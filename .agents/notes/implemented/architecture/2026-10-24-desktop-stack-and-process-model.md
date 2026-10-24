@@ -58,10 +58,11 @@ Electron 主进程 ──utilityProcess.fork──> engine（NestJS，Electron �
 ```
 
 - 主进程启动时用 `crypto.randomBytes(32)` 生成一次性 token，通过环境变量交给 engine，同时传入 `FRAME_LOOM_DATA_DIR`。
+- 持久主密钥由异步 safeStorage 封装为 `<userData>/secret-key.bin`，只经 `FRAME_LOOM_SECRET_KEY` 交给 engine；缺失安全存储不阻止启动，字段加解密拒绝并显示原生提示。恢复、备份与日志约束见[engine 服务](2026-10-24-engine-service.md)。
 - engine 只监听 `127.0.0.1`，端口填 0 让系统分配。监听成功后，通过 `process.parentPort.postMessage({ type: 'ready', port })` 把实际端口告诉主进程。主进程收到之前，renderer 拿不到连接信息。
 - engine 实际接口校验 `Authorization: Bearer <token>`；`Host` 必须是 `127.0.0.1:<port>`，防止 DNS rebinding；携带 Origin 时必须匹配应用自己的完整源。任一校验不满足即拒绝，`/health` 同样鉴权。浏览器可信 OPTIONS 预检不带 Bearer，仅在 Host 和 Origin 都合法时放行，不扩展为匿名业务接口；允许源由主进程以 JSON 数组传入。
 - preload 通过 `contextBridge` 暴露 `frameLoom.getEngineConnection()`，返回 `{ baseUrl, token }`，以及 `theme.get/set`、`window.command` 固定方法；所有 IPC 校验可信主框架，主题与窗口命令使用 contracts 枚举校验。不暴露 `ipcRenderer` 或 Node 能力，renderer 只经 `lib/desktop-bridge.ts` 访问。
-- 后续实时推送约定用 SSE（Nest 的 `@Sse()`），当前没有推送端点。浏览器原生 `EventSource` 不能带请求头，因此使用 `fetch` 读流，token 始终放请求头，不放 URL；命令走普通 HTTP。
+- 实时推送使用 SSE（Nest 的 `@Sse()`），`GET /events` 已提供鉴权事件流与 15 秒心跳。浏览器原生 `EventSource` 不能带请求头，因此使用 `fetch` 读流，token 始终放请求头，不放 URL；命令走普通 HTTP。断线不重放，调用方重连后补拉状态。
 - engine 退出时，主进程记录退出码并重载当前页面，hash 保留路径和设置页签，本地引擎面板显示中文错误，设置入口显示错误圆点。此捷径只适用于当前静态页面，新增可编辑业务页面时改为类型化事件。当前不自动重启 engine；启动等待上限为 30 秒，退出先发 shutdown，最多等 5 秒后强杀。
 - `app/shell/` 组合 42px 标题栏、260px 侧栏、点阵画布与设置弹窗；主题由主进程在窗口创建前读取并驱动 `prefers-color-scheme`，偏好损坏回退系统。主题 token 位于 `styles/theme.css`，设置开关与页签经根路由 zod 校验。生产 CSP 的 `style-src` 是 `'self' 'unsafe-inline'`，支持 Radix 的样式注入，`script-src` 仍为 `'self'`，详见[主题与外壳笔记](../feature/2026-10-24-theme-and-app-shell.md)。
 
@@ -157,5 +158,5 @@ frame-loom/
 - 首次打包需要下载 Electron、NSIS 和压缩工具。Windows exe／安装包图标取用户提供的 `apps/desktop/resources/icon.png`，开发窗口使用同图；renderer 的 256px logo 独立生成，原始 `resources/` 不进入 asar。未接代码签名、发布、自动更新；这些不属于已完成能力。
 - 主进程等待 engine 最多 30 秒，首轮部署出现过超过原定 15 秒的冷启动。仍保留超时失败和关闭回收，不将等待改为无限期。
 - Playwright 自动冒烟与加固 exe 安装验证分开，自动用例不能证明 NSIS 安装行为；修改打包、fuse、原生模块或 engine 部署时需要重跑真实安装验证。CI 尚不自动安装，远端结果不能由本地验证替代。
-- Electron 45.0.0 处于早期版本，精确锁定并跟进补丁；运行时升级单独验证。后续媒体、Provider、任务恢复、SSE 与 Agent 能力仍未实现，相关选型不能当成现有功能。
+- Electron 45.0.0 处于早期版本，精确锁定并跟进补丁；运行时升级单独验证。SSE、主密钥与字段加密基础设施随[模型管理](../../proposed/architecture/2026-10-24-model-management.md)的 01 阶段引入；媒体、Provider、任务恢复与 Agent 能力仍未实现，相关选型不能当成现有功能。
 - 鉴权只防本机其他进程和网页，防不住和用户同权限、能读进程环境变量的恶意程序。桌面应用接受这个边界。

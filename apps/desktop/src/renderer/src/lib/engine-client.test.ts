@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { HealthResponse } from '@frame-loom/contracts';
+import { EngineEvent, HealthResponse } from '@frame-loom/contracts';
 import { createEngineClient, EngineRequestError } from './engine-client';
 
 const connection = { baseUrl: 'http://127.0.0.1:45678', token: 'secret' };
@@ -178,4 +178,169 @@ it('保留调用者取消信号，已取消的请求不发出', async () => {
     message: '本地服务请求已取消',
   });
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it.each(['POST', 'PATCH', 'PUT', 'DELETE'])('%s 支持 JSON 请求体且保留鉴权', async (method) => {
+  const { client, fetch } = setup();
+  await client.request('/resource', HealthResponse, {
+    method,
+    body: { name: '中文', enabled: true },
+  });
+  const [url, init] = fetch.mock.calls[0];
+  expect(url).toBe(`${connection.baseUrl}/resource`);
+  expect(init?.method).toBe(method);
+  expect(init?.body).toBe(JSON.stringify({ name: '中文', enabled: true }));
+  expect(new Headers(init?.headers).get('Content-Type')).toBe('application/json');
+  expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer secret');
+});
+
+function eventResponse(chunks: Uint8Array[], cancel = vi.fn()) {
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+      cancel,
+    }),
+    { headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
+  );
+}
+
+it('事件流解析多行 data、注释、CRLF 与跨块中文，并与普通请求共用连接', async () => {
+  const { client, fetch, getConnection } = setup();
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  const event = { type: 'generation.job.updated', jobId: '中文任务' };
+  const bytes = new TextEncoder().encode(
+    `: keepalive\r\nevent: message\r\ndata: {"type":"generation.job.updated",\r\ndata: "jobId":"中文任务"}\r\n\r\ndata: ${JSON.stringify(health)}\n`,
+  );
+  fetch.mockResolvedValueOnce(eventResponse(Array.from(bytes, (byte) => Uint8Array.of(byte))));
+  const events: unknown[] = [];
+  for await (const value of client.stream('/events', EngineEvent)) events.push(value);
+  expect(events).toEqual([event]);
+  expect(timeout).not.toHaveBeenCalled();
+  const [url, init] = fetch.mock.calls[0];
+  expect(url).toBe(`${connection.baseUrl}/events`);
+  expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer secret');
+  expect(new Headers(init?.headers).get('Accept')).toBe('text/event-stream');
+  expect(init?.redirect).toBe('error');
+  await client.request('/health', HealthResponse);
+  expect(getConnection).toHaveBeenCalledOnce();
+});
+
+it.each(['not-json', '{"type":"unknown"}', '{"type":"generation.job.updated"}'])(
+  '非法事件立即报错，不自动重连：%s',
+  async (data) => {
+    const { client, fetch, getConnection } = setup();
+    fetch.mockResolvedValueOnce(eventResponse([new TextEncoder().encode(`data: ${data}\n\n`)]));
+    const iterator = client.stream('/events', EngineEvent);
+    await expect(iterator.next()).rejects.toMatchObject({ code: 'INVALID_EVENT' });
+    expect(fetch).toHaveBeenCalledOnce();
+    await client.request('/health', HealthResponse);
+    expect(getConnection).toHaveBeenCalledTimes(2);
+  },
+);
+
+it.each(['\n', '\r\n', '\r'])(
+  '按 SSE 规范支持换行符 %j，完整事件在 EOF 前派发',
+  async (newline) => {
+    const { client, fetch } = setup();
+    const event = { type: 'generation.job.updated', jobId: 'one' };
+    fetch.mockResolvedValueOnce(
+      eventResponse([
+        new TextEncoder().encode(`data: ${JSON.stringify(event)}${newline}${newline}`),
+      ]),
+    );
+    const events = [];
+    for await (const value of client.stream('/events', EngineEvent)) events.push(value);
+    expect(events).toEqual([event]);
+  },
+);
+
+it('错误 HTTP 响应、错误内容类型和读流断线保留统一错误处理', async () => {
+  const { client, fetch } = setup();
+  fetch.mockResolvedValueOnce(
+    Response.json({ code: 'HTTP_401', message: '访问令牌无效' }, { status: 401 }),
+  );
+  await expect(client.stream('/events', EngineEvent).next()).rejects.toMatchObject({
+    status: 401,
+    code: 'HTTP_401',
+  });
+  fetch.mockResolvedValueOnce(Response.json({}));
+  await expect(client.stream('/events', EngineEvent).next()).rejects.toMatchObject({
+    code: 'INVALID_RESPONSE',
+  });
+  fetch.mockResolvedValueOnce(
+    new Response(
+      new ReadableStream({ start: (controller) => controller.error(new Error('断线')) }),
+      { headers: { 'Content-Type': 'text/event-stream' } },
+    ),
+  );
+  await expect(client.stream('/events', EngineEvent).next()).rejects.toMatchObject({
+    code: 'CONNECTION_FAILED',
+  });
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('流地址同样不能向其他源发送 token', async () => {
+  const { client, fetch } = setup();
+  await expect(
+    client.stream('https://evil.example/events', EngineEvent).next(),
+  ).rejects.toMatchObject({
+    code: 'INVALID_PATH',
+  });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('取消事件流会中止正在等待的读取，提前结束迭代也会断开连接', async () => {
+  const { client, fetch } = setup();
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    client.stream('/events', EngineEvent, { signal: controller.signal }).next(),
+  ).rejects.toMatchObject({ code: 'REQUEST_ABORTED' });
+  expect(fetch).not.toHaveBeenCalled();
+
+  const active = new AbortController();
+  fetch.mockImplementationOnce((_url, init) => {
+    return Promise.resolve(
+      new Response(
+        new ReadableStream({
+          start(stream) {
+            init!.signal!.addEventListener('abort', () => stream.error(init!.signal!.reason), {
+              once: true,
+            });
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+  });
+  const iterator = client.stream('/events', EngineEvent, { signal: active.signal });
+  const next = iterator.next();
+  const rejected = expect(next).rejects.toMatchObject({ code: 'REQUEST_ABORTED' });
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+  active.abort();
+  await rejected;
+
+  const cancel = vi.fn();
+  fetch.mockResolvedValueOnce(
+    new Response(
+      new ReadableStream({
+        start(stream) {
+          stream.enqueue(
+            new TextEncoder().encode('data: {"type":"generation.job.updated","jobId":"one"}\n\n'),
+          );
+        },
+        cancel,
+      }),
+      { headers: { 'Content-Type': 'text/event-stream' } },
+    ),
+  );
+  for await (const event of client.stream('/events', EngineEvent)) {
+    expect(event).toEqual({ type: 'generation.job.updated', jobId: 'one' });
+    break;
+  }
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(fetch.mock.calls[1][1]?.signal?.aborted).toBe(true);
 });

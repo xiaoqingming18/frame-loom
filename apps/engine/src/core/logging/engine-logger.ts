@@ -1,12 +1,20 @@
 import { ConsoleLogger } from '@nestjs/common';
 
 export class EngineLogger extends ConsoleLogger {
-  constructor(private readonly token: string) {
+  private readonly secrets = new Set<string>();
+
+  constructor(token: string, secretKey = '') {
     super('Engine', {
       logLevels: ['error', 'warn', 'log'],
       colors: false,
-      redact: ['token', 'authorization'],
+      redact: ['token', 'authorization', 'x-api-key', 'api-key', 'x-goog-api-key'],
     });
+    this.registerSecret(token);
+    this.registerSecret(secretKey);
+  }
+
+  registerSecret(secret: string): void {
+    if (secret) this.secrets.add(secret);
   }
 
   protected override printMessages(...args: Parameters<ConsoleLogger['printMessages']>): void {
@@ -23,9 +31,16 @@ export class EngineLogger extends ConsoleLogger {
   }
 
   private sanitize(message: string): string {
-    const withoutToken = this.token ? message.replaceAll(this.token, '[REDACTED]') : message;
-    return withoutToken
-      .replace(/\bAuthorization\s*[:=]\s*[^\r\n]+/gi, 'Authorization: [REDACTED]')
+    for (const secret of this.secrets) message = message.replaceAll(secret, '[REDACTED]');
+    return message
+      .replace(
+        /(["']?\b(?:authorization|x-api-key|api-key|x-goog-api-key)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\r\n,}]+)/gi,
+        '$1[REDACTED]',
+      )
+      .replace(
+        /([?&](?:key|x-amz-[\w-]+|x-oss-[\w-]+|ossaccesskeyid|signature|security-token|q-[\w-]+)=)[^&#\s"'<>]*/gi,
+        '$1[REDACTED]',
+      )
       .replace(/\bBearer\s+[^\s"']+/gi, 'Bearer [REDACTED]');
   }
 }

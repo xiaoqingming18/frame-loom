@@ -1,13 +1,15 @@
 import { ErrorResponse, HealthResponse } from '@frame-loom/contracts';
-import type { INestApplication } from '@nestjs/common';
+import { Logger, type INestApplication } from '@nestjs/common';
 import { request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createEngine } from './application.js';
 import { EngineConfig } from './core/config/config.js';
+import { SecretCipher } from './core/crypto/secret-cipher.js';
+import { EngineLogger } from './core/logging/engine-logger.js';
 
 const token = 'a'.repeat(64);
 let app: INestApplication<Server>;
@@ -16,7 +18,12 @@ let directory: string;
 beforeAll(async () => {
   directory = mkdtempSync(join(tmpdir(), 'frame-loom-http-'));
   app = await createEngine(
-    new EngineConfig(token, directory, ['http://localhost:5173', 'app://frame-loom']),
+    new EngineConfig(
+      token,
+      directory,
+      ['http://localhost:5173', 'app://frame-loom'],
+      'cd'.repeat(32),
+    ),
   );
   await app.listen(0, '127.0.0.1');
   port = (app.getHttpServer().address() as AddressInfo).port;
@@ -44,6 +51,20 @@ function call(headers: Record<string, string> = {}, method = 'GET') {
 }
 
 describe('真实 HTTP 边界', () => {
+  it('字段加密登记的明文也被 Nest 与注入的日志实例屏蔽', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      app.get(SecretCipher).encrypt('runtime-provider-secret', 'channels', 'one');
+      new Logger('Integration').error('第三方错误 runtime-provider-secret');
+      app.get(EngineLogger).warn('runtime-provider-secret');
+      const output = stderr.mock.calls.flat().join('');
+      expect(output).toContain('[REDACTED]');
+      expect(output).not.toContain('runtime-provider-secret');
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it.each<Record<string, string>>([{}, { Authorization: `Bearer ${'b'.repeat(64)}` }])(
     '缺失或错误令牌返回 401',
     async (headers) => {
@@ -91,14 +112,15 @@ describe('真实 HTTP 边界', () => {
     const response = await call(
       {
         Origin: 'app://frame-loom',
-        'Access-Control-Request-Method': 'GET',
-        'Access-Control-Request-Headers': 'authorization',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type',
       },
       'OPTIONS',
     );
     expect(response.status).toBe(204);
     expect(response.headers['access-control-allow-origin']).toBe('app://frame-loom');
-    expect(response.headers['access-control-allow-headers']).toBe('Authorization');
+    expect(response.headers['access-control-allow-headers']).toBe('Authorization,Content-Type');
+    expect(response.headers['access-control-allow-methods']).toBe('GET,POST,PATCH,PUT,DELETE');
     const unauthorized = await call({ Origin: 'app://frame-loom' });
     expect(unauthorized.status).toBe(401);
     expect(ErrorResponse.parse(JSON.parse(unauthorized.body)).code).toBe('HTTP_401');
@@ -111,7 +133,14 @@ describe('真实 HTTP 边界', () => {
       { Origin: 'app://frame-loom', Host: 'evil.example' },
     ];
     for (const headers of requests) {
-      const response = await call(headers, 'OPTIONS');
+      const response = await call(
+        {
+          ...headers,
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'authorization,content-type',
+        },
+        'OPTIONS',
+      );
       expect(response.status).toBe(403);
       expect(ErrorResponse.parse(JSON.parse(response.body)).code).toBe('HTTP_403');
     }

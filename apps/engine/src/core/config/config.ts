@@ -24,6 +24,15 @@ const environment = z.object({
   FRAME_LOOM_DATA_DIR: z
     .string({ error: '必须提供数据目录' })
     .refine(isAbsolute, '数据目录必须是绝对路径'),
+  FRAME_LOOM_SECRET_KEY: z
+    .union([
+      z.literal(''),
+      z
+        .string()
+        .length(64)
+        .regex(/^[0-9a-fA-F]{64}$/),
+    ])
+    .default(''),
   FRAME_LOOM_ALLOWED_ORIGINS: z
     .string()
     .default('[]')
@@ -43,6 +52,7 @@ export class EngineConfig {
     readonly token: string,
     readonly dataDir: string,
     readonly allowedOrigins: string[],
+    readonly secretKey = '',
   ) {}
 }
 
@@ -59,5 +69,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): EngineConfig {
     result.data.FRAME_LOOM_TOKEN,
     result.data.FRAME_LOOM_DATA_DIR,
     result.data.FRAME_LOOM_ALLOWED_ORIGINS,
+    result.data.FRAME_LOOM_SECRET_KEY,
   );
 }

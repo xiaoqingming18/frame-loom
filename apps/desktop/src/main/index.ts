@@ -1,4 +1,14 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, utilityProcess } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  net,
+  protocol,
+  safeStorage,
+  utilityProcess,
+} from 'electron';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,6 +23,7 @@ import {
 import { registerDesktopIpc } from './desktop-ipc.js';
 import { readTheme } from './preferences.js';
 import { WINDOW_BACKGROUNDS, updateWindowTheme } from './theme.js';
+import { loadSecretKey } from './secret-key.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 app.setName('Frame Loom');
@@ -74,8 +85,18 @@ async function start(): Promise<void> {
     });
 
     let startupError: unknown;
+    let secretWarning: string | undefined;
     try {
       const token = randomBytes(32).toString('hex');
+      let secretKey = '';
+      try {
+        const result = await loadSecretKey(app.getPath('userData'), safeStorage);
+        secretKey = result.key;
+        secretWarning = result.warning;
+      } catch {
+        secretWarning =
+          '主密钥无法读取或保存，当前无法使用已保存的凭据。请检查数据目录权限后重启应用。';
+      }
       const child = utilityProcess.fork(
         engineEntry(app.isPackaged, app.getAppPath(), process.resourcesPath),
         [],
@@ -85,6 +106,7 @@ async function start(): Promise<void> {
           env: {
             ...process.env,
             FRAME_LOOM_TOKEN: token,
+            FRAME_LOOM_SECRET_KEY: secretKey,
             FRAME_LOOM_DATA_DIR: app.getPath('userData'),
             FRAME_LOOM_ALLOWED_ORIGINS: JSON.stringify([origin]),
           },
@@ -145,6 +167,13 @@ async function start(): Promise<void> {
     });
     window.once('ready-to-show', () => window?.show());
     await window.loadURL(devUrl ?? `${APP_ORIGIN}/`);
+    if (secretWarning) {
+      await dialog.showMessageBox(window, {
+        type: 'warning',
+        title: '密钥安全存储',
+        message: secretWarning,
+      });
+    }
   } catch (error) {
     console.error('桌面窗口启动失败：', error);
     app.quit();

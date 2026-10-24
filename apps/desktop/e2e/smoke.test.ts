@@ -118,6 +118,40 @@ test('窗口显示真实 engine 健康状态，关闭后服务退出', async () 
     await page.getByRole('tab', { name: '本地引擎' }).click();
     await expect(page.getByRole('status')).toHaveText('运行正常');
     await expect(page.getByTestId('engine-version')).toHaveText(/\S+/);
+    const encrypted = await readFile(join(userData, 'secret-key.bin'));
+    const protectedKey = await application.evaluate(async ({ safeStorage }, bytes: number[]) => {
+      const encrypted = Buffer.from(bytes);
+      const { result } = await safeStorage.decryptStringAsync(encrypted);
+      return {
+        valid: /^[0-9a-f]{64}$/.test(result),
+        plaintextOnDisk: encrypted.includes(Buffer.from(result)),
+      };
+    }, Array.from(encrypted));
+    expect(protectedKey).toEqual({ valid: true, plaintextOnDisk: false });
+    expect(
+      await page.evaluate<{ unauthorized: number; eventType: string }>(`(async () => {
+        const { baseUrl, token } = await window.frameLoom.getEngineConnection();
+        const denied = await fetch(baseUrl + '/events');
+        const controller = new AbortController();
+        try {
+          const response = await fetch(baseUrl + '/events', {
+            headers: { Authorization: 'Bearer ' + token }, signal: controller.signal,
+          });
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let received = '';
+          while (!received.includes('heartbeat')) {
+            received += decoder.decode((await reader.read()).value);
+          }
+          return {
+            unauthorized: denied.status,
+            eventType: JSON.parse(received.match(/data: (.+)/)[1]).type,
+          };
+        } finally {
+          controller.abort();
+        }
+      })()`),
+    ).toEqual({ unauthorized: 401, eventType: 'heartbeat' });
     await page.goto(`${page.url().split('#')[0]}#/missing`);
     await expect(page.getByRole('heading', { name: '页面不存在' })).toBeVisible();
     await page.reload();
@@ -167,6 +201,7 @@ test('损坏偏好可启动，主题同步原生窗口并在重启后保持', as
     await writeFile(join(userData, 'preferences.json'), '{broken');
     application = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     let page = await application.firstWindow();
+    const secretKey = await readFile(join(userData, 'secret-key.bin'));
     // Playwright 默认模拟明亮模式，清除模拟后才能验证 Electron 的真实主题。
     await page.emulateMedia({ colorScheme: null });
     await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
@@ -203,6 +238,7 @@ test('损坏偏好可启动，主题同步原生窗口并在重启后保持', as
     await application.close();
     application = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     page = await application.firstWindow();
+    expect(await readFile(join(userData, 'secret-key.bin'))).toEqual(secretKey);
     await page.emulateMedia({ colorScheme: null });
     await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
     await page.getByRole('button', { name: '设置中心' }).click();

@@ -8,11 +8,17 @@ import { EngineConfig } from './core/config/config.js';
 import { EngineGuard } from './core/security/engine.guard.js';
 import { EngineLogger } from './core/logging/engine-logger.js';
 
-export async function createEngine(config: EngineConfig): Promise<INestApplication<Server>> {
-  const app = await NestFactory.create<INestApplication<Server>>(AppModule.register(config), {
-    logger: new EngineLogger(config.token),
-    abortOnError: false,
-  });
+export async function createEngine(
+  config: EngineConfig,
+  logger = new EngineLogger(config.token, config.secretKey),
+): Promise<INestApplication<Server>> {
+  const app = await NestFactory.create<INestApplication<Server>>(
+    AppModule.register(config, logger),
+    {
+      logger,
+      abortOnError: false,
+    },
+  );
   const guard = app.get(EngineGuard);
   app.use((request: Request, _response: Response, next: NextFunction) => {
     try {
@@ -24,8 +30,8 @@ export async function createEngine(config: EngineConfig): Promise<INestApplicati
   });
   app.enableCors({
     origin: config.allowedOrigins,
-    methods: ['GET'],
-    allowedHeaders: ['Authorization'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
   });
   return app;
 }

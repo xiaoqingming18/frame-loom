@@ -46,6 +46,8 @@ apps/engine/
 │  │  ├─ config/                   # zod 解析环境变量，EngineConfig 兼作注入令牌
 │  │  ├─ security/                 # EngineGuard（Host、Origin、Bearer）与 CORS 配置
 │  │  ├─ database/                 # DatabaseService、app-meta.schema.ts
+│  │  ├─ crypto/                   # SecretCipher：字段加解密与明文日志登记
+│  │  ├─ events/                   # EventBus、鉴权 SSE 与心跳
 │  │  ├─ http/                     # ZodValidationPipe、DomainError、全局异常过滤器
 │  │  └─ logging/                  # 写 stderr 的日志实现
 │  └─ modules/
@@ -85,7 +87,7 @@ apps/engine/
 
   错误消息使用中文：领域异常保留显式消息，普通 HTTP 异常使用固定提示，pipe 使用 zod 中文默认消息。HTTP 测试确认 `app.use` 边界中间件通过 `next(error)` 传出的错误进入 `APP_FILTER`，不另写一套响应。
 - 日志继承 Nest `ConsoleLogger`，重写输出方法使所有级别都写 stderr，默认级别为 `error`、`warn`、`log`。stdout 只保留独立运行时的单行 ready JSON。token 和 `Authorization` 认证值永远不写日志；对象使用内置字段脱敏，正文与堆栈另行屏蔽令牌和认证值。保留无堆栈错误的空值处理，启动／退出失败也使用同一日志实现。
-- 第一个非 GET 接口上线时，CORS 的 `methods` 和 `allowedHeaders`（加 `Content-Type`）必须在同一提交中放开，并补充预检测试。
+- 模型管理 01 已将 CORS 放开至 GET、POST、PATCH、PUT、DELETE，允许 Authorization 与 Content-Type，并覆盖可信 POST 预检及非法源拒绝；Host、Origin 与 Bearer 边界不变。密钥与日志的当前事实见[engine 服务](2026-10-24-engine-service.md)。
 
 ### renderer 目录
 
@@ -120,8 +122,9 @@ apps/desktop/src/renderer/src/
   - 首次请求时从 preload 获取连接并缓存，使用同一个 Promise 合并并发获取；获取、校验或请求失败时清除对应缓存，下一次请求重新获取，过时请求不能清除新连接。
   - token 只存在闭包里，不写 storage、cookie 或 URL。
   - `request(path, schema, init)` 在连接就绪后开始默认 5 秒的 HTTP 超时，冷启动仍由主进程的 30 秒 ready 超时约束。支持调用方取消，用传入的 schema 解析成功响应；非 2xx 响应按 `ErrorResponse` 解析，抛出 `EngineRequestError { status, code, message }`。非法错误体回退到中文 HTTP 提示，网络、取消、超时和非法成功响应也提供中文错误。
+  - `init.body` 接收 JSON 值并序列化，自动设置 Content-Type；通过 `init.method` 支持 POST、PATCH、PUT、DELETE，复用相同鉴权和响应校验。
   - 请求地址必须与已校验的连接同源且不含用户信息；拒绝重定向，避免令牌发送到其他目标。
-  - SSE 的 `stream()` 在第一个 SSE 端点出现时加入，使用 fetch 读流，token 放请求头。
+  - `stream(path, schema, init)` 返回异步迭代器，使用 fetch 读 SSE，token 放请求头；支持 JSON 请求体和取消，读取 UTF-8 跨块、多行 data、注释与 CR/LF/CRLF。非法 JSON 或 schema 返回 `INVALID_EVENT`，提前结束迭代会取消读取。流不套用五秒超时，不自动重连，重连与补拉由调用方负责。
 - engine client 和 QueryClient 通过路由 context 注入，组件和测试都不直接 import 单例。每个 feature 的 `api/` 导出 query key 工厂和 `queryOptions`。mutation 只使精确的 key 失效。QueryClient 默认关闭 `retry` 和 `refetchOnWindowFocus`。
 - 服务端数据只走 TanStack Query；Zustand 只保存界面状态和画布编辑状态，在第一个需要它的功能中引入。
 - desktop 的 tsconfig 拆成两份：`tsconfig.node.json` 覆盖 main、preload 和配置文件，只有 node 类型；`tsconfig.web.json` 覆盖 renderer，只有 DOM 和 `vite/client`。`@/` 别名指向 `src/renderer/src`，只在 web 配置和 Vite renderer 配置中声明。
@@ -133,7 +136,7 @@ apps/desktop/src/renderer/src/
 
 以下设施只约定位置，等第一个使用者出现时再建，不提前写空壳：
 
-- engine：`modules/jobs`（SQLite 任务表、进程内 runner、启动恢复）、`core/events`（类型化事件总线）、`@Sse()` 端点、`modules/agent`。
+- engine：`modules/jobs`（SQLite 任务表、进程内 runner、启动恢复）由[模型管理提案](../../proposed/architecture/2026-10-24-model-management.md)的 `modules/generation` 承接；`modules/agent` 仍延后。`core/events` 与 `@Sse()` 端点已随模型管理 01 引入。
 - renderer：Zustand、`@xyflow/react`、i18n、devtools。shadcn、`cn` 与 lucide 随主题系统和设置中心弹窗一起引入，不再延后。
 
 ### 调研依据

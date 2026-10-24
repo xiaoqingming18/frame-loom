@@ -61,6 +61,9 @@ async function renderPage(
     {
       queryClient,
       engineClient: {
+        stream: () => {
+          throw new Error('当前路由测试不应订阅事件');
+        },
         async request(path, schema, init) {
           return schema.parse(await request(path, schema, init));
         },
@@ -331,7 +334,15 @@ it('初次读取最大化状态，窗口命令失败时保留可重试入口', a
 it('默认 history 把空 hash 归一为首页，并保留已有 hash 路径', () => {
   const queryClient = new QueryClient();
   clients.push(queryClient);
-  const context = { queryClient, engineClient: { request: vi.fn() } };
+  const context = {
+    queryClient,
+    engineClient: {
+      request: vi.fn(),
+      stream: () => {
+        throw new Error('当前路由测试不应订阅事件');
+      },
+    },
+  };
   window.history.replaceState(null, '', '/');
   const home = createAppRouter(context);
   histories.push(home.history);

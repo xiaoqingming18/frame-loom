@@ -51,11 +51,12 @@ let baseUrl: string;
 let directory: string;
 beforeAll(async () => {
   directory = mkdtempSync(join(tmpdir(), 'frame-loom-errors-'));
+  const logger = new EngineLogger(token);
   const module = await Test.createTestingModule({
-    imports: [AppModule.register(new EngineConfig(token, directory, []))],
+    imports: [AppModule.register(new EngineConfig(token, directory, []), logger)],
     controllers: [ErrorController],
   }).compile();
-  app = module.createNestApplication({ logger: new EngineLogger(token) });
+  app = module.createNestApplication({ logger });
   await app.listen(0, '127.0.0.1');
   baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
 });

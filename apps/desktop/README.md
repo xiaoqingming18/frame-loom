@@ -17,6 +17,8 @@ pnpm dev
 
 renderer 使用 TanStack 文件路由与 hash history，首页地址为 `#/`；未知路由显示中文 404，重载保留 hash 路径。`app/router.tsx` 与 `app/providers.tsx` 组合应用，健康查询和界面位于 `features/engine-status/`。只有 `lib/desktop-bridge.ts` 读取 preload，所有 engine 请求经 `lib/engine-client.ts` 校验连接和响应；HTTP 请求默认五秒超时，连接就绪前保留主进程的三十秒冷启动等待。客户端和 QueryClient 通过路由 context 注入，默认不重试、不随窗口聚焦刷新。
 
+engine client 的 `request(path, schema, { method, body, signal })` 接受 JSON 值作为 body，自动序列化并设置 Content-Type，支持 POST、PATCH、PUT、DELETE。`stream(path, schema, init)` 返回异步迭代器，可用 `for await` 消费 SSE；token 只放请求头，取消信号或结束迭代会断开连接。长连接不使用普通请求的五秒超时，不自动重连；调用方重连后需要重新查询状态。
+
 `tsconfig.node.json` 与 `tsconfig.web.json` 分别检查 Node 和浏览器代码，避免 renderer 误用 `process`；`@/` 指向 `src/renderer/src`。Vitest 的 node project 覆盖 main、preload，jsdom project 覆盖 renderer 及 `.tsx` 组合测试。文件路由由开发／构建插件生成 `src/renderer/src/routeTree.gen.ts` 并入库，不手工编辑。
 
 主题颜色统一定义在 `src/renderer/src/styles/theme.css`，由 `prefers-color-scheme` 选择明暗值；主进程在创建窗口前读取 `<userData>/preferences.json` 并设置 `nativeTheme.themeSource`，文件缺失或损坏时跟随系统。隐藏标题栏的原生窗口按钮和背景同步更新，切换主题时先持久化再生效。shadcn 组件位于 `components/ui/`，`components.json` 和根 tsconfig 的别名供 CLI 解析；UI 使用语义 token，调色板、任意值颜色与直接内联颜色会被 lint 拒绝，类名由 Prettier 排序。`app/shell/` 组合外壳与设置弹窗，根路由校验 `settings=appearance|engine|about`，页面重载后仍停留在原页签。首页控件用只读／`aria-disabled` 保留聚焦与提示，不提供创作能力。后续界面遵守 [UI 规范](../../docs/ui-guidelines.md)。
@@ -24,6 +26,8 @@ renderer 使用 TanStack 文件路由与 hash history，首页地址为 `#/`；�
 新增 shadcn 组件时，在 desktop 目录运行 `pnpm dlx shadcn@4.22.1 add <组件>`，先用 `--dry-run` 检查路径和依赖。当前 registry 会导入并安装 `cn` 包；本仓库复用 `@/lib/utils` 的 `cn`，生成后修正导入并移除多余依赖，颜色也须改为语义 token。
 
 开发和生产都使用 Electron 的 `userData`，Windows 默认为 `%APPDATA%\Frame Loom`，数据库位于其下的 `data/frame-loom.sqlite`，不会写入源码目录。
+
+主进程使用 Electron 45 的异步 safeStorage，将随机 32 字节主密钥加密后原子保存到 `<userData>/secret-key.bin`，经 `FRAME_LOOM_SECRET_KEY` 只传给 engine。损坏或无法解密的旧文件备份为 `.broken` 后换新，已存凭据需要重填；暂时不可用和读写失败时保留可恢复的原文件。安全存储不可用时仍启动应用与 engine，原生提示框说明不能保存或读取凭据；主密钥不通过 preload 暴露。
 
 ```sh
 pnpm build

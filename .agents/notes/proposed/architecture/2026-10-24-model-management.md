@@ -26,6 +26,10 @@ Status: proposed
 
 ## Proposal
 
+### 当前实现边界
+
+01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。渠道、模型调用、生成任务、对象存储与模型测试界面尚未实现，本篇保持 proposed，整体验收后再转 implemented。
+
 ### 调研依据
 
 2026-10-24 的调研结论，属于记录时的事实，上游可能变化：
@@ -200,7 +204,8 @@ created_at, updated_at, finished_at
   - 主进程首次启动时生成 32 字节主密钥，用 Electron `safeStorage`（Windows 底层为 DPAPI）加密后，原子写入 `<userData>/secret-key.bin`。
   - 每次启动时解密，通过新增的环境变量 `FRAME_LOOM_SECRET_KEY`（64 位十六进制）交给 engine，与现有 token 的传递方式相同。engine 配置用 zod 校验格式。
   - `safeStorage` 不可用时，拒绝保存任何密钥，并在界面提示。
-  - 2026-10-24 的检索结果称同步 API 会在 Electron 46 移除；如果 Electron 45 已提供异步 API，就用异步 API。实施时核对。
+  - 异步解密暂时不可用时保留主密钥文件，不当作损坏。Electron 45.0.0 仅通过错误消息 `temporarily unavailable` 区分该情况，依据为[该版本源码](https://github.com/electron/electron/blob/v45.0.0/shell/browser/api/electron_api_safe_storage.cc)；升级 Electron 时要复核。重新封装或文件读写失败也不轮换主密钥，应用以空主密钥启动并提示重试。
+  - Electron 45 已提供 `isAsyncEncryptionAvailable()`、`encryptStringAsync()`、`decryptStringAsync()`，主进程使用异步 API；解密返回 `{ result, shouldReEncrypt }`，需要重新加密时原子替换文件。依据为已安装的 45.0.0 类型定义及 [safeStorage 官方文档](https://www.electronjs.org/docs/latest/api/safe-storage)（2026-10-24 在线核对，上游可能变化）。
 - **字段加密**：engine 用 AES-256-GCM 加密每个 API Key 和对象存储 Secret。存储格式为 `iv | tag | ciphertext`，附加认证数据（AAD）为"表名 + 行 ID"，防止密文在行之间被调换。
 - **主密钥无法解密时**（例如用户目录迁到了另一台机器）：
   - 把旧文件改名为 `secret-key.bin.broken`，生成新主密钥；
@@ -230,6 +235,7 @@ created_at, updated_at, finished_at
   | 事件 | `/events` |
 
 - **推送**：`GET /events` 是 engine 的第一个 SSE 端点，推送 `generation.job.updated` 等类型化事件，事件结构由 contracts 定义。renderer 的 engine client 加入 `stream()`：用 fetch 读流，token 放在请求头里。收到事件后更新对应的 TanStack Query 缓存。文本测试的流式响应复用同一个 `stream()`。
+  - 01 的基础事件为 `heartbeat { timestamp }` 与 `generation.job.updated { jobId }`，通过 `type` 区分；任务事件只通知重新查询，完整任务数据与状态由 03 定义。心跳在连接建立时立即发送，此后每 15 秒一次；服务关闭时结束流。客户端返回异步迭代器，支持 AbortSignal 与提前结束迭代，不做自动重连或重放；重连后调用方重新拉取任务。
 - **生成结果的显示**：`<img>` 和 `<video>` 不能携带 Bearer 请求头，所以由主进程注册只读的 `frame-media://<sha256>` 协议：
   - 只接受 64 位十六进制 sha256，只从 `<userData>/media/` 读取；
   - 视频播放需要支持 Range 请求；
@@ -264,8 +270,8 @@ created_at, updated_at, finished_at
 
 - [Agent 内核选型](2026-10-24-agent-runtime-pi.md)：部分重叠。pi 的导入边界从"只有 agent 模块"细化为"pi-ai 只在 `modules/llm`，pi-agent-core 只在 `modules/agent`"，已在该篇原地同步并互链；选型理由不变。
 - [应用骨架](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)：部分重叠。表中"AI 接入"一行的后续边界由本篇细化；媒体 SHA-256 存储、ffprobe 的引入时机由本篇确定。进程模型和鉴权边界不变，已互链。
-- [基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)：部分重叠。延后的 `modules/jobs` 由本篇的 `modules/generation` 承接，`core/events` 与 SSE 随本篇引入；CORS 放开规则照原约定执行，已互链。
-- [engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)：部分重叠。新增 `FRAME_LOOM_SECRET_KEY` 环境变量，以及新的日志屏蔽项；鉴权与启动流程不变，落地时原地同步。
+- [基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)：部分重叠。延后的 `modules/jobs` 由本篇的 `modules/generation` 承接；01 已引入 `core/events`、SSE 与 client 写请求／事件流，按原约定放开 CORS 并补预检测试，已原地同步并互链。
+- [engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)：部分重叠。01 已新增 `FRAME_LOOM_SECRET_KEY`、AES-GCM 字段加密与日志屏蔽项，原地同步当前实现；鉴权与启动边界不变。
 - [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)：部分重叠。侧栏新增入口、设置中心新增页签、CSP 增加 `frame-media:`，落地时原地同步。
 - 其他流程类笔记无关。
 

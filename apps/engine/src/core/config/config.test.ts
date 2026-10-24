@@ -13,8 +13,27 @@ describe('环境配置', () => {
       token: 'AB01'.repeat(16),
       dataDir: env.FRAME_LOOM_DATA_DIR,
       allowedOrigins: [],
+      secretKey: '',
     });
   });
+
+  it.each(['', 'AB01'.repeat(16)])('接受空或 64 位十六进制主密钥', (secretKey) => {
+    expect(loadConfig({ ...env, FRAME_LOOM_SECRET_KEY: secretKey }).secretKey).toBe(secretKey);
+  });
+
+  it.each(['a'.repeat(63), 'a'.repeat(65), 'z'.repeat(64), `${'a'.repeat(64)}\n`])(
+    '拒绝无效主密钥且不回显输入',
+    (secretKey) => {
+      expect(() => loadConfig({ ...env, FRAME_LOOM_SECRET_KEY: secretKey })).toThrow(
+        /FRAME_LOOM_SECRET_KEY/,
+      );
+      try {
+        loadConfig({ ...env, FRAME_LOOM_SECRET_KEY: secretKey });
+      } catch (error) {
+        expect(String(error)).not.toContain(secretKey);
+      }
+    },
+  );
 
   it('接受开发服务器与打包应用的完整源', () => {
     const allowedOrigins = [

@@ -11,11 +11,14 @@ interface ParentPort {
 }
 
 const parentPort = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
-const logger = new EngineLogger(process.env.FRAME_LOOM_TOKEN ?? '');
+const logger = new EngineLogger(
+  process.env.FRAME_LOOM_TOKEN ?? '',
+  process.env.FRAME_LOOM_SECRET_KEY ?? '',
+);
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
-  const app = await createEngine(config);
+  const app = await createEngine(config, logger);
   const listening = app.listen(0, '127.0.0.1');
   let closing = false;
   const shutdown = async () => {
