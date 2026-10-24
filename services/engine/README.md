@@ -1,6 +1,6 @@
 # 本地 engine
 
-Node.js 24.22.x 下独立运行的 NestJS 12 ESM 服务；Electron `utilityProcess` 的真实联调由桌面壳子计划完成。安全边界与取舍见[决策笔记](../../.agents/notes/implemented/architecture/2026-10-24-engine-service.md)。
+Node.js 24.22.x 下独立运行的 NestJS 12 ESM 服务；已通过 Electron 45 `utilityProcess` 的真实联调。安全边界与取舍见[决策笔记](../../.agents/notes/implemented/architecture/2026-10-24-engine-service.md)。
 
 ## 构建与运行
 
@@ -28,7 +28,7 @@ Invoke-RestMethod 'http://127.0.0.1:45678/health' -Headers @{ Authorization = "B
 
 ## 主进程对接
 
-engine 不导入 Electron。存在 `process.parentPort` 时，通过 `postMessage({ type: 'ready', port })` 上报端口；主进程使用 `child.postMessage({ type: 'shutdown' })` 请求退出。普通 Node 则从 stdout 读取 ready。SIGTERM、SIGINT 与 shutdown 都关闭 HTTP 和数据库。首次骨架不自动重启服务。
+engine 不导入 Electron。存在 `process.parentPort` 时，通过 `postMessage({ type: 'ready', port })` 上报端口；主进程使用 `child.postMessage({ type: 'shutdown' })` 请求退出。普通 Node 则从 stdout 读取 ready。SIGTERM、SIGINT 与 shutdown 都关闭 HTTP 和数据库。utilityProcess 不会在清空 Node 句柄后自动退出，因此有 parentPort 时在完成资源关闭后显式结束进程，启动失败以 1 退出；普通 Node 维持自然退出。首次骨架不自动重启服务。
 
 ## 迁移与验证
 
@@ -40,7 +40,7 @@ pnpm typecheck
 
 修改 `src/schema.ts` 后用 drizzle-kit 生成迁移并提交整个 `drizzle/`。首份迁移的表结构由工具生成，随后添加 `schema_version=1` 的数据初始化；后续改变 schema 时，在对应迁移中更新这条元数据，不在启动时覆盖版本。不要修改已经分发的迁移。
 
-测试脚本先构建自身及 contracts。Vitest 同时检查环境配置、Nest 元数据注入、真实 SQLite 迁移、HTTP 鉴权与 CORS，以及编译入口的独立启动和关闭。进程测试用本地 shim 模拟 parentPort 和信号事件；真实 Electron、操作系统信号投递和安装包行为仍需后续验证。
+测试脚本先构建自身及 contracts。Vitest 同时检查环境配置、Nest 元数据注入、真实 SQLite 迁移、HTTP 鉴权与 CORS，以及编译入口的独立启动和关闭。进程测试用本地 shim 模拟 parentPort 和信号事件，并通过活动句柄验证显式退出；真实 Electron 的联调见[桌面壳说明](../../apps/desktop/README.md)，操作系统信号投递和安装包行为仍需后续验证。
 
 ## 独立部署
 

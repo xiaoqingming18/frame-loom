@@ -54,4 +54,4 @@ Parent: plan.md
 
 ## 交接
 
-尚未开始，要等 04 完成。T1 的配置调研可以和 04 并行。
+尚未开始，04 已完成。下一步执行 T1；桌面主入口为 `apps/desktop/out/main/index.js`，preload 为 `out/preload/index.cjs`，构建页面使用 `app://frame-loom`。真实 utilityProcess 已验证可加载 ESM 和 better-sqlite3；engine 清理资源后在 parentPort 环境显式退出。仍需验证 `resources/engine` 的部署路径、fuse、NSIS 和 Playwright，不将 app 协议预览等同于安装包验证。

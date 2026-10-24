@@ -2,7 +2,7 @@
 
 基于 **Electron + React** 的多模态 AI 智能影视工作台桌面 PC 应用。
 
-当前已完成仓库流程工具、pnpm workspace、`@frame-loom/contracts` 共享契约包与可独立运行的 NestJS engine。Electron／React 桌面壳与安装包仍待后续子计划实现，见[应用骨架计划](.agents/plans/2026-10-24-app-skeleton/plan.md)。
+当前已完成仓库流程工具、pnpm workspace、共享契约、NestJS engine 和 Electron／React 桌面壳。`pnpm dev` 可打开窗口并显示本地引擎健康信息；NSIS 安装包仍待子计划 05 实现，见[应用骨架计划](.agents/plans/2026-10-24-app-skeleton/plan.md)。
 
 ## 准备环境
 
@@ -16,6 +16,14 @@ pnpm install --frozen-lockfile
 pnpm run setup:git
 pnpm run verify
 ```
+
+## 桌面开发
+
+```sh
+pnpm dev        # 先构建 contracts 和 engine，再打开桌面窗口
+```
+
+窗口显示本地引擎健康信息。修改 engine 源码后需要重启命令；关闭窗口会回收服务进程。开发和生产共用 `%APPDATA%\Frame Loom` 数据目录，使用说明见[桌面壳](apps/desktop/README.md)。
 
 ## 共享契约
 

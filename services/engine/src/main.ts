@@ -9,10 +9,11 @@ interface ParentPort {
   removeAllListeners(event: 'message'): void;
 }
 
+const parentPort = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
+
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
   const app = await createEngine(config);
-  const parentPort = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
   const listening = app.listen(0, '127.0.0.1');
   let closing = false;
   const shutdown = async () => {
@@ -29,6 +30,8 @@ async function main(): Promise<void> {
       process.off('SIGTERM', onSignal);
       process.off('SIGINT', onSignal);
       parentPort?.removeAllListeners('message');
+      // utilityProcess 不随 Node 句柄清空而退出，必须先完成资源关闭再显式结束。
+      if (parentPort) process.exit(process.exitCode ?? 0);
     }
   };
   const onSignal = () => { void shutdown(); };
@@ -47,12 +50,14 @@ async function main(): Promise<void> {
     if (parentPort) parentPort.postMessage(ready);
     else console.log(JSON.stringify(ready));
   } catch (error) {
+    console.error('engine 启动失败：', error instanceof Error ? error.message : error);
+    process.exitCode = 1;
     await shutdown();
-    throw error;
   }
 }
 
 main().catch((error: unknown) => {
   console.error('engine 启动失败：', error instanceof Error ? error.message : error);
   process.exitCode = 1;
+  if (parentPort) process.exit(1);
 });

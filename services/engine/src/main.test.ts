@@ -18,6 +18,8 @@ const parentShim = `
   const port = new EventEmitter();
   port.postMessage = message => console.log(JSON.stringify(message));
   process.parentPort = port;
+  // 模拟真实 utilityProcess 不会因关闭服务与移除消息监听而自然退出。
+  setInterval(() => {}, 60_000);
   process.stdin.setEncoding('utf8');
   process.stdin.once('data', data => {
     const message = JSON.parse(data);
@@ -88,6 +90,35 @@ it('配置无效时不泄露令牌', () => {
   expect(result.stderr).toContain('engine 配置无效');
   expect(result.stderr).not.toContain('private-invalid-token');
   expect(result.stdout).not.toContain('ready');
+});
+
+it('有 parentPort 的服务启动失败时非零退出，不被活动句柄阻塞', () => {
+  const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(parentShim)}`, entry], {
+    cwd: tmpdir(), env: { ...process.env, FRAME_LOOM_TOKEN: 'invalid' }, encoding: 'utf8', timeout: 10_000,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('engine 配置无效');
+  expect(result.stdout).not.toContain('ready');
+});
+
+it('有 parentPort 的监听失败时清理数据库并保留非零退出码', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'frame-loom-listen-fail-'));
+  directories.push(directory);
+  const shim = `${parentShim}
+    const { Server } = await import('node:net');
+    Server.prototype.listen = function () {
+      queueMicrotask(() => this.emit('error', new Error('模拟监听失败')));
+      return this;
+    };
+  `;
+  const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(shim)}`, entry], {
+    cwd: tmpdir(), env: { ...process.env, FRAME_LOOM_TOKEN: token, FRAME_LOOM_DATA_DIR: directory,
+      FRAME_LOOM_ALLOWED_ORIGINS: '[]' }, encoding: 'utf8', timeout: 10_000,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('模拟监听失败');
+  expect(result.stdout).not.toContain('ready');
+  expect(existsSync(join(directory, 'data/frame-loom.sqlite-wal'))).toBe(false);
 });
 
 it('数据库损坏时在监听和 ready 之前失败', () => {

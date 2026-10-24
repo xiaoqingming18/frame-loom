@@ -9,6 +9,7 @@
     "node": ">=24.22.0 <25"
   },
   "scripts": {
+    "dev": "pnpm --filter @frame-loom/engine... build && pnpm --filter @frame-loom/desktop dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

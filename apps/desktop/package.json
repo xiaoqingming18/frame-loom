@@ -1,0 +1,33 @@
+{
+  "name": "@frame-loom/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frame Loom 桌面工作台",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "postinstall": "install-electron",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "pnpm --filter @frame-loom/contracts build && vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@frame-loom/contracts": "workspace:*",
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-query": "5.104.5",
+    "@tanstack/react-router": "1.170.46",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "45.0.0",
+    "electron-vite": "6.0.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.5"
+  }
+}

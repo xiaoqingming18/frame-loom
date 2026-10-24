@@ -4,7 +4,7 @@ Status: proposed
 
 ## Problem
 
-Frame Loom 要做多模态 AI 影视工作台：剧本、角色和场景资产、分镜、出图、出视频、合成，后期由 Agent 串起全流程。仓库目前只有笔记和流程工具，没有应用代码。动手前需要定下几件事：桌面壳、界面、本地服务、数据库、媒体处理、进程之间怎么通信、仓库怎么分包。这些决定会落到跨进程契约、落盘格式和打包方式上，事后改动的成本高。
+Frame Loom 要做多模态 AI 影视工作台：剧本、角色和场景资产、分镜、出图、出视频、合成，后期由 Agent 串起全流程。仓库已建立共享契约、engine 和桌面壳，安装包仍待实现。需要统一桌面壳、界面、本地服务、数据库、媒体处理、进程通信与仓库分包的边界。这些决定会落到跨进程契约、落盘格式和打包方式上，事后改动的成本高。
 
 约束：
 
@@ -95,7 +95,7 @@ frame-loom/
 ```
 
 - 包名：`@frame-loom/desktop`、`@frame-loom/engine`、`@frame-loom/contracts`。
-- `packages/contracts` 已实现，字段、校验边界和构建约定见[共享契约包](../../implemented/architecture/2026-10-24-shared-contracts.md)。`services/engine` 已可独立运行，启动、安全边界与部署见[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)；本篇仍跟踪完整应用骨架，桌面壳与安装包待实现。
+- `packages/contracts` 已实现，字段、校验边界和构建约定见[共享契约包](../../implemented/architecture/2026-10-24-shared-contracts.md)。`services/engine` 已可独立运行，启动、安全边界与部署见[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)；桌面壳的可信页面、生命周期和真实联调见[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)。本篇仍跟踪完整应用骨架，安装包待实现。
 - desktop 的运行时依赖全部由 electron-vite 打进产物，`dependencies` 保持为空，这样 electron-builder 不需要收集 pnpm 的 `node_modules`。
 - engine 用 `pnpm deploy --prod` 生成一个独立目录，作为 electron-builder 的 `extraResources` 放进安装包。打包后的路径是 `process.resourcesPath/engine`，开发模式下用 `services/engine/dist`。
 - 打包时通过 electron-builder 的 `electronFuses` 关闭以下开关：`runAsNode`、`enableNodeOptionsEnvironmentVariable`、`enableNodeCliInspectArguments`。同时打开 `onlyLoadAppFromAsar` 和 ASAR 完整性校验。这样别的程序就不能把安装好的 exe 当作普通 Node 运行时来用。`utilityProcess` 不依赖 `runAsNode`。
@@ -103,10 +103,10 @@ frame-loom/
 
 ### 开放问题（首个里程碑验证）
 
-- `utilityProcess.fork()` 能否直接加载 ESM 入口。不行的话，加一个 `.cjs` 引导文件，在里面 `await import()` 真正的入口。
+- Electron 45 的 `utilityProcess.fork()` 已直接加载 ESM 入口，无需 `.cjs` 引导。关闭 HTTP／数据库后 utilityProcess 仍不自然退出，engine 在 parentPort 环境下清理完资源后显式退出；启动失败同样非零退出。
 - Vitest 4.1.12 实测能完成 controller → service 的隐式注入，无需 `unplugin-swc`；生产入口同样通过健康检查。
 - pnpm 12.15.0 的 `pnpm deploy --prod` 实测能正确带上 `@frame-loom/contracts` 的产物，无需开启 `injectWorkspacePackages`。
-- better-sqlite3 13 的 Node-API 预编译包在 Electron 45 的 `utilityProcess` 里能否直接加载。
+- better-sqlite3 13.0.3 的 Node-API 预编译包已在 Electron 45 的 utilityProcess 中直接加载，完成迁移和健康检查；asar 外部署仍由安装包验证。
 - 打开 `onlyLoadAppFromAsar` 和 ASAR 完整性校验后，`utilityProcess` 还能否从 asar 外部的 `resources/engine` 加载入口。
 - Playwright 的 `_electron` 能否启动 Electron 45 打包后的应用，尤其是在关闭 `enableNodeCliInspectArguments` 之后。如果这个 fuse 让 Playwright 连不上，冒烟测试改为启动 `electron-vite build` 的产物，打包后的 exe 改为人工验证。
 
