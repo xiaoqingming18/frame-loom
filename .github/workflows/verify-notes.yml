@@ -1,0 +1,35 @@
+name: 决策笔记校验
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出完整历史
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装锁定依赖
+        run: npm ci
+
+      - name: 校验目录、格式与归档封印
+        env:
+          # 使用变更前基线，防止以当前 HEAD 比较而漏掉封印篡改。
+          # 新分支首次推送没有历史基线时，上游脚本仍检查当前封印。
+          AGENT_NOTE_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: npm run verify-notes

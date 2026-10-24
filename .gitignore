@@ -1,0 +1,37 @@
+# 依赖与工具缓存
+node_modules/
+.npm/
+.cache/
+*.tsbuildinfo
+
+# 构建、安装包与测试产物
+dist/
+dist-electron/
+out/
+build/
+release/
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# 本地配置与凭据
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# 本地生成的决策看板
+/board.html
+/demo.html
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo

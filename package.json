@@ -1,0 +1,23 @@
+{
+  "name": "frame-loom",
+  "version": "0.1.0",
+  "private": true,
+  "description": "基于 Electron 与 React 的多模态 AI 智能影视工作台",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "verify-agent-note-tree": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts",
+    "verify-agent-note-format": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-format.ts",
+    "verify-archived": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-archived-agent-notes.ts",
+    "verify-notes": "npm run verify-agent-note-tree && npm run verify-agent-note-format && npm run verify-archived",
+    "archive-agent-note": "tsx .agents/skills/write-notes-like-deepseek/scripts/archive-agent-note.ts",
+    "check-anchors": "tsx .agents/skills/write-notes-like-deepseek/scripts/check-note-anchors.ts",
+    "init-board": "tsx .agents/skills/write-notes-like-deepseek/scripts/build-board.ts --init board.html \"Frame Loom 决策看板\"",
+    "bundle-board": "tsx .agents/skills/write-notes-like-deepseek/scripts/build-board.ts --bundle .agents/notes demo.html \"Frame Loom 决策看板\""
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  }
+}
