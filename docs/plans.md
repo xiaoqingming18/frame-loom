@@ -57,10 +57,12 @@ Note: ../notes/proposed/process/2026-11-10-settings-store.md
 
 ## 校验
 
+使用 Node.js 24.22.x 和 `packageManager` 锁定的 pnpm；环境准备见 [README](../README.md)。
+
 ```sh
-npm run verify-plans   # 计划路径、头块、状态、章节、步骤、父子一致性与链接（done/dropped 仅查计划与笔记链接）
-npm run test:plans     # 校验器正反例，以及自带示例的合规检查
-npm run verify         # 提交前运行：笔记校验 + 计划校验
+pnpm run verify-plans   # 计划路径、头块、状态、章节、步骤、父子一致性与链接（done/dropped 仅查计划与笔记链接）
+pnpm run test:plans     # 校验器正反例，以及自带示例的合规检查
+pnpm run verify         # 提交前运行：笔记校验 + 计划校验
 ```
 
 脚本只检查机械约束。拆分是否合理、验证是否真实执行、交接能否接手，仍需人工评审。

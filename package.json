@@ -4,8 +4,9 @@
   "private": true,
   "description": "基于 Electron 与 React 的多模态 AI 智能影视工作台",
   "type": "module",
+  "packageManager": "pnpm@12.15.0",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=24.22.0 <25"
   },
   "scripts": {
     "prepare": "node scripts/setup-git.mjs --hooks-only",
@@ -16,10 +17,10 @@
     "verify-agent-note-tree": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts",
     "verify-agent-note-format": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-format.ts",
     "verify-archived": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-archived-agent-notes.ts",
-    "verify-notes": "npm run verify-agent-note-tree && npm run verify-agent-note-format && npm run verify-archived",
+    "verify-notes": "pnpm run verify-agent-note-tree && pnpm run verify-agent-note-format && pnpm run verify-archived",
     "verify-plans": "node .agents/skills/todo-plan/scripts/verify-plans.mjs",
     "test:plans": "node --test tests/plans.test.mjs",
-    "verify": "npm run verify-notes && npm run verify-plans",
+    "verify": "pnpm run verify-notes && pnpm run verify-plans",
     "archive-agent-note": "tsx .agents/skills/write-notes-like-deepseek/scripts/archive-agent-note.ts",
     "check-anchors": "tsx .agents/skills/write-notes-like-deepseek/scripts/check-note-anchors.ts",
     "init-board": "tsx .agents/skills/write-notes-like-deepseek/scripts/build-board.ts --init board.html \"Frame Loom 决策看板\"",

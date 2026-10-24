@@ -16,7 +16,7 @@ Status: implemented
 - 生命周期写在 `Status:` 中：`draft`、`active`、`blocked — <原因>`、`done`、`dropped — <原因>`，不靠目录表示，路径保持稳定。计划完成后原地保留，作为执行记录与验证证据。
 - 与笔记联动：笔记 `proposed` 时计划为 `draft`，两者同批评审；收尾提交同批把笔记移入 `implemented/`、更新 `Note:` 路径并把计划转 `done`。
 - 提交信息新增可选尾注 `Plan: .agents/plans/...`，与 `Note:` 并列，不强制。
-- `npm run verify-plans` 执行计划校验，`npm run test:plans` 运行校验器测试，`npm run verify` 聚合笔记与计划校验。`verify-notes` 保持原样，CI 在笔记工作流中增加计划测试与校验。
+- `pnpm run verify-plans` 执行计划校验，`pnpm run test:plans` 运行校验器测试，`pnpm run verify` 聚合笔记与计划校验。`verify-notes` 保持原样，CI 在笔记工作流中增加计划测试与校验。
 
 ### 校验契约
 
@@ -55,7 +55,7 @@ Status: implemented
 - **GitHub Issues / Projects**：有看板，也便于协作；但仓库尚未托管，代理离线不可读，也不能与代码同次提交，因此不采用。
 - **完成后删除计划、只靠 Git 历史**：计划目录更干净；但笔记或提交中引用的计划链接会失效，验证证据只能翻历史，因此采用原地保留。
 - **不限层级的递归计划**：表达力强；但校验和状态汇总复杂，容易无限拆分，因此限定两层，过大的子计划拆成同级或提升为独立父计划。
-- **把计划校验并入 verify-notes**：入口统一；但需要修改上游脚本或 npm script 语义，因此新增独立的 `verify-plans` 并通过 `npm run verify` 聚合。
+- **把计划校验并入 verify-notes**：入口统一；但需要修改上游脚本或包脚本语义，因此新增独立的 `verify-plans` 并通过 `pnpm run verify` 聚合。
 
 ## Consequences
 
@@ -68,8 +68,8 @@ Status: implemented
 
 ## Verification
 
-- `npm run test:plans`：自带示例通过校验；7 个合法用例、27 个违规用例覆盖路径、头块、状态、章节、步骤、父子表、依赖与状态约束。
-- `npm run test:commit-convention`：增加带 `Plan:` 尾注的合法消息用例。
-- `npm run verify`：笔记校验与计划校验（当前 `.agents/plans/` 没有真实计划）。
+- `pnpm run test:plans`：自带示例通过校验；7 个合法用例、27 个违规用例覆盖路径、头块、状态、章节、步骤、父子表、依赖与状态约束。
+- `pnpm run test:commit-convention`：增加带 `Plan:` 尾注的合法消息用例。
+- `pnpm run verify`：笔记校验与计划校验（工作流首次落地时 `.agents/plans/` 没有真实计划）。
 - 以 `AGENT_NOTE_ROOT` 指向 `examples/notes` 运行上游格式与树校验，确认示例笔记符合笔记格式。
 - 本地抓取 OpenAI ExecPlans、spec-kit、OpenSpec 原文失败，借鉴内容依据检索摘要：[ExecPlans PLANS.md](https://github.com/openai/openai-agents-python/blob/fb67680fae60fef27cd0e71e73a68c73f9212526/PLANS.md)、[spec-kit 任务模板](https://github.com/github/spec-kit/blob/main/templates/tasks-template.md)、[OpenSpec 入门](https://raw.githubusercontent.com/nwaikhom/OpenSpec/refs/heads/main/docs/getting-started.md)。这些在线内容可能变化，本仓库规则以 todo-plan 技能为准。

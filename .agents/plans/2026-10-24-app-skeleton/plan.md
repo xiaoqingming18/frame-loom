@@ -1,15 +1,15 @@
 # Plan: 搭建应用骨架与工具链
 
-Status: draft
+Status: active
 Note: ../../notes/proposed/architecture/2026-10-24-desktop-stack-and-process-model.md
-Note: ../../notes/proposed/process/2026-10-24-pnpm-node24-toolchain.md
+Note: ../../notes/implemented/process/2026-10-24-pnpm-node24-toolchain.md
 
 ## 目标
 
 达成两篇笔记的验收标准：
 
 - [技术栈与进程模型](../../notes/proposed/architecture/2026-10-24-desktop-stack-and-process-model.md)：开发模式和装好的 NSIS 安装包都能打开窗口，拉起 engine，完成 SQLite 迁移，并在界面上显示鉴权后 `/health` 的结果。
-- [工具链切换](../../notes/proposed/process/2026-10-24-pnpm-node24-toolchain.md)：仓库在 Node 24.22 加 pnpm 下安装、校验、提交钩子全部可用。
+- [工具链切换](../../notes/implemented/process/2026-10-24-pnpm-node24-toolchain.md)：仓库在 Node 24.22 加 pnpm 下安装、校验、提交钩子全部可用。
 
 ## 范围与非目标
 
@@ -31,7 +31,7 @@ Note: ../../notes/proposed/process/2026-10-24-pnpm-node24-toolchain.md
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [工具链迁移到 pnpm 与 Node 24.22](01-toolchain.md) | draft | — | 现有校验在 pnpm 下全部通过，文档和 CI 已同步 |
+| 01 | [工具链迁移到 pnpm 与 Node 24.22](01-toolchain.md) | done | — | 现有校验在 pnpm 下全部通过，文档和 CI 已同步 |
 | 02 | [workspace 与 contracts 包](02-contracts.md) | draft | 01 | 可构建的 `@frame-loom/contracts`，带 schema 测试 |
 | 03 | [engine 服务骨架](03-engine.md) | draft | 02 | 能单独启动的 NestJS engine，包含鉴权、迁移和 `/health` |
 | 04 | [Electron 桌面壳](04-desktop.md) | draft | 03 | `pnpm dev` 打开窗口，显示 engine 健康状态 |
@@ -46,7 +46,7 @@ Note: ../../notes/proposed/process/2026-10-24-pnpm-node24-toolchain.md
 
 ## 验收
 
-- [ ] Node 24.22 加 pnpm 下 `pnpm run verify`、`pnpm run test:plans`、`pnpm run test:commit-convention` 通过 — 证据：01 验证
+- [x] Node 24.22 加 pnpm 下 `pnpm run verify`、`pnpm run test:plans`、`pnpm run test:commit-convention` 通过 — 证据：01 验证
 - [ ] `pnpm -r test` 覆盖 contracts schema、engine 鉴权守卫、迁移执行 — 证据：02、03 验证
 - [ ] 不带 token 访问 engine 返回 401，`Host` 不对的请求被拒绝 — 证据：03 验证
 - [ ] `pnpm dev` 打开窗口并显示健康状态；渲染层 `window.require`、`process`、`ipcRenderer` 都不可用 — 证据：04 验证
@@ -55,4 +55,5 @@ Note: ../../notes/proposed/process/2026-10-24-pnpm-node24-toolchain.md
 
 ## 发现与偏差
 
-无。
+- 01 已完成：工具链笔记移入 `implemented/`，架构笔记仍待 05 落地；02–05 保持 `draft`。
+- 01 安装时仅为 `esbuild@0.28.2` 登记构建许可；钩子全新安装改用隔离 Git 仓库验证。详情见[01 的发现与偏差](01-toolchain.md#发现与偏差)。

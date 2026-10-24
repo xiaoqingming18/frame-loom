@@ -23,17 +23,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: 配置 pnpm
+        uses: pnpm/action-setup@v4
+
       - name: 配置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: '24.22'
+          cache: pnpm
 
       - name: 安装锁定依赖
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: 验证规则及 Git 钩子
-        run: npm run test:commit-convention
+        run: pnpm run test:commit-convention
 
       - name: 校验新增提交
         env:
@@ -41,4 +44,4 @@ jobs:
           # 首次推送的全零基线触发全历史检查，包含根提交。
           COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: npm run verify-commits
+        run: pnpm run verify-commits

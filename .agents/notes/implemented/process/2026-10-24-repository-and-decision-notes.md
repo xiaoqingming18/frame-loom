@@ -11,20 +11,20 @@ Frame Loom 是计划采用 Electron 与 React 的多模态 AI 智能影视工作
 - Git 仓库使用 `main` 初始分支，此次基建构成首次提交。
 - 将上游 `write-notes-like-deepseek` 技能完整安装到 `.agents/skills/` 并纳入版本控制，固定来源提交，避免依赖开发者的全局安装。
 - 使用 `.agents/notes/{proposed,implemented,rejected,archived}/{class}/yyyy-mm-dd-topic.md` 标准，按需创建分类目录，不建立总索引。
-- 通过锁定的本地 `tsx`、npm scripts 和 GitHub Actions 执行目录、格式、归档封印三项校验；生成的看板不进入版本控制。
+- 通过锁定的本地 `tsx`、pnpm scripts 和 GitHub Actions 执行目录、格式、归档封印三项校验；生成的看板不进入版本控制。
 - 用根目录 `AGENTS.md` 和中文操作指南接入后续开发。非平凡改动与笔记同批提交，纯机械改动不立笔记。
-- 技能来源固定为上游提交 `72573a5b179de7798bbb7c4aeacdc0df6bf62439`；校验运行于 Node.js 22 或更高版本，CI 使用 Node.js 22 和推送前／PR 基线检查归档只增不改。
+- 技能来源固定为上游提交 `72573a5b179de7798bbb7c4aeacdc0df6bf62439`；本地与 CI 统一使用 Node.js 24.22.x 和 pnpm，CI 使用推送前／PR 基线检查归档只增不改，工具版本与锁文件见[工具链决策](2026-10-24-pnpm-node24-toolchain.md)。
 - `.gitattributes` 将文本换行统一为 LF，避免跨平台检出改变归档哈希；`.gitignore` 排除依赖、构建输出、凭据和生成的看板。
 
 ## Related notes
 
-初始化前活跃笔记为空，没有需要更新、否决或归档的旧决定。后续产品与运行时架构选择另行记录，不由本次流程决策预设。大型任务的实施计划由[todo-plan 工作流](2026-10-24-todo-plan-workflow.md)管理，存放在 `.agents/plans/`，不修改本篇安装的上游技能；`npm run verify` 聚合笔记与计划校验。
+初始化前活跃笔记为空，没有需要更新、否决或归档的旧决定。后续产品与运行时架构选择另行记录，不由本次流程决策预设。大型任务的实施计划由[todo-plan 工作流](2026-10-24-todo-plan-workflow.md)管理，存放在 `.agents/plans/`，不修改本篇安装的上游技能；`pnpm run verify` 聚合笔记与计划校验。
 
 ## Alternatives considered
 
 - **只写普通 Markdown 或传统 ADR**：文件少、学习成本低，也能记录理由；但用户明确要求本系统，标准 ADR 没有现成的状态分类、归档封印与校验脚本，需要另行维护约定，因此本次采用上游实现。
 - **仅在开发者全局目录安装技能**：多个项目可以共享一份文件，更新方便；但新机器、其他协作者和 CI 无法从本仓库恢复同一套规则，因此采用项目级随仓库分发。
-- **每次用 npx 临时获取 tsx**：无需维护开发依赖，适合快速试用；但每次联网和解析工具版本削弱可复现性，因此通过 package-lock.json 固定本地依赖。
+- **每次用 npx 临时获取 tsx**：无需维护开发依赖，适合快速试用；但每次联网和解析工具版本削弱可复现性，因此通过 `pnpm-lock.yaml` 固定本地依赖。
 
 ## Consequences
 
@@ -37,8 +37,8 @@ Frame Loom 是计划采用 Electron 与 React 的多模态 AI 智能影视工作
 
 ## Verification
 
-- `npm ci`：从锁文件恢复开发依赖。
-- `npm run verify-notes`：检查目录与相对链接、状态与必备章节、归档封印及历史基线。
-- `npm run init-board`、`npm run bundle-board`：生成日常直读和静态分发两种看板。
+- `pnpm install --frozen-lockfile`：从锁文件恢复开发依赖。
+- `pnpm run verify-notes`：检查目录与相对链接、状态与必备章节、归档封印及历史基线。
+- `pnpm run init-board`、`pnpm run bundle-board`：生成日常直读和静态分发两种看板。
 - `git check-ignore board.html demo.html node_modules/`：确认生成产物和依赖不进入版本控制。
 - `git diff --cached --check`：检查首次提交内容的空白错误。

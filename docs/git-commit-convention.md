@@ -84,11 +84,12 @@ BREAKING CHANGE: 说明旧项目的影响及实际可用的迁移方法。
 
 ## 本地使用
 
-环境：Node.js ≥22.12.0、npm、Git。新克隆后执行：
+环境：Node.js 24.22.x、Corepack、Git，pnpm 版本由 `packageManager` 锁定。新克隆后执行：
 
 ```sh
-npm ci
-npm run setup:git
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm run setup:git
 ```
 
 安装依赖的 `prepare` 自动启用 Husky。`setup:git` 再将提交模板配置到当前仓库的 `.git/config`，不更改全局设置。钩子和模板路径分别为 `.husky/_` 和 `.gitmessage.txt`，本地路径不随 Git 克隆；移动仓库后可重新运行设置命令。
@@ -98,16 +99,16 @@ git add <相关文件>
 git commit
 
 # 检查某个 UTF-8 消息文件
-npm run verify-commit-message -- --edit <消息文件>
+pnpm run verify-commit-message --edit <消息文件>
 
 # 检查基线之后到目标之间的所有提交，基线本身不包含在内
-npm run verify-commits -- --from <基线SHA> --to HEAD
+pnpm run verify-commits --from <基线SHA> --to HEAD
 
 # 不提供基线时检查全部可达历史，包含根提交
-npm run verify-commits
+pnpm run verify-commits
 
 # 规则及真实 Git 钩子集成验证
-npm run test:commit-convention
+pnpm run test:commit-convention
 ```
 
 提交钩子只检查消息，不自动修改消息或暂存文件。GUI 提交需要进程环境能找到 Node.js；Windows Git 使用自带的 shell 执行 Husky 钩子。

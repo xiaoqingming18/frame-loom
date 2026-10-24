@@ -38,5 +38,5 @@ Status: implemented
 ## Verification
 
 - 对比本地副本与上游克隆：六个 `SKILL.md` 与 `LICENSE` 逐字节一致。
-- `npm run verify`：笔记与计划校验通过。
+- `pnpm run verify`：笔记与计划校验通过。
 - 当前会话的技能目录在复制后列出全部六个 `ponytail*` 技能，确认宿主可发现。

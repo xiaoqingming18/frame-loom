@@ -7,13 +7,14 @@
 ## 准备环境
 
 - Git
-- Node.js 22.12.0 或更高版本（本地与 CI 当前使用 Node.js 22）
-- npm
+- Node.js 24.22.x（`.nvmrc` 与 CI 使用相同版本线）
+- Corepack（通过 `package.json` 的 `packageManager` 固定 pnpm 12.15.0）
 
 ```sh
-npm ci
-npm run setup:git
-npm run verify
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm run setup:git
+pnpm run verify
 ```
 
 ## 决策笔记
@@ -27,10 +28,10 @@ npm run verify
 
 ```sh
 # 生成本地看板，之后用浏览器打开 board.html
-npm run init-board
+pnpm run init-board
 
 # 生成可独立分发的静态看板 demo.html
-npm run bundle-board
+pnpm run bundle-board
 ```
 
 两个 HTML 文件均为生成产物，不纳入 Git。`.github/workflows/verify-notes.yml` 已配置三项校验；推送至 GitHub 后在 main 推送、拉取请求或手动触发时运行。
@@ -40,8 +41,8 @@ npm run bundle-board
 跨多次提交或会话的大型任务在 `.agents/plans/` 写实施计划，通过 `Note:` 链接对应决策笔记；大型需求使用父计划加同级子计划，最多两层。规则由项目自有的 [todo-plan 技能](.agents/skills/todo-plan/SKILL.md)定义，操作见[实施计划指南](docs/plans.md)。
 
 ```sh
-npm run verify-plans   # 校验计划
-npm run verify         # 提交前运行：笔记 + 计划
+pnpm run verify-plans   # 校验计划
+pnpm run verify         # 提交前运行：笔记 + 计划
 ```
 
 ## Ponytail 技能
@@ -52,4 +53,4 @@ npm run verify         # 提交前运行：笔记 + 计划
 
 遵循 [Git 提交信息规范](docs/git-commit-convention.md)：`type(scope): 中文摘要`，范围可省略。Husky 在提交时调用 commitlint，CI 在 Ubuntu／Windows 复检新增提交。
 
-`npm ci` 自动准备钩子，`npm run setup:git` 为当前仓库设置钩子和消息模板。日常仍使用 `git commit`；规则测试执行 `npm run test:commit-convention`。
+`pnpm install --frozen-lockfile` 自动准备钩子，`pnpm run setup:git` 为当前仓库设置钩子和消息模板。日常仍使用 `git commit`；规则测试执行 `pnpm run test:commit-convention`。

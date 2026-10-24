@@ -18,11 +18,11 @@ Frame Loom 的 Electron、React、模型接入和媒体处理开发需要从 Git
 
 ### 工具与安装
 
-本地和 CI 使用同一 `commitlint.config.mjs`。锁定 `@commitlint/cli` 与 `@commitlint/config-conventional` 为 `21.2.4`、Husky 为 `9.1.7`。commitlint 的最低运行要求是 Node.js 22.12.0，项目引擎声明与说明同步为该下限，CI 仍使用 Node.js 22。
+本地和 CI 使用同一 `commitlint.config.mjs`。锁定 `@commitlint/cli` 与 `@commitlint/config-conventional` 为 `21.2.4`、Husky 为 `9.1.7`。commitlint 的最低运行要求是 Node.js 22.12.0；项目按[工具链决策](2026-10-24-pnpm-node24-toolchain.md)统一使用 Node.js 24.22.x 和 pnpm，项目引擎声明为 `>=24.22.0 <25`，CI 使用 Node.js 24.22。
 
 继承常规规则，补充项目标题格式、尾注空行与回退 SHA 检查。移除上游英文摘要大小写及百列正文限制，保留专有名称和完整路径。语义、中文表达、真实验证、笔记必要性与迁移质量由评审判断，不用正则冒充语义检查。
 
-`npm ci` 的 `prepare` 自动准备 Husky；`npm run setup:git` 设置当前仓库 `core.hooksPath=.husky/_` 和提交模板，不修改全局设置。CI、生产依赖安装、`HUSKY=0` 跳过设置；源代码副本无 `.git` 时准备阶段跳过。钩子只检查消息，不修改或暂存文件。跨平台入口直接启动 Node 执行 commitlint，避免 Windows `.cmd` 引号差异。
+`pnpm install --frozen-lockfile` 的 `prepare` 自动准备 Husky；`pnpm run setup:git` 设置当前仓库 `core.hooksPath=.husky/_` 和提交模板，不修改全局设置。CI、生产依赖安装、`HUSKY=0` 跳过设置；源代码副本无 `.git` 时准备阶段跳过。钩子只检查消息，不修改或暂存文件。跨平台入口直接启动 Node 执行 commitlint，避免 Windows `.cmd` 引号差异。
 
 ### CI 与范围
 
@@ -73,9 +73,9 @@ Frame Loom 的 Electron、React、模型接入和媒体处理开发需要从 Git
 
 ## Verification
 
-- `npm run test:commit-convention`：26 个消息正反例；另在依赖缓存内建立隔离 Git 仓库，验证真实钩子拒绝错误消息、接受合法消息与模板注释且不修改消息，CI 跳过安装，范围覆盖根提交及多条提交、拒绝未知基线、检出中间的错误消息。
+- `pnpm run test:commit-convention`：27 个消息正反例；另在依赖缓存内建立隔离 Git 仓库，验证真实钩子拒绝错误消息、接受合法消息与模板注释且不修改消息，CI 跳过安装，范围覆盖根提交及多条提交、拒绝未知基线、检出中间的错误消息。
 - Windows Git 不接受 Node 空设备路径作为全局配置文件；测试使用临时空 Git 配置隔离用户设置。清理前验证绝对路径在本测试缓存目录内。
-- `npm ci` 和 `npm run setup:git`：恢复锁定依赖并启用当前仓库钩子及模板。
-- `npm run verify-notes`：目录、相对链接、状态与格式、归档封印检查。
-- `npm run verify-commits`：同一配置检查现有可达提交；真实实施提交经过已安装的 `commit-msg` 钩子。
+- `pnpm install --frozen-lockfile` 和 `pnpm run setup:git`：恢复锁定依赖并启用当前仓库钩子及模板。
+- `pnpm run verify-notes`：目录、相对链接、状态与格式、归档封印检查。
+- `pnpm run verify-commits`：同一配置检查现有可达提交；真实实施提交经过已安装的 `commit-msg` 钩子。
 - `git diff --cached --check`：检查提交内容空白错误。远端 CI 运行结果在推送后确认。

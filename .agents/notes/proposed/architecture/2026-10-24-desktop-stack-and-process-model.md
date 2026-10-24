@@ -12,7 +12,7 @@ Frame Loom 要做多模态 AI 影视工作台：剧本、角色和场景资产�
 - 视频生成是耗时几分钟的远程异步任务，应用重启后不能丢。
 - 本地服务会持有用户的模型 API Key 和素材文件，本机其他程序和浏览器页面不能随意访问它。
 - Agent 内核选 pi（见 [Agent 内核选型](2026-10-24-agent-runtime-pi.md)），pi 只发布 ESM，要求 Node 22.19 以上。NestJS 12 也只发布 ESM。
-- 工具链切到 pnpm 和 Node 24.22（见 [工具链笔记](../process/2026-10-24-pnpm-node24-toolchain.md)）。
+- 工具链已切到 pnpm 和 Node 24.22（见 [工具链笔记](../../implemented/process/2026-10-24-pnpm-node24-toolchain.md)）。
 
 ## Proposal
 
