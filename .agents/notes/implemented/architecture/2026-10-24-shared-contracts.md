@@ -37,7 +37,7 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 - 收益：后续 engine 和 desktop 可共用运行时校验与推导类型；测试进入类型检查，生产输出不包含测试文件。
 - 代价：引入 TypeScript、Vitest 和 zod 的安装量；调用方加载包入口前需要先构建 contracts。没有另加构建封装或其他测试框架。
 - 连接地址有意限制为主进程生成的规范形式；将来支持远程 engine 或其他 URL 格式时，必须重新评审契约与校验。
-- 连接地址校验只检查数据格式，不能替代后续 HTTP 鉴权、Host 检查、CORS 或 IPC 来源校验。engine、Electron 与打包行为不在本次验证范围。
+- 连接地址校验只检查数据格式，不能替代 HTTP 鉴权、Host 检查、CORS 或 IPC 来源校验；前三项现由 [engine 服务](2026-10-24-engine-service.md)落实。engine、Electron 与打包行为不在本篇契约验证范围。
 
 ## Verification
 

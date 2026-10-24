@@ -1,7 +1,8 @@
 # Plan: engine 服务骨架
 
-Status: draft
+Status: done
 Parent: plan.md
+Note: ../../notes/implemented/architecture/2026-10-24-engine-service.md
 
 ## 目标
 
@@ -21,15 +22,15 @@ engine 不依赖 Electron，用 Node 24.22 直接运行 `node dist/main.js` 就�
 
 ## 步骤
 
-- [ ] T1 以 `@nestjs/schematics` 的 `ts-esm` 应用模板为起点，手动建出 `services/engine`：`package.json` 写 `"type": "module"`，`tsconfig.json` 继承根目录的 `tsconfig.base.json`，并开启 `experimentalDecorators` 和 `emitDecoratorMetadata`，再加上 `nest-cli.json`。不需要的模板内容（`@nestjs/mau`、`deploy` 脚本、示例 controller）不保留。依赖全部写精确版本，`@frame-loom/contracts` 用 `workspace:*` — 验证：`pnpm --filter @frame-loom/engine build` 生成 `dist/main.js`
-- [ ] T2 写配置读取：从环境变量取 token 和数据目录，用 zod 校验。token 必须是 64 位十六进制；数据目录必须是绝对路径。校验失败时打印原因，以非零退出码退出 — 验证：不设环境变量运行 `node dist/main.js`，进程以非零码退出，并输出中文错误
-- [ ] T3 写数据库模块：用 better-sqlite3 打开数据库，设置 `journal_mode = WAL` 和 `foreign_keys = ON`；在 Nest 监听端口之前，用 `drizzle-orm/better-sqlite3/migrator` 执行 `services/engine/drizzle/` 下的迁移。第一份迁移只建 `app_meta` 表（`key`、`value`），用来记录 schema 版本。迁移文件由 `drizzle-kit generate` 生成后入库。在 `pnpm-workspace.yaml` 的 `allowBuilds` 里登记 better-sqlite3。如果安装后发现它不需要构建，按实际情况写 `false` — 验证：`pnpm install` 没有 `ERR_PNPM_IGNORED_BUILDS` 报错；engine 启动后数据库文件存在，`app_meta` 表存在
-- [ ] T4 写鉴权：全局 guard 校验 `Authorization: Bearer <token>`，用 `crypto.timingSafeEqual` 比较；同时校验 `Host` 等于 `127.0.0.1:<实际端口>`。CORS 只放行 renderer 的源，开发模式是 electron-vite 开发服务器的源，打包后是 `app://` 源，源列表通过环境变量 `FRAME_LOOM_ALLOWED_ORIGINS` 传入。不提供免鉴权的接口 — 验证：单测和 e2e 覆盖四种情况：无 token 返回 401；token 错误返回 401；`Host` 错误返回 403；正确请求返回 200
-- [ ] T5 写 `HealthController`，`GET /health` 返回 `HealthResponse`。返回前用 contracts 的 schema 做一次 `parse`，确保响应和契约一致 — 验证：e2e 测试断言响应能通过 `HealthResponse.parse`
-- [ ] T6 写 `main.ts` 启动流程：读配置 → 执行迁移 → `app.listen(0, '127.0.0.1')` → 读取实际端口 → 如果存在 `process.parentPort` 就上报 ready，否则把端口打印到 stdout，供单独调试用。另外处理 `SIGTERM` 和 parentPort 的退出消息：调用 `app.close()` 并关闭数据库 — 验证：用 PowerShell 设置环境变量后运行 `node dist/main.js`，输出端口；`curl -H "Authorization: Bearer <token>" http://127.0.0.1:<port>/health` 返回 200
-- [ ] T7 配置 Vitest，单测和 e2e 共用一套设置。先不加 SWC，跑一个依赖注入用例：controller 注入 service。如果注入结果是 `undefined`，加上 `unplugin-swc`，并把这件事记进本文件的「发现与偏差」 — 验证：`pnpm --filter @frame-loom/engine test` 通过，覆盖鉴权、迁移、健康检查
-- [ ] T8 加 `deploy` 脚本：`pnpm --filter @frame-loom/engine deploy --prod <输出目录>`。确认产物里有 `dist/`、`drizzle/`、生产依赖和 contracts 的 `dist`。如果 workspace 依赖没有被正确带上，就开启 `injectWorkspacePackages` — 验证：在产物目录里设置环境变量运行 `node dist/main.js`，`/health` 返回 200
-- [ ] T9 提交 `feat(engine): 新增本地服务骨架`，带 `Note:` 和 `Plan:` 尾注 — 验证：`pnpm run verify` 和 `pnpm -r test` 通过
+- [x] T1 参考 `@nestjs/schematics` 的 `ts-esm` 模板建立 `services/engine`，保留 ESM、NodeNext、装饰器元数据、`nest-cli.json` 和精确依赖，移除示例与多余模板工具 — 验证：`pnpm --filter @frame-loom/engine build` 生成 `dist/main.js`，输出不含测试
+- [x] T2 用 zod 校验 64 位十六进制 token、绝对数据目录与 JSON 允许源列表 — 验证：配置测试通过，生产入口无配置时输出中文错误并以 1 退出，不泄露无效令牌
+- [x] T3 用 better-sqlite3 与 Drizzle 在监听前完成 WAL、外键和 `app_meta` 迁移，入库生成的 SQL 与快照，并初始化 schema 版本；按实际安装登记构建许可 — 验证：冻结安装成功；真实 SQLite 测试覆盖版本、迁移日志、幂等、已有数据保留和损坏数据库失败
+- [x] T4 用全局 guard 与 `timingSafeEqual` 校验 Bearer，在 CORS 前检查 Host 与 Origin，只允许环境变量指定的源 — 验证：单测与真实 HTTP 测试覆盖缺失／错误 token 的 401、错误 Host／Origin 的 403、合法请求的 200，以及可信预检
+- [x] T5 实现 `HealthController`，通过 `HealthResponse.parse` 校验健康响应，读取包版本和落盘 schema 版本 — 验证：HTTP 与生产入口黑盒测试均通过共享契约检查
+- [x] T6 实现迁移后随机端口监听、parentPort／stdout ready 与 shutdown／SIGTERM／SIGINT 关闭，处理初始化期间退出 — 验证：生产入口子进程测试从临时工作目录启动，用 HTTP 请求确认 200，并检查正常退出、端口关闭与 WAL 清理
+- [x] T7 配置单测与 e2e 共用的 Vitest，先实测隐式注入再决定是否加 SWC — 验证：controller → service 注入正常，无需 SWC，engine 68 项测试通过
+- [x] T8 增加根 `deploy:engine` 脚本，构建后执行 `pnpm --filter @frame-loom/engine deploy --prod <输出目录>`，确认迁移、生产依赖与 contracts 产物 — 验证：部署目录独立启动并通过生产入口测试，无需 `injectWorkspacePackages`
+- [x] T9 提交 `feat(engine): 新增本地服务骨架`，带 `Note:` 和 `Plan:` 尾注 — 验证：`pnpm run verify` 与 `pnpm -r test` 通过，与本计划收尾同批提交
 
 ## 验证
 
@@ -37,16 +38,27 @@ engine 不依赖 Electron，用 Node 24.22 直接运行 `node dist/main.js` 就�
   - engine 用 Node 24.22 能单独启动并完成迁移；
   - 无 token 返回 401，`Host` 错误返回 403，正确请求返回 200，且响应符合契约；
   - `deploy` 产物能独立运行。
-- 实际：未执行。
+- 实际：Node 24.22.1、pnpm 12.15.0 下，冻结安装、workspace 构建与 `pnpm typecheck` 通过；再次执行 `db:generate` 无 schema 变更。
+- `pnpm -r test` 通过：contracts 43 项、engine 68 项，覆盖配置、元数据注入、真实 SQLite 迁移、HTTP 边界、健康响应及编译入口的启动与关闭。
+- 生产入口无配置或数据库损坏时以 1 退出，不上报 ready；有效配置从临时工作目录启动，迁移后输出端口，带 Bearer 的 `/health` 返回 200。
+- `pnpm deploy:engine` 产物含 `dist/`、`drizzle/`、生产依赖及 contracts 的 `dist`；另向仓库外的系统临时目录执行生产部署，复用 `src/main.test.ts` 检查入口、鉴权、健康响应与退出。
+- 既有 `test:plans` 37 项、`test:commit-convention` 29 项通过，包含真实 Git 钩子校验；`pnpm run verify` 与 `git diff --check` 通过。
 
 ## 进度
 
 - 2026-10-24：创建子计划草稿。
+- 2026-10-24：用户授权执行子计划 03；确认 02 完成、工作区干净，开始实现独立 engine 与部署验证。
+- 2026-10-24：完成 T1–T8、68 项 engine 测试和仓库外部署验证；engine 笔记移入 `implemented/`，同步父计划、项目现状与 04 对接说明，与 T9 同批提交。
 
 ## 发现与偏差
 
-无。
+- 完整架构仍需 04、05 验证，保持 `proposed`；本次 engine 的独立决策笔记转入 `implemented`，与完整架构及共享契约笔记互链。
+- `FRAME_LOOM_ALLOWED_ORIGINS` 固定为 JSON 字符串数组，省略时 `[]`；退出消息为 `{ type: 'shutdown' }`。04 的主进程必须遵守这两项格式。
+- Host 与 Origin 检查放在 CORS 前的全局中间件，Bearer 放在全局 guard；可信 OPTIONS 预检无 Bearer，实际接口仍鉴权。未带 Origin 的预检拒绝。
+- better-sqlite3 13.0.3 自带预编译包，无安装生命周期脚本，构建许可登记 `false`。drizzle-kit 带入的 esbuild 0.18.20 与 0.25.12 初次安装被审核拦截；核对安装脚本后按精确版本许可，冻结安装通过。
+- 首份表结构由 drizzle-kit 生成，补充 schema_version 的种子 SQL；迁移与快照一起入库。测试验证重复启动不会覆盖已有元数据。
+- Vitest 已能生成隐式注入所需元数据，不加 SWC；pnpm deploy 已能携带 workspace 产物，不开启注入。生产入口测试代替人工 curl 验证；parentPort 与信号事件使用 shim，真实 Electron、操作系统信号投递和安装包验证留到后续。
 
 ## 交接
 
-02 已完成；本计划尚未开始。`@frame-loom/contracts` 已提供 `HealthResponse`、`EngineConnection` 的 schema 与同名类型；开始本计划时先构建 contracts，再通过 `workspace:*` 引用。
+无。

@@ -12,6 +12,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "deploy:engine": "pnpm --filter @frame-loom/engine... build && pnpm --filter @frame-loom/engine deploy --prod",
     "prepare": "node scripts/setup-git.mjs --hooks-only",
     "setup:git": "node scripts/setup-git.mjs",
     "verify-commit-message": "node scripts/verify-commit-message.mjs",

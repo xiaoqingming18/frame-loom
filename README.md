@@ -2,7 +2,7 @@
 
 基于 **Electron + React** 的多模态 AI 智能影视工作台桌面 PC 应用。
 
-当前已完成仓库流程工具、pnpm workspace 与 `@frame-loom/contracts` 共享契约包，尚无可启动的应用程序。engine、Electron／React 桌面壳与安装包仍待后续子计划实现，见[应用骨架计划](.agents/plans/2026-10-24-app-skeleton/plan.md)。
+当前已完成仓库流程工具、pnpm workspace、`@frame-loom/contracts` 共享契约包与可独立运行的 NestJS engine。Electron／React 桌面壳与安装包仍待后续子计划实现，见[应用骨架计划](.agents/plans/2026-10-24-app-skeleton/plan.md)。
 
 ## 准备环境
 
@@ -28,6 +28,18 @@ pnpm typecheck   # 检查源码与测试的类型
 ```
 
 契约边界与构建方式见[共享契约决策](.agents/notes/implemented/architecture/2026-10-24-shared-contracts.md)。
+
+## 本地 engine
+
+`services/engine` 使用 NestJS 12、Express、better-sqlite3 与 Drizzle。配置与独立部署方法见 [engine 使用说明](services/engine/README.md)。
+
+```sh
+pnpm --filter @frame-loom/engine... build
+pnpm --filter @frame-loom/engine test
+pnpm deploy:engine .cache/engine-deploy
+```
+
+部署命令先构建 contracts 与 engine，再执行 `pnpm --filter @frame-loom/engine deploy --prod <输出目录>`。产物自带迁移和生产依赖，运行时仍需传入令牌与绝对数据目录。
 
 ## 决策笔记
 

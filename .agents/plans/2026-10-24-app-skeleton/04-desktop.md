@@ -60,4 +60,4 @@ Parent: plan.md
 
 ## 交接
 
-尚未开始，要等 03 完成。T1、T2 可以和 03 并行做。
+03 已完成，下一步可执行本计划。engine 入口为 `services/engine/dist/main.js`；主进程传入 `FRAME_LOOM_ALLOWED_ORIGINS: JSON.stringify([rendererOrigin])`，使用完整源，例如 `http://localhost:5173` 或 `app://frame-loom`。退出发送 `child.postMessage({ type: 'shutdown' })`；ready 格式为 `{ type: 'ready', port }`。Node 独立运行与仓库外部署已验证，真实 utilityProcess／原生模块加载仍需本计划联调。协议细节见 `services/engine/README.md`。
