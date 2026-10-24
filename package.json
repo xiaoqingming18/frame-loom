@@ -5,9 +5,14 @@
   "description": "基于 Electron 与 React 的多模态 AI 智能影视工作台",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "scripts": {
+    "prepare": "node scripts/setup-git.mjs --hooks-only",
+    "setup:git": "node scripts/setup-git.mjs",
+    "verify-commit-message": "node scripts/verify-commit-message.mjs",
+    "verify-commits": "node scripts/verify-commits.mjs",
+    "test:commit-convention": "node --test tests/commit-convention.test.mjs",
     "verify-agent-note-tree": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts",
     "verify-agent-note-format": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-format.ts",
     "verify-archived": "tsx .agents/skills/write-notes-like-deepseek/scripts/verify-archived-agent-notes.ts",
@@ -18,6 +23,9 @@
     "bundle-board": "tsx .agents/skills/write-notes-like-deepseek/scripts/build-board.ts --bundle .agents/notes demo.html \"Frame Loom 决策看板\""
   },
   "devDependencies": {
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
+    "husky": "9.1.7",
     "tsx": "4.23.15"
   }
 }

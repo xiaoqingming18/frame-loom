@@ -18,6 +18,14 @@
 7. 样式、格式化、错别字、无行为变化的补丁等纯机械改动不单独立笔记。
 8. 提交前运行 `npm run verify-notes`，失败先修复。校验只保证机械规则，仍需核对理由和内容是否准确。
 
+## Git 提交规范
+
+- 遵循 [Git 提交信息规范](docs/git-commit-convention.md)，使用 `type(scope): 中文摘要`，范围可省略，标题最多 72 字符。
+- 仅使用 `feat`、`fix`、`perf`、`refactor`、`docs`、`test`、`build`、`ci`、`style`、`chore`、`revert`；`style` 仅表示格式调整。
+- 一个提交对应一个逻辑变化，代码、必要测试、文档与笔记同次提交。非平凡改动简述动机和实际验证，以 `Note:` 关联笔记。
+- 破坏性变更同时使用标题 `!` 和 `BREAKING CHANGE:`，写清影响及迁移方法；回退使用 `revert` 并填写 `Reverts:` 完整 SHA。
+- 不绕过提交消息钩子，不编造测试、Issue 或共同作者；提交前继续运行 `npm run verify-notes`。新克隆执行 `npm ci` 和 `npm run setup:git`。
+
 ## 工具与操作
 
 - 已安装 MCP 提供对应能力时优先使用。代码检索有 `code-index` 时先初始化索引，优先使用文件／符号级工具；Git 操作或大规模编辑后刷新索引。未提供该工具时使用 `rg`／`rg --files`。

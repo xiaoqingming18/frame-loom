@@ -1,0 +1,1 @@
+node scripts/verify-commit-message.mjs --edit "$1"

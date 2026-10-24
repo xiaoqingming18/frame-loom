@@ -7,11 +7,12 @@
 ## 准备环境
 
 - Git
-- Node.js 22 或更高版本（本地与 CI 当前使用 Node.js 22）
+- Node.js 22.12.0 或更高版本（本地与 CI 当前使用 Node.js 22）
 - npm
 
 ```sh
 npm ci
+npm run setup:git
 npm run verify-notes
 ```
 
@@ -33,3 +34,9 @@ npm run bundle-board
 ```
 
 两个 HTML 文件均为生成产物，不纳入 Git。`.github/workflows/verify-notes.yml` 已配置三项校验；推送至 GitHub 后在 main 推送、拉取请求或手动触发时运行。
+
+## Git 提交
+
+遵循 [Git 提交信息规范](docs/git-commit-convention.md)：`type(scope): 中文摘要`，范围可省略。Husky 在提交时调用 commitlint，CI 在 Ubuntu／Windows 复检新增提交。
+
+`npm ci` 自动准备钩子，`npm run setup:git` 为当前仓库设置钩子和消息模板。日常仍使用 `git commit`；规则测试执行 `npm run test:commit-convention`。

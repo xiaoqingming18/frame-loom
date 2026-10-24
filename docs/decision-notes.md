@@ -92,7 +92,7 @@ npm run bundle-board
 - 前三项校验分别检查目录／相对链接、正文骨架／状态、归档封印／只增不改，聚合入口是 `verify-notes`。
 - 本地归档比较基线默认是 `HEAD`；CI 使用 PR 基线或推送前提交。首次提交没有历史清单时，只检查当前封印。
 - GitHub Actions 使用完整历史和 `npm ci`，运行同一个聚合入口。需要仓库托管至 GitHub 才能执行远端校验。
-- 当前未配置自动执行的本地 Git 提交钩子，提交前手动运行聚合入口。
+- 本地 `commit-msg` 钩子检查提交信息，操作见 [Git 提交信息规范](git-commit-convention.md)；笔记聚合校验仍须在提交前手动运行。
 - `check-anchors` 是可选软报告，不代替门禁，不要求代码额外添加锚点。
 - `board.html` 由 Chrome／Edge 读取本地笔记；首次点击「连接本地目录」并选择 `.agents/notes`。`demo.html` 内嵌生成时的数据，适合离线分享；分享前核对笔记内容。
 

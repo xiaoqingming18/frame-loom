@@ -1,0 +1,14 @@
+# type(scope): 中文摘要，建议不超过50字符，最多72字符
+# 删除本行上方的说明，在首行填写标题；scope 可省略。
+# 类型：feat fix perf refactor docs test build ci style chore revert
+#
+# 非平凡改动简述动机、关键变化和实际验证；小改可以只有标题。
+# 标题与正文、正文与尾注之间留空行。
+#
+# Note: .agents/notes/implemented/类别/日期-主题.md
+# Refs: #问题编号
+# Closes: #已解决的问题编号
+# Reverts: 完整提交SHA
+# BREAKING CHANGE: 不兼容点、影响对象及迁移方法；标题同时加 !
+#
+# 完整规范：docs/git-commit-convention.md

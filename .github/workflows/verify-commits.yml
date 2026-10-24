@@ -1,0 +1,44 @@
+name: 提交信息校验
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      HUSKY: '0'
+    steps:
+      - name: 检出完整历史
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装锁定依赖
+        run: npm ci
+
+      - name: 验证规则及 Git 钩子
+        run: npm run test:commit-convention
+
+      - name: 校验新增提交
+        env:
+          # PR 校验真实分支提交，不把 GitHub 生成的测试合并提交当作目标。
+          # 首次推送的全零基线触发全历史检查，包含根提交。
+          COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run verify-commits
