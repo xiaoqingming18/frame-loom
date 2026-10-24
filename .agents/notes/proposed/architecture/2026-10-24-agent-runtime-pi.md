@@ -40,7 +40,7 @@ Status: proposed
 
 ### 隔离与锁版本
 
-- 只有 `apps/engine` 里的 `agent` 模块可以直接 import pi。其他模块只依赖我们自己定义的工具接口和事件类型。以后要换内核，改动只限在这一个模块里。
+- `@earendil-works/pi-agent-core` 只能在 `apps/engine` 的 `modules/agent` 中 import，`@earendil-works/pi-ai` 只能在 `modules/llm` 中 import。`modules/llm` 负责渠道模型到 pi `Model` 的转换和文本调用，模型管理的连通测试也走这里，见[模型管理](2026-10-24-model-management.md)。其他模块只依赖我们自己定义的接口和事件类型；以后要换内核，改动只限在这两个模块里。
 - pi 的版本精确锁定，不用 `^`。升级单独提交，并跑 Agent 的回归测试。
 - 2026-10-24 的最新版本是 1.4.0。npm 包名已经从 `@mariozechner/*` 改成了 `@earendil-works/*`。
 
@@ -52,7 +52,7 @@ Status: proposed
 
 ### 时机
 
-首个骨架里程碑不安装 pi。等第一个领域能力需要 Agent 时，再引入并建立 `agent` 模块。本篇先定选型和边界。
+首个骨架里程碑不安装 pi。模型管理的第一阶段会先引入 pi-ai，并建立 `modules/llm`，用于文本模型的连通测试；pi-agent-core 和 `modules/agent` 等第一个需要 Agent 的领域能力出现时再引入。本篇先定选型和边界。
 
 ## Alternatives considered
 
@@ -68,7 +68,7 @@ Status: proposed
 
 ## Acceptance criteria
 
-- 引入 pi 时，`apps/engine` 里只有 `agent` 模块直接 import `@earendil-works/*`，可以用 grep 检查。
+- 引入 pi 时，用 grep 检查 `apps/engine` 里的导入：pi-agent-core 只出现在 `modules/agent`，pi-ai 只出现在 `modules/llm`。
 - pi 在 `package.json` 里写精确版本。
 - 第一个 Agent 能力上线时，用假模型跑通「生成剧本 → 抽取资产 → 生成分镜」三个工具，并覆盖两点：耗时任务异步返回后能接上下一轮；进程中途退出后能按任务表恢复。
 
