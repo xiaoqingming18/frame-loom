@@ -80,11 +80,13 @@ Status: implemented
 - 类型感知 lint 会随代码量变慢。超过可接受时间时，先考虑缩小 `recommendedTypeChecked` 的范围，再考虑 oxlint。
 - 首次格式化会改动大量行，和进行中的分支冲突。在没有其他未合并分支时执行，并单独提交。
 - Prettier 对 Markdown 的改写可能和项目写作规范冲突，所以 `docs/` 和 `.agents/` 不纳入格式化；README 等根目录 Markdown 是否纳入，以首次运行的 diff 为准。
-- 初次纯格式化和 blame SHA 登记在配置提交之后独立完成；CI 配置已审阅，远端尚未执行。
+- 初次纯格式化提交为 `aee1d3a0012ac3172974a41d7a8265502e30c715`，与配置、blame SHA 登记分别提交；CI 配置已审阅，远端尚未执行。
 
 ## Verification
 
 - 冻结安装通过，11 项依赖按版本表精确锁定；`unrs-resolver@1.12.2` 禁止安装脚本后，TypeScript resolver 仍能加载本机绑定。
 - `pnpm lint`、`pnpm typecheck` 和 `pnpm test` 通过，现有 150 项单测全部保留；lint 修复只涉及类型标注及冗余非空断言，没有运行时行为变化。
 - `eslint --print-config` 断言 renderer 的导入边界和 `no-floating-promises` 均为 error。临时源码配合 ESLint API 验证 7 项反例：跨 feature、renderer 导入 main/preload/engine、engine 导入 desktop、feature 导入 app、lib 导入 feature；同 feature 和 contracts 导入正例通过。反例均只报预期的边界错误，随后删除临时源码。
-- 首轮 `format:check` 仅报告 28 份源码、配置和测试的格式差异，未报告 `.agents/`、`docs/`、锁文件或迁移元数据；格式化完成结果由后续同组提交同步。
+- `pnpm format` 改动 28 份源码、配置和测试，逐文件断言均等于 Prettier 对提交前原文的输出；未改动 `.agents/`、`docs/`、锁文件或迁移元数据。格式化后 `format:check`、lint、类型检查和 150 项单测全部通过。
+- `.git-blame-ignore-revs` 登记格式提交的完整 SHA，README 提供本地配置命令；使用临时 `git -c` 配置检查 blame，不改变用户现有 Git 配置。
+- 格式化涉及的根目录计划测试 37 项、提交规范与真实 Git 钩子测试 29 项均通过；CI 配置只完成本地审阅，不视为远端运行结果。

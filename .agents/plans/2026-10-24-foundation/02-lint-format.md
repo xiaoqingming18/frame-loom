@@ -1,6 +1,6 @@
 # Plan: ESLint 与 Prettier
 
-Status: active
+Status: done
 Parent: plan.md
 Note: ../../notes/implemented/process/2026-10-24-lint-and-format.md
 
@@ -22,19 +22,21 @@ Note: ../../notes/implemented/process/2026-10-24-lint-and-format.md
 - [x] T5 用临时文件验证导入边界 — 验证：ESLint API 使用相同配置验证 7 项反例和 1 项正例，全部符合预期；临时源码已删除
 - [x] T6 在 `.github/workflows/build.yml` 的单测与类型检查之后加入 `pnpm lint` 与 `pnpm format:check` — 验证：配置已审阅，远端未执行
 - [x] T7 提交 `build: 引入 ESLint 与 Prettier`，包含配置、脚本、CI 与 lint 修复，带 `Note:` 与 `Plan:` 尾注 — 验证：提交钩子与提交前 `pnpm run verify`
-- [ ] T8 运行 `pnpm format`，单独提交 `style: 全仓格式化` — 验证：`git diff --stat` 不含 `.agents/`；`pnpm typecheck`、`pnpm test`、`pnpm format:check` 通过
-- [ ] T9 把 T8 提交的完整 SHA 写入 `.git-blame-ignore-revs`，README 说明 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，作为 `chore` 提交 — 验证：`git blame` 在配置后跳过格式化提交
+- [x] T8 运行 `pnpm format`，单独提交 `style: 全仓格式化` — 验证：`aee1d3a0012ac3172974a41d7a8265502e30c715` 的 28 份变更均为 Prettier 对原文的输出，不含 `.agents/` 或 `docs/`；`pnpm typecheck`、`pnpm test`、`pnpm format:check` 通过
+- [x] T9 把 T8 提交的完整 SHA 写入 `.git-blame-ignore-revs`，README 说明 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，作为 `chore` 提交 — 验证：`git -c blame.ignoreRevsFile=.git-blame-ignore-revs blame` 跳过格式化提交，提交钩子与 `pnpm run verify`
 
 ## 验证
 
 - 预期：`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test`、`pnpm run verify` 全部通过；边界反例报错；格式化提交只含格式改动。
-- 实际：未执行。
+- 实际：`pnpm install --frozen-lockfile`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck`、`pnpm test`（150 项）、`pnpm run verify` 通过。边界反例 7 项、正例 1 项通过并清理临时源码；配置打印包含 error 级别的导入边界与异步检查。Windows CI 在测试和类型检查后加入 lint 与格式检查，远端尚未运行。格式提交 `aee1d3a0012ac3172974a41d7a8265502e30c715` 逐文件核对为纯格式改动，blame 配置跳过该提交。
+- 根目录测试与提交配置也被格式化，额外运行 `pnpm run test:plans`（37 项）和 `pnpm run test:commit-convention`（29 项），均通过，包含真实 Git 钩子正反例验证。
 
 ## 进度
 
 - 2026-10-24：创建子计划草稿。
 - 2026-10-24：01 已完成（`9a48d6f`），无其他本地未合并分支，开始执行 T1。
 - 2026-10-24：完成 T1～T7；11 项依赖精确锁定、配置与 CI 就绪，边界正反例验证通过；配置提交后的下一步为 T8 纯格式化。
+- 2026-10-24：配置提交 `ea56a3b`；纯格式提交 `aee1d3a0012ac3172974a41d7a8265502e30c715`，完成 T8～T9，登记 blame 忽略与 README 用法。笔记已移入 `implemented/`，父计划仍 active，03～07 未施工。
 
 ## 发现与偏差
 
@@ -44,4 +46,4 @@ Note: ../../notes/implemented/process/2026-10-24-lint-and-format.md
 
 ## 交接
 
-T1～T7 已完成；下一步运行 `pnpm format`，只暂存格式改动提交 T8，再登记 SHA 完成 T9。
+无。

@@ -42,6 +42,8 @@ pnpm --filter @frame-loom/desktop test:e2e
 pnpm build       # 构建各 workspace 包，contracts 输出 ESM 与声明文件
 pnpm test        # 运行各包的单元测试
 pnpm typecheck   # 检查源码与测试的类型
+pnpm lint        # 检查异步调用、React 与 Query 规则、导入边界
+pnpm format:check # 检查格式；pnpm format 可自动格式化
 ```
 
 契约边界与构建方式见[共享契约决策](.agents/notes/implemented/architecture/2026-10-24-shared-contracts.md)。
@@ -95,3 +97,9 @@ pnpm run verify         # 提交前运行：笔记 + 计划
 遵循 [Git 提交信息规范](docs/git-commit-convention.md)：`type(scope): 中文摘要`，范围可省略。Husky 在提交时调用 commitlint，CI 在 Ubuntu／Windows 复检新增提交。
 
 `pnpm install --frozen-lockfile` 自动准备钩子，`pnpm run setup:git` 为当前仓库设置钩子和消息模板。日常仍使用 `git commit`；规则测试执行 `pnpm run test:commit-convention`。
+
+首次全仓格式化使用独立提交，完整 SHA 保存在 `.git-blame-ignore-revs`。当前副本可配置 blame 跳过该提交：
+
+```sh
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
