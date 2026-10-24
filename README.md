@@ -48,7 +48,7 @@ pnpm typecheck   # 检查源码与测试的类型
 
 ## 本地 engine
 
-`services/engine` 使用 NestJS 12、Express、better-sqlite3 与 Drizzle。配置与独立部署方法见 [engine 使用说明](services/engine/README.md)。
+`apps/engine` 使用 NestJS 12、Express、better-sqlite3 与 Drizzle。配置与独立部署方法见 [engine 使用说明](apps/engine/README.md)。迁移前的开发副本需重新执行 `pnpm install`，更新 workspace 链接。
 
 ```sh
 pnpm --filter @frame-loom/engine... build

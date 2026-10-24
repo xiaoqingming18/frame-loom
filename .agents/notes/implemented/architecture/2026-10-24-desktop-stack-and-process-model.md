@@ -74,7 +74,7 @@ Electron 主进程 ──utilityProcess.fork──> engine（NestJS，Electron �
 
 | 位置 | 格式 | 说明 |
 | --- | --- | --- |
-| `services/engine` | ESM：`"type": "module"`，`module` 和 `moduleResolution` 都设为 `nodenext` | 以 Nest 官方 `ts-esm` 模板为起点，用 `nest build`（tsc）编译。相对路径 import 要写 `.js` 后缀。 |
+| `apps/engine` | ESM：`"type": "module"`，`module` 和 `moduleResolution` 都设为 `nodenext` | 以 Nest 官方 `ts-esm` 模板为起点，用 `nest build`（tsc）编译。相对路径 import 要写 `.js` 后缀。 |
 | `packages/contracts` | ESM，用 tsc 编译出 JS 和 `.d.ts` | `exports` 声明 `types` 和 `default` 两个条件 |
 | Electron 主进程 | ESM | 应用 ready 之前要完成的工作都必须 `await` |
 | preload | 打包成 CommonJS | sandbox 模式下的 preload 不支持 ESM。Electron 45 还移除了 sandbox preload 里的 `Buffer`、`events`、`timers`、`url` |
@@ -88,7 +88,7 @@ Electron 主进程 ──utilityProcess.fork──> engine（NestJS，Electron �
 ```text
 frame-loom/
 ├─ apps/desktop/          # electron-vite：src/main、src/preload、src/renderer
-├─ services/engine/       # NestJS：health、鉴权、SQLite 迁移；以后的领域服务和 agent 模块
+├─ apps/engine/           # NestJS：health、鉴权、SQLite 迁移；以后的领域服务和 agent 模块
 │  └─ drizzle/            # 入库的迁移文件
 ├─ packages/contracts/    # zod schema 与类型
 └─ pnpm-workspace.yaml
@@ -97,7 +97,7 @@ frame-loom/
 - 包名：`@frame-loom/desktop`、`@frame-loom/engine`、`@frame-loom/contracts`。
 - 字段、校验边界和构建约定见[共享契约包](../../implemented/architecture/2026-10-24-shared-contracts.md)；服务启动、安全边界与部署见[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)；可信页面、生命周期和真实联调见[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)。本篇汇总整体骨架与分发约定，不取代三篇具体边界。
 - desktop 的运行时依赖全部由 electron-vite 打进产物，`dependencies` 保持为空，这样 electron-builder 不需要收集 pnpm 的 `node_modules`。
-- engine 用 `pnpm deploy --prod` 生成一个独立目录，作为 electron-builder 的 `extraResources` 放进安装包。打包后的路径是 `process.resourcesPath/engine`，开发模式下用 `services/engine/dist`。
+- engine 用 `pnpm deploy --prod` 生成一个独立目录，作为 electron-builder 的 `extraResources` 放进安装包。打包后的路径是 `process.resourcesPath/engine`，开发模式下用 `apps/engine/dist`。
 - 打包时通过 electron-builder 的 `electronFuses` 关闭以下开关：`runAsNode`、`enableNodeOptionsEnvironmentVariable`、`enableNodeCliInspectArguments`。同时打开 `onlyLoadAppFromAsar` 和 ASAR 完整性校验。这样别的程序就不能把安装好的 exe 当作普通 Node 运行时来用。`utilityProcess` 不依赖 `runAsNode`。
 - 首个里程碑不做插件机制，不把 engine 打成单文件，也不建 `resources/bin`。ffmpeg 等到第一个媒体能力落地时再加进来。
 - Windows x64 打包使用 electron-builder 26.18.0；`files` 仅纳入桌面构建产物和 package.json。`pnpm package:win` 构建 contracts、engine，使用 `pnpm deploy --prod --force --node-linker=hoisted` 重新生成 `apps/desktop/build/engine`，再构建 desktop 并打 NSIS。按用户安装，卸载保留 userData，不接签名与发布；electron-winstaller 只用于 Squirrel，其 5.4.0 安装脚本明确禁用，本项目不使用 Squirrel。

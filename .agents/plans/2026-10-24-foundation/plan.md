@@ -1,6 +1,6 @@
 # Plan: engine 与 renderer 基础设施
 
-Status: draft
+Status: active
 Note: ../../notes/proposed/architecture/2026-10-24-engine-and-renderer-foundation.md
 Note: ../../notes/proposed/process/2026-10-24-lint-and-format.md
 Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
@@ -44,7 +44,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [engine 迁到 apps/engine](01-move-engine.md) | draft | — | `services/` 不存在，开发、打包、e2e 行为不变 |
+| 01 | [engine 迁到 apps/engine](01-move-engine.md) | done | — | `services/` 不存在，开发、打包、e2e 行为不变 |
 | 02 | [ESLint 与 Prettier](02-lint-format.md) | draft | 01 | `pnpm lint`、`pnpm format:check` 通过，CI 已接入，格式化提交独立 |
 | 03 | [engine 目录调整](03-engine-structure.md) | draft | 02 | `core/` 加 `modules/health` 结构，现有测试与部署入口通过 |
 | 04 | [engine 错误契约与日志](04-engine-http-baseline.md) | draft | 03 | 所有错误响应符合 `ErrorResponse`，日志只写 stderr |
@@ -62,7 +62,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 
 ## 验收
 
-- [ ] `services/` 不存在，`pnpm dev`、`package:dir`、`test:e2e` 和加固 exe 启动都通过 — 证据：01 验证
+- [x] `services/` 不存在，`pnpm dev`、`package:dir`、`test:e2e` 和加固 exe 启动都通过 — 证据：01 验证
 - [ ] `pnpm lint`、`pnpm format:check` 通过，边界反例报错，CI 包含两步 — 证据：02 验证
 - [ ] engine 结构调整后测试全过，`db:generate` 无变化，部署入口黑盒通过 — 证据：03 验证
 - [ ] 401、403、400、500 响应体符合 `ErrorResponse`，日志无 token，stdout 只有 ready — 证据：04 验证

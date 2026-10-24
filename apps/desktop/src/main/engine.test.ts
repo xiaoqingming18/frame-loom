@@ -11,7 +11,7 @@ class Child extends EventEmitter {
 afterEach(() => vi.useRealTimers());
 
 it('从应用路径而非工作目录解析开发及安装后的 engine 入口', () => {
-  expect(engineEntry(false, resolve('apps/desktop'), resolve('resources'))).toBe(resolve('services/engine/dist/main.js'));
+  expect(engineEntry(false, resolve('apps/desktop'), resolve('resources'))).toBe(resolve('apps/engine/dist/main.js'));
   expect(engineEntry(true, resolve('app.asar'), resolve('resources'))).toBe(resolve('resources/engine/dist/main.js'));
 });
 

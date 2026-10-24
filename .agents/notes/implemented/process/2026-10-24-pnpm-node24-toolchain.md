@@ -25,7 +25,7 @@ Status: implemented
 ### pnpm
 
 - 根目录 `package.json` 写 `"packageManager": "pnpm@12.15.0"`，通过 `corepack enable pnpm` 启用命令，由 Corepack 安装精确版本。2026-10-24 查询 [npm registry](https://registry.npmjs.org/pnpm/latest) 的最新稳定版本为 12.15.0；在线结果可能随时间变化，仓库以锁定版本为准。
-- 新增 `pnpm-workspace.yaml`，包含 `apps/*`、`services/*`、`packages/*` 三个目录。
+- `pnpm-workspace.yaml` 包含 `apps/*`、`packages/*` 两个目录，engine 与 desktop 均放在 `apps/`。
 - 依赖构建脚本的白名单写在 `pnpm-workspace.yaml` 的 `allowBuilds` 里。pnpm 11 起已经不认 `onlyBuiltDependencies`；pnpm 12 遇到没登记的构建脚本会直接让安装失败（见 [pnpm 迁移说明](https://pnpm.io/migration)）。白名单只登记已审核的包版本，不关闭默认构建审核。
 - 仓库保持 pnpm 默认的 isolated 链接方式，不设全仓 `node-linker=hoisted`。desktop 依赖打入 electron-vite 产物；Windows 打包时单独对 engine 的 `pnpm deploy` 使用 `--node-linker=hoisted`，消除分发目录指回仓库的 Windows 目录链接，开发布局不变。
 - 删除 `package-lock.json`，改为提交 `pnpm-lock.yaml`。

@@ -12,7 +12,7 @@ Status: proposed
 - engine 没有统一日志。独立运行时 stdout 输出 ready JSON；而主进程只转发 utilityProcess 的 stderr，stdout 没有人读取。
 - renderer 的 `app://` 协议处理函数 `rendererFile` 把请求路径直接映射成文件，未知路径返回 404，不回退到 `index.html`。engine 退出时主进程会调用 `reload()`，如果使用浏览器 history 路由，深层路由重载后就是空白页。
 - desktop 只有一份 tsconfig，同时覆盖 main、preload 和 renderer，renderer 代码里写 `process` 也能通过类型检查，运行时却会报错。
-- 顶层 `services/engine` 是自定义约定。调研的 15 个同类仓库都没有使用顶层 `services/`。
+- 顶层原 `services/engine` 是自定义约定，已迁到 `apps/engine`。调研的 15 个同类仓库都没有使用顶层 `services/`。
 
 约束：engine 继续保持 ESM、NodeNext、`nest build`（tsc）编译；SQLite 与 Drizzle、zod 契约包、Vitest、TanStack Router/Query、Tailwind 4 都已确定，不在本篇重新选择。
 
@@ -20,7 +20,7 @@ Status: proposed
 
 ### 仓库布局
 
-- 把 `services/engine` 移到 `apps/engine`。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。
+- engine 已从 `services/engine` 移到 `apps/engine`。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。其余基础设施仍为提案，不视为已实现。
 - `pnpm-workspace.yaml` 只保留 `apps/*` 和 `packages/*`。
 - renderer 继续留在 `apps/desktop/src/renderer`，不拆成独立包。它只有一个使用者，electron-vite 的约定也是 main、preload、renderer 放在同一个包里。
 - 迁移是单独的 `refactor` 提交，不改变任何行为。必须同步的位置：
@@ -28,7 +28,7 @@ Status: proposed
   - README、AGENTS.md、engine README 中的命令路径。
   - 活跃笔记里的路径：应用骨架、[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[工具链](../../implemented/process/2026-10-24-pnpm-node24-toolchain.md)、Agent 内核选型。已完成计划中的路径属于当时的执行记录，不改。
   - 提交重新安装后的 `pnpm-lock.yaml`，否则 CI 的 `--frozen-lockfile` 失败。
-- `git mv` 不会移动未跟踪的 `node_modules` 和 `dist`。迁移后要确认残留目录确实在 `services/engine` 下，再删除并重装。
+- 本机 `git mv` 连同未跟踪的 `node_modules` 和 `dist` 一起迁移；旧 `services/` 为空后删除，重新安装修复 workspace 链接。其他副本迁移时仍需先核对残留，再清理旧目录。
 
 ### engine 目录
 

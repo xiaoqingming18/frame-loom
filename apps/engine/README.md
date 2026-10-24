@@ -11,7 +11,7 @@ pnpm --filter @frame-loom/engine... build
 $env:FRAME_LOOM_TOKEN = node --input-type=module -e "import { randomBytes } from 'node:crypto'; console.log(randomBytes(32).toString('hex'))"
 $env:FRAME_LOOM_DATA_DIR = Join-Path $env:LOCALAPPDATA 'FrameLoom-dev'
 $env:FRAME_LOOM_ALLOWED_ORIGINS = '["http://localhost:5173"]'
-node services/engine/dist/main.js
+node apps/engine/dist/main.js
 ```
 
 必填配置：`FRAME_LOOM_TOKEN` 是 64 位十六进制字符串；`FRAME_LOOM_DATA_DIR` 是绝对目录，桌面主进程传 `app.getPath('userData')`。允许源是 JSON 字符串数组；开发时传开发服务器的完整源，打包后例如 `["app://frame-loom"]`，具体主机名由桌面壳统一确定。省略时默认为 `[]`，仅允许不带 Origin 的本地调试请求。

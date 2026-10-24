@@ -10,7 +10,7 @@ interface EngineChild extends EventEmitter {
 export function engineEntry(isPackaged: boolean, appPath: string, resourcesPath: string): string {
   return isPackaged
     ? resolve(resourcesPath, 'engine/dist/main.js')
-    : resolve(appPath, '../../services/engine/dist/main.js');
+    : resolve(appPath, '../engine/dist/main.js');
 }
 
 export function waitForReady(child: EngineChild, timeout = 30_000): Promise<number> {

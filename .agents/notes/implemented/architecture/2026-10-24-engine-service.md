@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-- 沿用 Nest 官方 `ts-esm` 模板的 ESM、装饰器元数据和 `nest build`，以 Express 适配器运行；生产入口为 `dist/main.js`，测试不进入产物。
+- engine 位于 `apps/engine`，沿用 Nest 官方 `ts-esm` 模板的 ESM、装饰器元数据和 `nest build`，以 Express 适配器运行；生产入口为 `dist/main.js`，测试不进入产物。
 - zod 校验环境变量：64 位十六进制 token、绝对数据目录；`FRAME_LOOM_ALLOWED_ORIGINS` 使用 JSON 字符串数组，省略时不允许浏览器源。只接受完整 HTTP(S) 或 `app://<host>` 源，不接受通配符、`null`、凭据和路径。Node 调试请求可以不带 Origin。
 - 启动时创建 `data/`、`media/`，打开 better-sqlite3、启用 WAL 和外键，按相对模块位置寻找 `drizzle/` 并迁移。首份迁移由 drizzle-kit 生成表结构，补充 `schema_version=1` 数据初始化；健康检查读取落盘版本。
 - 请求边界中间件检查实际 socket 端口对应的 Host 与 Origin，再配置仅允许指定源、GET 与 Authorization 的 CORS。浏览器的 OPTIONS 预检不能携带 Bearer，因此只在 Host 和允许列表中的 Origin 合法时返回预检响应；实际接口由全局 guard 使用等长检查与 `timingSafeEqual` 校验 Bearer，不存在匿名健康接口。缺少 Origin 的 OPTIONS 也拒绝。
@@ -42,6 +42,7 @@ Status: implemented
 
 ## Verification
 
+- 迁到 `apps/engine` 后，冻结安装、类型检查及全仓 150 项单测通过；开发窗口、目录打包、desktop e2e 和真实加固 exe 均显示健康状态，关闭后无残留进程。包名、ready/shutdown 与安装后的 `resources/engine` 路径保持不变。
 - `pnpm install --frozen-lockfile`、`pnpm typecheck` 通过；`nest build` 生成 `dist/main.js`，生产输出不含测试。再次执行 `db:generate` 报告无 schema 变更。
 - `pnpm -r test` 通过：contracts 43 项、engine 70 项。engine 覆盖配置校验、隐式依赖注入、WAL／外键／幂等迁移／损坏数据库、401／403／200、Origin 和预检，以及生产入口的无配置失败、ready、健康响应和退出清理。parentPort shim 保持活动定时器，验证关闭与启动失败均不依赖句柄自然清空；监听失败保留退出码 1 且数据库已关闭。
 - 启动测试使用独立 Node 子进程与仓库外临时工作目录；parentPort、SIGTERM／SIGINT 由 shim 注入，检查退出码、端口关闭与 WAL 清理，包含初始化期间退出不再上报 ready。

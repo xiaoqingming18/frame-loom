@@ -40,7 +40,7 @@ Status: proposed
 
 ### 隔离与锁版本
 
-- 只有 `services/engine` 里的 `agent` 模块可以直接 import pi。其他模块只依赖我们自己定义的工具接口和事件类型。以后要换内核，改动只限在这一个模块里。
+- 只有 `apps/engine` 里的 `agent` 模块可以直接 import pi。其他模块只依赖我们自己定义的工具接口和事件类型。以后要换内核，改动只限在这一个模块里。
 - pi 的版本精确锁定，不用 `^`。升级单独提交，并跑 Agent 的回归测试。
 - 2026-10-24 的最新版本是 1.4.0。npm 包名已经从 `@mariozechner/*` 改成了 `@earendil-works/*`。
 
@@ -68,7 +68,7 @@ Status: proposed
 
 ## Acceptance criteria
 
-- 引入 pi 时，`services/engine` 里只有 `agent` 模块直接 import `@earendil-works/*`，可以用 grep 检查。
+- 引入 pi 时，`apps/engine` 里只有 `agent` 模块直接 import `@earendil-works/*`，可以用 grep 检查。
 - pi 在 `package.json` 里写精确版本。
 - 第一个 Agent 能力上线时，用假模型跑通「生成剧本 → 抽取资产 → 生成分镜」三个工具，并覆盖两点：耗时任务异步返回后能接上下一轮；进程中途退出后能按任务表恢复。
 
