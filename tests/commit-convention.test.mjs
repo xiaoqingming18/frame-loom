@@ -17,6 +17,7 @@ test('提交规则接受中文和可选范围，拒绝不合规消息', async (t
     ['专有名称', 'build(deps): 升级 Electron 至已验证版本', true],
     ['机器人摘要', 'build(deps): bump Electron to a verified version', true],
     ['长中文正文与尾注', `fix(media): 修复导出取消\n\n${'验证实际行为。'.repeat(30)}\n\nNote: .agents/notes/implemented/process/example.md\nRefs: #12`, true],
+    ['计划尾注', 'feat(ipc): 新增类型化版本查询\n\n验证界面显示版本。\n\nNote: .agents/notes/implemented/architecture/example.md\nPlan: .agents/plans/2026-11-02-example/02-renderer-ipc.md', true],
     ['破坏性变更', 'feat(project)!: 升级清单格式\n\nBREAKING CHANGE: 旧文件需使用转换入口迁移。', true],
     ['回退', `revert(ai): 回退不稳定的模型适配\n\n恢复已验证的模型路径。\n\nReverts: ${sha}`, true],
     ['Git 合并消息', "Merge branch 'feature/example'", true],

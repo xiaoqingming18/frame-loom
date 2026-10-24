@@ -13,7 +13,7 @@
 ```sh
 npm ci
 npm run setup:git
-npm run verify-notes
+npm run verify
 ```
 
 ## 决策笔记
@@ -34,6 +34,15 @@ npm run bundle-board
 ```
 
 两个 HTML 文件均为生成产物，不纳入 Git。`.github/workflows/verify-notes.yml` 已配置三项校验；推送至 GitHub 后在 main 推送、拉取请求或手动触发时运行。
+
+## 实施计划
+
+跨多次提交或会话的大型任务在 `.agents/plans/` 写实施计划，通过 `Note:` 链接对应决策笔记；大型需求使用父计划加同级子计划，最多两层。规则由项目自有的 [todo-plan 技能](.agents/skills/todo-plan/SKILL.md)定义，操作见[实施计划指南](docs/plans.md)。
+
+```sh
+npm run verify-plans   # 校验计划
+npm run verify         # 提交前运行：笔记 + 计划
+```
 
 ## Git 提交
 

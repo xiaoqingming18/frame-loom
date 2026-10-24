@@ -6,6 +6,7 @@
 # 标题与正文、正文与尾注之间留空行。
 #
 # Note: .agents/notes/implemented/类别/日期-主题.md
+# Plan: .agents/plans/日期-主题.md 或 .agents/plans/日期-主题/NN-子计划.md（可选）
 # Refs: #问题编号
 # Closes: #已解决的问题编号
 # Reverts: 完整提交SHA

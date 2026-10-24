@@ -53,6 +53,7 @@ Frame Loom 采用 [Conventional Commits 1.0.0](https://www.conventionalcommits.o
 | 尾注 | 用途 |
 | --- | --- |
 | `Note: .agents/notes/...` | 对应笔记，路径相对仓库根目录 |
+| `Plan: .agents/plans/...` | 可选，本提交推进的实施计划或子计划，路径相对仓库根目录 |
 | `Refs: #123` | 相关问题；跨仓库使用完整 URL |
 | `Closes: #123` | 确实解决，并应随默认分支合入关闭的问题 |
 | `Reverts: <完整提交 SHA>` | `revert` 提交必须指定回退目标 |

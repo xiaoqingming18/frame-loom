@@ -1,4 +1,4 @@
-name: 决策笔记校验
+name: 决策笔记与实施计划校验
 
 on:
   push:
@@ -35,3 +35,8 @@ jobs:
           # 新分支首次推送没有历史基线时，上游脚本仍检查当前封印。
           AGENT_NOTE_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
         run: npm run verify-notes
+
+      - name: 校验实施计划
+        run: |
+          npm run test:plans
+          npm run verify-plans

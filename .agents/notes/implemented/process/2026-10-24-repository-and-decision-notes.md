@@ -18,7 +18,7 @@ Frame Loom 是计划采用 Electron 与 React 的多模态 AI 智能影视工作
 
 ## Related notes
 
-初始化前活跃笔记为空，没有需要更新、否决或归档的旧决定。后续产品与运行时架构选择另行记录，不由本次流程决策预设。
+初始化前活跃笔记为空，没有需要更新、否决或归档的旧决定。后续产品与运行时架构选择另行记录，不由本次流程决策预设。大型任务的实施计划由[todo-plan 工作流](2026-10-24-todo-plan-workflow.md)管理，存放在 `.agents/plans/`，不修改本篇安装的上游技能；`npm run verify` 聚合笔记与计划校验。
 
 ## Alternatives considered
 
