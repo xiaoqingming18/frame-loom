@@ -33,6 +33,12 @@ export function SettingsDialog({
       <DialogContent
         className="h-[min(640px,calc(100dvh-7rem))] w-[calc(100%-3rem)] gap-0 overflow-hidden rounded-[20px] bg-muted p-1 shadow-panel-focus sm:max-w-[1000px]"
         showCloseButton={false}
+        onInteractOutside={(event) => {
+          // 窗口按钮属于系统级操作，不应因最小化或最大化而关闭设置。
+          const target = event.target;
+          if (target instanceof Element && target.closest('.window-controls'))
+            event.preventDefault();
+        }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           document.getElementById('settings-button')?.focus();

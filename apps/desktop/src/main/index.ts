@@ -12,7 +12,7 @@ import {
 } from './security.js';
 import { registerDesktopIpc } from './desktop-ipc.js';
 import { readTheme } from './preferences.js';
-import { TITLE_BAR_COLORS, updateWindowTheme } from './theme.js';
+import { WINDOW_BACKGROUNDS, updateWindowTheme } from './theme.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 app.setName('Frame Loom');
@@ -103,16 +103,14 @@ async function start(): Promise<void> {
     }
 
     nativeTheme.themeSource = readTheme(app.getPath('userData'));
-    const colors = TITLE_BAR_COLORS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'];
     window = new BrowserWindow({
       title: 'Frame Loom',
       width: 1120,
       height: 760,
       minWidth: 720,
       minHeight: 560,
-      backgroundColor: colors.color,
-      titleBarStyle: 'hidden',
-      titleBarOverlay: { ...colors, height: 42 },
+      backgroundColor: WINDOW_BACKGROUNDS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'],
+      frame: false,
       autoHideMenuBar: true,
       ...(!app.isPackaged ? { icon: join(directory, '../../resources/icon.png') } : {}),
       show: false,

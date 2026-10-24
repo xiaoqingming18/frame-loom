@@ -12,6 +12,29 @@ test('快捷面板向上展开，键盘关闭及模态焦点交接在折叠侧�
     application = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     const page = await application.firstWindow();
     await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
+    await page.getByRole('button', { name: '最大化窗口' }).click();
+    await expect(page.getByRole('button', { name: '还原窗口' })).toBeVisible();
+    expect(
+      await application.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].isMaximized(),
+      ),
+    ).toBe(true);
+    await page.getByRole('button', { name: '还原窗口' }).click();
+    await expect(page.getByRole('button', { name: '最大化窗口' })).toBeVisible();
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].maximize());
+    await expect(page.getByRole('button', { name: '还原窗口' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: '还原窗口' })).toBeVisible();
+    await page.getByRole('button', { name: '还原窗口' }).click();
+    await page.getByRole('button', { name: '最小化窗口' }).click();
+    await expect
+      .poll(() =>
+        application!.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].isMinimized(),
+        ),
+      )
+      .toBe(true);
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore());
     const trigger = page.getByRole('button', { name: '设置中心' });
     const quick = page.getByRole('dialog', { name: '快捷设置' });
     const settings = page.getByRole('dialog', { name: '设置中心' });
@@ -38,6 +61,16 @@ test('快捷面板向上展开，键盘关闭及模态焦点交接在折叠侧�
     await expect(quick).toBeVisible();
     await page.getByRole('button', { name: '设置', exact: true }).click();
     await expect(quick).toBeHidden();
+    await expect(settings).toBeVisible();
+    await page.getByRole('button', { name: '最小化窗口', includeHidden: true }).click();
+    await expect
+      .poll(() =>
+        application!.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].isMinimized(),
+        ),
+      )
+      .toBe(true);
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore());
     await expect(settings).toBeVisible();
     await expect
       .poll(() =>
@@ -107,7 +140,7 @@ test('窗口显示真实 engine 健康状态，关闭后服务退出', async () 
     );
     expect(enginePid).toBeDefined();
     const closed = application.waitForEvent('close');
-    await page.close();
+    await page.getByRole('button', { name: '关闭窗口', includeHidden: true }).click();
     await closed;
     await expect
       .poll(() => {

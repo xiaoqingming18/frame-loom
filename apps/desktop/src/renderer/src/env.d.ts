@@ -7,6 +7,10 @@ interface Window {
       get(): Promise<unknown>;
       set(source: import('@frame-loom/contracts').ThemeSource): Promise<unknown>;
     };
-    window: { command(name: import('@frame-loom/contracts').WindowCommand): Promise<void> };
+    window: {
+      command(name: import('@frame-loom/contracts').WindowCommand): Promise<void>;
+      isMaximized(): Promise<unknown>;
+      onMaximizedChanged(callback: (maximized: unknown) => void): () => void;
+    };
   };
 }

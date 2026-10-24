@@ -31,9 +31,9 @@
 @layer components {
   .title-bar {
     app-region: drag;
-    width: env(titlebar-area-width, 100%);
   }
-  .title-bar [role='menubar'] {
+  .title-bar [role='menubar'],
+  .title-bar .window-controls {
     app-region: no-drag;
   }
   .canvas-grid {

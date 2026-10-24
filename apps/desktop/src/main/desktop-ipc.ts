@@ -6,6 +6,15 @@ import { updateWindowTheme } from './theme.js';
 
 export function registerDesktopIpc(window: BrowserWindow, origin: string): void {
   const contents = window.webContents;
+  ipcMain.handle('window:is-maximized', (event) => {
+    if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的窗口请求');
+    return window.isMaximized();
+  });
+  const sendMaximized = () => contents.send('window:maximized', window.isMaximized());
+  window.on('maximize', sendMaximized);
+  window.on('unmaximize', sendMaximized);
+  window.on('enter-full-screen', sendMaximized);
+  window.on('leave-full-screen', sendMaximized);
   ipcMain.handle('theme:get', (event) => {
     if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的主题请求');
     return nativeTheme.themeSource;
@@ -35,6 +44,9 @@ export function registerDesktopIpc(window: BrowserWindow, origin: string): void 
         break;
       case 'quit':
         app.quit();
+        break;
+      case 'close':
+        window.close();
         break;
     }
   });

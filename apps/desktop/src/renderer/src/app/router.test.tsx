@@ -1,22 +1,32 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory } from '@tanstack/react-router';
 import { AppProviders } from '@/app/providers';
 import { createAppRouter } from '@/app/router';
 import { EngineRequestError, type EngineClient } from '@/lib/engine-client';
-import { commandWindow, getTheme, setTheme } from '@/lib/desktop-bridge';
+import {
+  commandWindow,
+  getTheme,
+  setTheme,
+  getWindowMaximized,
+  onWindowMaximizedChanged,
+} from '@/lib/desktop-bridge';
 
 vi.mock('@/lib/desktop-bridge', () => ({
   getTheme: vi.fn(),
   setTheme: vi.fn(),
   commandWindow: vi.fn(),
+  getWindowMaximized: vi.fn(),
+  onWindowMaximizedChanged: vi.fn(),
 }));
 
 const clients: QueryClient[] = [];
 const histories: ReturnType<typeof createMemoryHistory>[] = [];
 
 beforeEach(() => {
+  vi.mocked(getWindowMaximized).mockResolvedValue(false);
+  vi.mocked(onWindowMaximizedChanged).mockReturnValue(vi.fn());
   vi.stubGlobal('scrollTo', vi.fn());
   vi.stubGlobal('__APP_VERSION__', '0.1.0');
   vi.stubGlobal(
@@ -271,6 +281,51 @@ it('帮助菜单打开关于页', async () => {
   fireEvent.keyDown(screen.getByRole('menuitem', { name: '帮助' }), { key: 'Enter' });
   fireEvent.click(await screen.findByRole('menuitem', { name: '关于 Frame Loom' }));
   expect((await screen.findByTestId('app-version')).textContent).toBe('0.1.0');
+});
+
+it('自绘窗口按钮转发命令，最大化事件优先于初始查询并在卸载时清理', async () => {
+  let resolveInitial!: (value: boolean) => void;
+  vi.mocked(getWindowMaximized).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveInitial = resolve;
+      }),
+  );
+  const unsubscribe = vi.fn();
+  vi.mocked(onWindowMaximizedChanged).mockReturnValue(unsubscribe);
+  vi.mocked(commandWindow).mockResolvedValue();
+  await renderPage(vi.fn().mockResolvedValue(healthy));
+  const callback = vi.mocked(onWindowMaximizedChanged).mock.calls.at(-1)![0];
+  act(() => callback(true));
+  expect(screen.getByRole('button', { name: '还原窗口' })).toBeDefined();
+  await act(() => {
+    resolveInitial(false);
+    return Promise.resolve();
+  });
+  expect(screen.getByRole('button', { name: '还原窗口' })).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: '还原窗口' }));
+  expect(commandWindow).toHaveBeenLastCalledWith('toggle-maximize');
+  act(() => callback(false));
+  fireEvent.click(screen.getByRole('button', { name: '最大化窗口' }));
+  expect(commandWindow).toHaveBeenLastCalledWith('toggle-maximize');
+  fireEvent.click(screen.getByRole('button', { name: '最小化窗口' }));
+  expect(commandWindow).toHaveBeenLastCalledWith('minimize');
+  fireEvent.click(screen.getByRole('button', { name: '关闭窗口' }));
+  expect(commandWindow).toHaveBeenLastCalledWith('close');
+  cleanup();
+  expect(unsubscribe).toHaveBeenCalledOnce();
+});
+
+it('初次读取最大化状态，窗口命令失败时保留可重试入口', async () => {
+  vi.mocked(getWindowMaximized).mockResolvedValueOnce(true);
+  vi.mocked(commandWindow).mockRejectedValueOnce(new Error('窗口关闭失败'));
+  await renderPage(vi.fn().mockResolvedValue(healthy));
+  await screen.findByRole('button', { name: '还原窗口' });
+  fireEvent.click(screen.getByRole('button', { name: '关闭窗口' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('窗口操作失败');
+  vi.mocked(commandWindow).mockResolvedValue();
+  fireEvent.click(screen.getByRole('button', { name: '关闭窗口' }));
+  await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
 });
 
 it('默认 history 把空 hash 归一为首页，并保留已有 hash 路径', () => {

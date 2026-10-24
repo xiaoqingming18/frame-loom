@@ -74,6 +74,8 @@ Status: implemented
 
 ### 窗口标题栏
 
+自绘窗口按钮由[自定义标题栏窗口按钮](2026-10-24-custom-window-controls.md)承接；本篇保留原生按钮选型的依据，主题持久化与媒体查询机制仍成立。
+
 - `BrowserWindow` 设置 `titleBarStyle: 'hidden'` 和 `titleBarOverlay: { color, symbolColor, height: 42 }`。最小化、最大化、关闭三个按钮使用 Windows 原生按钮，颜色跟随主题。做法见 [Electron 自定义标题栏教程](https://www.electronjs.org/docs/latest/tutorial/custom-title-bar)。
 - renderer 绘制 42px 高的标题栏：
   - 整条标题栏设 `app-region: drag`，可以拖动窗口；按钮、菜单等可交互元素设 `no-drag`。

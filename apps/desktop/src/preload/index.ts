@@ -9,5 +9,13 @@ contextBridge.exposeInMainWorld('frameLoom', {
   },
   window: {
     command: (name: WindowCommand): Promise<void> => ipcRenderer.invoke('window:command', name),
+    isMaximized: (): Promise<unknown> => ipcRenderer.invoke('window:is-maximized'),
+    onMaximizedChanged: (callback: (maximized: unknown) => void): (() => void) => {
+      const listener = (_event: unknown, maximized: unknown) => callback(maximized);
+      ipcRenderer.on('window:maximized', listener);
+      return () => {
+        ipcRenderer.removeListener('window:maximized', listener);
+      };
+    },
   },
 });

@@ -2,6 +2,8 @@
 
 Electron 45、electron-vite 6 和 React 19 工作台，包含标题栏菜单、可折叠侧栏、静态首页、项目库空状态及设置中心。主进程与 engine 的生命周期、安全边界见[桌面壳决策](../../.agents/notes/implemented/architecture/2026-10-24-desktop-shell.md)。
 
+标题栏与窗口操作按钮均由 renderer 自定义，支持拖动、双击最大化／还原、最小化和正常关闭。最大化图标跟随真实窗口状态，主题与工作台一致；不提供 Windows 11 原生最大化按钮悬停的贴靠弹层，仍可使用系统拖动贴靠和快捷键。实现依据见[自定义标题栏笔记](../../.agents/notes/implemented/feature/2026-10-24-custom-window-controls.md)。
+
 在仓库根目录执行：
 
 ```sh

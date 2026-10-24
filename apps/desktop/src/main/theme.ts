@@ -1,12 +1,10 @@
 import { nativeTheme, type BrowserWindow } from 'electron';
 
-export const TITLE_BAR_COLORS = {
-  light: { color: '#f6f7f9', symbolColor: '#8c8c8c' },
-  dark: { color: '#0d0d0f', symbolColor: '#a1a1aa' },
+export const WINDOW_BACKGROUNDS = {
+  light: '#f6f7f9',
+  dark: '#0d0d0f',
 };
 
 export function updateWindowTheme(window: BrowserWindow): void {
-  const colors = TITLE_BAR_COLORS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'];
-  window.setBackgroundColor(colors.color);
-  window.setTitleBarOverlay(colors);
+  window.setBackgroundColor(WINDOW_BACKGROUNDS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light']);
 }
