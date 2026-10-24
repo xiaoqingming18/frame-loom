@@ -44,6 +44,10 @@ npm run verify-plans   # 校验计划
 npm run verify         # 提交前运行：笔记 + 计划
 ```
 
+## Ponytail 技能
+
+`.agents/skills/` 随仓库分发 [Ponytail](https://github.com/DietrichGebert/ponytail) 的六个技能（`ponytail`、`ponytail-review`、`ponytail-audit`、`ponytail-debt`、`ponytail-help`、`ponytail-gain`），约束 AI 代理写最小且完整的改动。用法与优先级见[协作约定](AGENTS.md)，来源与选型理由见[决策笔记](.agents/notes/implemented/process/2026-10-24-ponytail-skills.md)。
+
 ## Git 提交
 
 遵循 [Git 提交信息规范](docs/git-commit-convention.md)：`type(scope): 中文摘要`，范围可省略。Husky 在提交时调用 commitlint，CI 在 Ubuntu／Windows 复检新增提交。

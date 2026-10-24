@@ -24,6 +24,13 @@
 - 大型需求使用父计划加同级子计划，最多两层。计划不复述理由；需要改变决定时回到笔记流程。
 - 施工中同步步骤、进度、父计划表和交接；收尾时笔记移入 `implemented/`、计划转 `done`，二者同批提交。操作见[实施计划指南](docs/plans.md)。
 
+## 最小完整改动（Ponytail）
+
+- 编写、修复、重构或评审代码，以及选择依赖时，加载 `.agents/skills/ponytail/SKILL.md`，默认 `full` 级别：先读懂改动波及的代码，再选最小且完整的方案。
+- 评审改动用 `ponytail-review`，全仓审计用 `ponytail-audit`，汇总 `shortcut:` 注释用 `ponytail-debt`。这些技能的报告和回复仍使用简体中文。
+- 有已知上限的捷径按 `shortcut: <上限>, <何时升级>` 注释。标记词保留英文，便于 `ponytail-debt` 检索，说明用中文。
+- Ponytail 不替代本文件的笔记、计划、验证与提交规则。二者冲突时以本文件为准。
+
 ## Git 提交规范
 
 - 遵循 [Git 提交信息规范](docs/git-commit-convention.md)，使用 `type(scope): 中文摘要`，范围可省略，标题最多 72 字符。
