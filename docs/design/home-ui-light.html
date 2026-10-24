@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frame Loom</title>
+    <style>
+        :root {
+            /* 亮色模式配色变量 */
+            --bg-app: #f6f7f9; /* 全局底层（顶栏和侧栏） */
+            --bg-main: #ffffff; /* 主画布背景 */
+            --bg-input: #ffffff; /* 输入框背景 */
+            --bg-input-bottom: #f7f7f8; /* 选择项目底座背景 */
+            
+            --text-primary: #1a1a1a;
+            --text-secondary: #8c8c8c;
+            --text-tertiary: #b3b3b3;
+            
+            --border-color: #eaeaea;
+            --border-light: #d1d5db;
+            
+            --hover-bg: #eef0f3;
+            --active-bg: #e4e6e9;
+            
+            --blue-accent: #1c64f2;
+            
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background-color: var(--bg-app);
+            font-size: 13px;
+        }
+
+        /* ================= 全局顶部标题栏 ================= */
+        .global-titlebar {
+            height: 42px;
+            background-color: transparent; 
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            flex-shrink: 0;
+        }
+
+        .titlebar-left {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .titlebar-brand {
+            font-weight: 500;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .titlebar-menu {
+            display: flex;
+            gap: 16px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .titlebar-menu span {
+            cursor: pointer;
+        }
+
+        .titlebar-menu span:hover {
+            color: var(--text-primary);
+        }
+
+        .titlebar-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .titlebar-controls svg {
+            width: 12px;
+            height: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        /* ================= 主体布局 ================= */
+        .app-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ================= 左侧边栏 ================= */
+        .sidebar {
+            width: 260px;
+            background-color: transparent;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 12px 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-serif);
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--text-primary);
+        }
+
+        .sidebar-brand svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .sidebar-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: var(--text-secondary);
+        }
+
+        .sidebar-header-actions svg {
+            cursor: pointer;
+        }
+
+        .nav-list {
+            list-style: none;
+            padding: 0 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            transition: background 0.2s;
+        }
+
+        .nav-item:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .nav-item.active {
+            background-color: var(--active-bg);
+        }
+
+        .nav-item svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-secondary);
+        }
+
+        .nav-item.active svg {
+            color: var(--text-primary);
+        }
+
+        .section-title {
+            padding: 20px 24px 10px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title svg {
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
+
+        .sub-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 24px;
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+
+        .sub-nav-item:hover {
+            background-color: var(--hover-bg);
+        }
+        
+        .sub-nav-item svg {
+            width: 14px;
+            height: 14px;
+            color: var(--blue-accent);
+        }
+
+        /* 底部设置中心修改 */
+        .sidebar-bottom {
+            margin-top: auto;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            /* 改为 flex-start 因为右侧元素移除了 */
+            justify-content: flex-start; 
+            border-top: 1px solid transparent; /* 保持原有的极简风格，如果需要边框可改为 var(--border-color) */
+        }
+
+        .settings-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: color 0.2s;
+            padding: 4px 8px;
+            margin-left: -8px;
+            border-radius: 6px;
+        }
+
+        .settings-btn:hover {
+            color: var(--text-primary);
+            background-color: var(--hover-bg);
+        }
+
+        .settings-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* ================= 主内容区 ================= */
+        .main-content {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-main);
+            /* 亮色模式点阵背景 */
+            background-image: radial-gradient(circle, #e5e7eb 1px, transparent 1px);
+            background-size: 24px 24px;
+            background-position: top left;
+            overflow-y: auto;
+            justify-content: center;
+            align-items: center;
+            
+            /* 左上角的大圆角 */
+            border-top-left-radius: 16px;
+            border-top: 1px solid var(--border-color);
+            border-left: 1px solid var(--border-color);
+            box-shadow: -4px -4px 16px rgba(0, 0, 0, 0.015);
+        }
+
+        .center-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            width: 100%;
+            max-width: 900px;
+            transform: translateY(-5vh); 
+        }
+
+        /* 顶部胶囊按钮 */
+        .announcement-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background-color: #ffffff;
+            border: 1px solid var(--border-color);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+
+        .announcement-badge svg {
+            width: 14px;
+            height: 14px;
+            color: var(--blue-accent);
+        }
+
+        .announcement-badge span {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* 品牌 Logo 区域 */
+        .brand-hero {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* 专门为参考图定制的带有节点和边框的 Logo 容器 */
+        .custom-logo-box {
+            position: relative;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .custom-logo-inner {
+            width: 100%;
+            height: 100%;
+            background-color: #b8baff; /* 参考图浅紫色 */
+            border: 1px solid #1a1a1a;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 四个角的黑点（模拟设计软件选中状态） */
+        .custom-logo-box::before,
+        .custom-logo-box::after,
+        .custom-logo-inner::before,
+        .custom-logo-inner::after {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: #1a1a1a;
+            z-index: 10;
+        }
+        
+        .custom-logo-box::before { top: -3px; left: -3px; }
+        .custom-logo-box::after { top: -3px; right: -3px; }
+        .custom-logo-inner::before { bottom: -3px; left: -3px; }
+        .custom-logo-inner::after { bottom: -3px; right: -3px; }
+
+        /* Logo 内部的黑色小怪兽图案 */
+        .logo-monster {
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 32px;
+            background-color: #1a1a1a;
+            border-radius: 20px 20px 0 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 6px 0;
+        }
+
+        .logo-monster-eye {
+            width: 10px;
+            height: 10px;
+            border: 1.5px solid #b8baff;
+            border-radius: 50%;
+            background-color: #1a1a1a;
+        }
+
+        .brand-hero h1 {
+            font-family: var(--font-serif);
+            font-size: 34px;
+            font-weight: 500;
+            letter-spacing: -0.5px;
+            color: var(--text-primary);
+        }
+
+        .brand-subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 40px;
+        }
+
+        /* ================= 输入框及选择项目区域 ================= */
+        .input-wrapper {
+            width: 100%;
+            max-width: 760px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 核心输入框 */
+        .input-box {
+            width: 100%;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.04), 0 1px 4px rgba(0,0,0,0.02);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            
+            position: relative;
+            z-index: 2;
+            margin-bottom: -12px; 
+        }
+
+        .input-box:focus-within {
+            border-color: var(--border-light);
+            box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+        }
+
+        .input-textarea {
+            border: none;
+            outline: none;
+            padding: 20px 20px 10px;
+            font-size: 14px;
+            min-height: 100px;
+            resize: none;
+            font-family: inherit;
+            color: var(--text-primary);
+            background: transparent;
+        }
+
+        .input-textarea::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        .input-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+        }
+
+        .toolbar-left, .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tool-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .tool-btn:hover {
+            background-color: var(--hover-bg);
+            color: var(--text-primary);
+        }
+
+        .tool-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .add-btn {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background-color: var(--hover-bg);
+            border: none;
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+
+        /* 发送按钮：亮色模式下为黑底白箭头 */
+        .submit-btn {
+            width: 28px;
+            height: 28px;
+            background-color: #333333;
+            color: #ffffff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        
+        .submit-btn:active {
+            transform: scale(0.95);
+        }
+
+        .submit-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* 选择项目底座 */
+        .project-select-bar {
+            width: calc(100% - 80px); 
+            background-color: var(--bg-input-bottom); 
+            border-radius: 0 0 16px 16px; 
+            padding: 24px 16px 8px 24px; 
+            z-index: 1;
+            display: flex;
+            justify-content: flex-start;
+            border: 1px solid var(--border-color);
+            border-top: none;
+        }
+
+        .project-select-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .project-select-btn:hover {
+            background-color: rgba(0, 0, 0, 0.04);
+            color: var(--text-primary);
+        }
+        
+        .project-select-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 全局顶部标题栏 -->
+    <header class="global-titlebar">
+        <div class="titlebar-left">
+            <div class="titlebar-brand">
+                Frame Loom
+            </div>
+            <div class="titlebar-menu">
+                <span>文件</span>
+                <span>窗口</span>
+                <span>帮助</span>
+            </div>
+        </div>
+        <div class="titlebar-controls">
+            <svg viewBox="0 0 12 12" fill="none"><path d="M2 6H10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+            <svg viewBox="0 0 12 12" fill="none"><path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </div>
+    </header>
+
+    <!-- 下方主体应用区 -->
+    <div class="app-body">
+        <!-- 左侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-brand">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="24" height="24" rx="6" fill="#1a1a1a"/>
+                        <path d="M7 16V8H10L12 12L14 8H17V16H15V11L12 16L9 11V16H7Z" fill="white"/>
+                    </svg>
+                    Frame Loom
+                </div>
+                <div class="sidebar-header-actions">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
+            </div>
+
+            <ul class="nav-list">
+                <li class="nav-item active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    开始创作
+                </li>
+                <li class="nav-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    项目库
+                </li>
+            </ul>
+
+            <div class="section-title">
+                项目
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+            </div>
+            
+            <!-- 此处项目列表已清空 -->
+
+            <!-- 底部用户栏修改为 设置中心 -->
+            <div class="sidebar-bottom">
+                <div class="settings-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    <span>设置中心</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <div class="center-container">
+                <div class="announcement-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    <span>Frame Loom</span> 首版发布 >
+                </div>
+
+                <div class="brand-hero">
+                    <!-- 带有四个角点边框的浅紫色 Logo -->
+                    <div class="custom-logo-box">
+                        <div class="custom-logo-inner">
+                            <div class="logo-monster">
+                                <div class="logo-monster-eye"></div>
+                                <div class="logo-monster-eye"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <h1>帧织</h1>
+                </div>
+                <div class="brand-subtitle">每一个故事，都值得被看见</div>
+
+                <!-- 输入框及底座 -->
+                <div class="input-wrapper">
+                    <!-- 输入框主体 -->
+                    <div class="input-box">
+                        <textarea class="input-textarea" placeholder="输入想创作的内容。 @ 选择素材或插件 / 使用技能 · Design 使用指南 ↗"></textarea>
+                        
+                        <div class="input-toolbar">
+                            <div class="toolbar-left">
+                                <button class="add-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                </button>
+                                <button class="tool-btn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                    模型
+                                </button>
+                                <button class="tool-btn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                                    技能
+                                </button>
+                            </div>
+                            <div class="toolbar-right">
+                                <button class="tool-btn">
+                                    V3 新版
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                </button>
+                                <button class="submit-btn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 底座：选择项目 -->
+                    <div class="project-select-bar">
+                        <div class="project-select-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            选择项目
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+</body>
+</html>

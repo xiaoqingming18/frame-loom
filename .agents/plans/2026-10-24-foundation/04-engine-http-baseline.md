@@ -1,0 +1,43 @@
+# Plan: engine 错误契约与日志
+
+Status: draft
+Parent: plan.md
+Note: ../../notes/proposed/architecture/2026-10-24-engine-and-renderer-foundation.md
+
+## 目标
+
+- contracts 新增 `ErrorResponse`，engine 的所有错误响应体都符合它，包括边界中间件和鉴权 guard 产生的 403、401。
+- engine 提供按参数使用的 `ZodValidationPipe` 与 `DomainError`，全局过滤器按笔记的映射表输出中文消息，500 不暴露堆栈。
+- 日志只写 stderr，独立运行时 stdout 只有一行 ready JSON；日志中没有 token。
+
+## 前置条件
+
+- 03 完成，`src/core/http/` 与 `src/core/logging/` 目录位置已确定。
+
+## 步骤
+
+- [ ] T1 在 `packages/contracts/src/error-response.ts` 定义 `ErrorResponse` schema 与类型并从入口导出 — 验证：contracts 测试覆盖必填字段、可选 issues 与非法输入
+- [ ] T2 在 `src/core/http/` 实现 `DomainError`、`ZodValidationPipe` 与全局异常过滤器，以 `APP_FILTER` 注册 — 验证：单测覆盖四类异常映射，500 响应体不含堆栈
+- [ ] T3 确认边界中间件的 403 是否经过全局过滤器；不经过时在中间件内直接写 `ErrorResponse` — 验证：HTTP 测试中错误 Host、错误 Origin、无 Origin 的 OPTIONS 返回 403，响应体通过 `ErrorResponse.parse`
+- [ ] T4 HTTP 测试补充 401 响应体断言，并用测试专用路由覆盖 400 与 500 — 验证：四种状态的响应体都通过 `ErrorResponse.parse`
+- [ ] T5 在 `src/core/logging/` 实现写 stderr 的日志（优先继承 `ConsoleLogger`，不可行时实现 `LoggerService`），`createEngine` 使用它替换 `logger: false` — 验证：生产入口测试断言 stdout 只有一行 ready JSON，stderr 中不包含 token
+- [ ] T6 更新 `apps/desktop/src/renderer/src/health.ts` 的错误处理，非 2xx 时解析 `ErrorResponse` 并显示其中文消息 — 验证：desktop 测试覆盖错误响应解析
+- [ ] T7 运行 `pnpm test`、`pnpm typecheck`、`pnpm lint`，启动加固 exe 检查健康页 — 验证：全部通过
+- [ ] T8 同步 engine 服务笔记与 `apps/engine/README.md` 中的错误与日志事实，提交 `feat(engine)!: 统一错误响应与 stderr 日志`，`BREAKING CHANGE:` 说明错误响应体改为 `ErrorResponse`，带 `Note:` 与 `Plan:` 尾注 — 验证：提交钩子与 `pnpm run verify` 通过
+
+## 验证
+
+- 预期：401、403、400、500 响应体都通过 `ErrorResponse.parse`；500 无堆栈；stdout 只有 ready；日志中无 token；renderer 显示中文错误消息。
+- 实际：未执行。
+
+## 进度
+
+- 2026-10-24：创建子计划草稿。
+
+## 发现与偏差
+
+无。
+
+## 交接
+
+尚未开始，等待 03 完成。
