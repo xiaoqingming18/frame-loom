@@ -4,8 +4,8 @@ import { NestFactory } from '@nestjs/core';
 import type { Server } from 'node:http';
 import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module.js';
-import { EngineConfig } from './config.js';
-import { EngineGuard } from './engine.guard.js';
+import { EngineConfig } from './core/config/config.js';
+import { EngineGuard } from './core/security/engine.guard.js';
 
 export async function createEngine(config: EngineConfig): Promise<INestApplication<Server>> {
   const app = await NestFactory.create<INestApplication<Server>>(AppModule.register(config), {

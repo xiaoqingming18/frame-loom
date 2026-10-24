@@ -6,8 +6,9 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EngineConfig } from './config.js';
-import { appMeta } from './schema.js';
+import { EngineConfig } from '../config/config.js';
+import { appMeta } from './app-meta.schema.js';
+import { packageRoot } from '../../package-root.js';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
@@ -23,7 +24,7 @@ export class DatabaseService implements OnModuleDestroy {
       this.sqlite.pragma('journal_mode = WAL');
       this.sqlite.pragma('foreign_keys = ON');
       migrate(this.db, {
-        migrationsFolder: fileURLToPath(new URL('../drizzle/', import.meta.url)),
+        migrationsFolder: fileURLToPath(new URL('drizzle/', packageRoot)),
       });
       this.getSchemaVersion();
     } catch (error) {

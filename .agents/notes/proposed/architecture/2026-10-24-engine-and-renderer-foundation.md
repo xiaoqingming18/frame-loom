@@ -20,7 +20,7 @@ Status: proposed
 
 ### 仓库布局
 
-- engine 已从 `services/engine` 移到 `apps/engine`。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。其余基础设施仍为提案，不视为已实现。
+- engine 已从 `services/engine` 移到 `apps/engine`，并完成下述 `core/`、`modules/health/` 与包根定位的目录调整。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。HTTP 基线与 renderer 骨架仍为提案，不视为已实现。
 - `pnpm-workspace.yaml` 只保留 `apps/*` 和 `packages/*`。
 - renderer 继续留在 `apps/desktop/src/renderer`，不拆成独立包。它只有一个使用者，electron-vite 的约定也是 main、preload、renderer 放在同一个包里。
 - 迁移是单独的 `refactor` 提交，不改变任何行为。必须同步的位置：

@@ -38,7 +38,9 @@ pnpm --filter @frame-loom/engine test
 pnpm typecheck
 ```
 
-修改 `src/schema.ts` 后用 drizzle-kit 生成迁移并提交整个 `drizzle/`。首份迁移的表结构由工具生成，随后添加 `schema_version=1` 的数据初始化；后续改变 schema 时，在对应迁移中更新这条元数据，不在启动时覆盖版本。不要修改已经分发的迁移。
+修改 `src/**/*.schema.ts` 后用 drizzle-kit 生成迁移并提交整个 `drizzle/`。当前元数据表定义在 `src/core/database/app-meta.schema.ts`。首份迁移的表结构由工具生成，随后添加 `schema_version=1` 的数据初始化；后续改变 schema 时，在对应迁移中更新这条元数据，不在启动时覆盖版本。不要修改已经分发的迁移。
+
+`src/core/` 放配置、安全边界与数据库等横切设施，由全局 `CoreModule` 提供；健康检查放在 `src/modules/health/`，由 `HealthModule` 声明。`AppModule.register(config)` 只组合模块。`src/package-root.ts` 统一定位包根，迁移目录与包版本都从这里解析，不随文件深度或工作目录变化。
 
 测试脚本先构建自身及 contracts。Vitest 同时检查环境配置、Nest 元数据注入、真实 SQLite 迁移、HTTP 鉴权与 CORS，以及编译入口的独立启动和关闭。进程测试用本地 shim 模拟 parentPort 和信号事件，并通过活动句柄验证显式退出；真实 Electron 的联调见[桌面壳说明](../../apps/desktop/README.md)，操作系统信号投递和安装包行为仍需后续验证。
 

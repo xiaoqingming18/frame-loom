@@ -46,7 +46,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 | --- | --- | --- | --- | --- |
 | 01 | [engine 迁到 apps/engine](01-move-engine.md) | done | — | `services/` 不存在，开发、打包、e2e 行为不变 |
 | 02 | [ESLint 与 Prettier](02-lint-format.md) | done | 01 | `pnpm lint`、`pnpm format:check` 通过，CI 已接入，格式化提交独立 |
-| 03 | [engine 目录调整](03-engine-structure.md) | draft | 02 | `core/` 加 `modules/health` 结构，现有测试与部署入口通过 |
+| 03 | [engine 目录调整](03-engine-structure.md) | done | 02 | `core/` 加 `modules/health` 结构，现有测试与部署入口通过 |
 | 04 | [engine 错误契约与日志](04-engine-http-baseline.md) | draft | 03 | 所有错误响应符合 `ErrorResponse`，日志只写 stderr |
 | 05 | [renderer 骨架](05-renderer-skeleton.md) | draft | 02、04 | 文件路由、hash history、engine client、拆分的 tsconfig 与测试环境 |
 | 06 | [主题系统与窗口标题栏](06-theme-system.md) | draft | 05 | 明暗 token、偏好持久化、主题与窗口 IPC、原生按钮配色、shadcn、颜色 lint、新图标 |
@@ -64,7 +64,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 
 - [x] `services/` 不存在，`pnpm dev`、`package:dir`、`test:e2e` 和加固 exe 启动都通过 — 证据：01 验证
 - [x] `pnpm lint`、`pnpm format:check` 通过，边界反例报错，CI 包含两步 — 证据：02 验证
-- [ ] engine 结构调整后测试全过，`db:generate` 无变化，部署入口黑盒通过 — 证据：03 验证
+- [x] engine 结构调整后测试全过，`db:generate` 无变化，部署入口黑盒通过 — 证据：03 验证
 - [ ] 401、403、400、500 响应体符合 `ErrorResponse`，日志无 token，stdout 只有 ready — 证据：04 验证
 - [ ] 加固 exe 中结束 engine 后，hash 路由重载仍在原路由并显示中文错误；renderer 中的 `process` 无法通过 web 类型检查 — 证据：05 验证
 - [ ] 偏好损坏时照常启动，IPC 拒绝非法输入，颜色 lint 反例报错，exe 显示新图标 — 证据：06 验证

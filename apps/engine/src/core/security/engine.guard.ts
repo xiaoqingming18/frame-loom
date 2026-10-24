@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
-import { EngineConfig } from './config.js';
+import { EngineConfig } from '../config/config.js';
 
 @Injectable()
 export class EngineGuard implements CanActivate {

@@ -1,7 +1,7 @@
 import { ForbiddenException, UnauthorizedException, type ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
 import { describe, expect, it } from 'vitest';
-import { EngineConfig } from './config.js';
+import { EngineConfig } from '../config/config.js';
 import { EngineGuard } from './engine.guard.js';
 
 const token = 'ab'.repeat(32);

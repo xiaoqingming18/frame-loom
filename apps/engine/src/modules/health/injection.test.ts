@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { expect, it } from 'vitest';
-import { DatabaseService } from './database.service.js';
+import { DatabaseService } from '../../core/database/database.service.js';
 import { HealthController } from './health.controller.js';
 import { HealthService } from './health.service.js';
 

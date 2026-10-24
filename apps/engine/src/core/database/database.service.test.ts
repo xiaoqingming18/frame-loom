@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { EngineConfig } from './config.js';
+import { EngineConfig } from '../config/config.js';
 import { DatabaseService } from './database.service.js';
-import { appMeta } from './schema.js';
+import { appMeta } from './app-meta.schema.js';
 
 const directories: string[] = [];
 const databases: DatabaseService[] = [];

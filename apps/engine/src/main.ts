@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import type { AddressInfo } from 'node:net';
 import { createEngine } from './application.js';
-import { loadConfig } from './config.js';
+import { loadConfig } from './core/config/config.js';
 
 interface ParentPort {
   postMessage(message: { type: 'ready'; port: number }): void;

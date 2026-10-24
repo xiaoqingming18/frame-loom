@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { HealthResponse } from '@frame-loom/contracts';
 import { readFileSync } from 'node:fs';
-import { DatabaseService } from './database.service.js';
+import { DatabaseService } from '../../core/database/database.service.js';
+import { packageRoot } from '../../package-root.js';
 
 const { version: engineVersion } = JSON.parse(
-  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('package.json', packageRoot), 'utf8'),
 ) as { version: string };
 
 @Injectable()

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEngine } from './application.js';
-import { EngineConfig } from './config.js';
+import { EngineConfig } from './core/config/config.js';
 
 const token = 'a'.repeat(64);
 let app: INestApplication<Server>;
