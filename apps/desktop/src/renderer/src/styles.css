@@ -1,12 +1,3 @@
-@import 'tailwindcss';
-
-:root {
-  color-scheme: dark;
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
-  color: #e9e9e0;
-  background: #171918;
-  font-synthesis: none;
-}
 * {
   box-sizing: border-box;
 }
@@ -18,12 +9,13 @@ button {
 }
 .workspace {
   padding: 0 56px;
-  background-image: linear-gradient(90deg, transparent calc(100% - 1px), #ffffff03 1px);
+  background-image: linear-gradient(90deg, transparent calc(100% - 1px), var(--border) 1px);
   background-size: 80px 100%;
 }
 .topbar {
+  app-region: drag;
   height: 92px;
-  border-bottom: 1px solid #ffffff14;
+  border-bottom: 1px solid var(--border);
 }
 .brand {
   gap: 14px;
@@ -38,7 +30,7 @@ button {
   font-family: 'Georgia', serif;
   position: relative;
   font-size: 27px;
-  color: #d5e6a0;
+  color: var(--brand);
   line-height: 1;
 }
 .brand-mark span {
@@ -48,7 +40,7 @@ button {
 .edition,
 .page-footer {
   font-size: 11px;
-  color: #8f9690;
+  color: var(--muted-foreground);
   letter-spacing: 2px;
 }
 main {
@@ -57,7 +49,7 @@ main {
   padding: 28px 0;
 }
 .eyebrow {
-  color: #9da496;
+  color: var(--muted-foreground);
   font-size: 11px;
   letter-spacing: 3px;
   margin-bottom: 18px;
@@ -68,7 +60,7 @@ main {
   gap: 24px;
 }
 .index {
-  color: #7d8874;
+  color: var(--muted-foreground);
   font-family: 'Consolas', monospace;
   font-size: 12px;
 }
@@ -80,22 +72,22 @@ h1 {
   margin: 0;
 }
 h1 span {
-  color: #d5e6a0;
+  color: var(--brand);
 }
 .subtitle {
-  color: #9ba29c;
+  color: var(--muted-foreground);
   font-size: 13px;
   letter-spacing: 2px;
   margin: 16px 0 32px 42px;
 }
 .status-panel {
-  border: 1px solid #ffffff21;
+  border: 1px solid var(--border);
   border-radius: 3px;
-  background: #1c1f1c;
+  background: var(--card);
 }
 .panel-heading {
   padding: 24px 28px;
-  border-bottom: 1px solid #ffffff12;
+  border-bottom: 1px solid var(--border);
 }
 h2 {
   font-size: 14px;
@@ -110,13 +102,13 @@ h2 {
   gap: 8px;
 }
 .ready {
-  color: #d5e6a0;
+  color: var(--brand);
 }
 .pending {
-  color: #c9bc8c;
+  color: var(--muted-foreground);
 }
 .error {
-  color: #eea79a;
+  color: var(--destructive);
 }
 .status-dot {
   width: 6px;
@@ -132,46 +124,46 @@ h2 {
 dt {
   font-size: 11px;
   letter-spacing: 1px;
-  color: #9ba29c;
+  color: var(--muted-foreground);
   margin-bottom: 14px;
 }
 dd {
   margin: 0;
   font-family: 'Consolas', 'Microsoft YaHei UI', monospace;
   font-size: 24px;
-  color: #e3e6d9;
+  color: var(--foreground);
 }
 dd.timestamp {
   font-size: 13px;
   padding-top: 6px;
 }
 .panel-footer {
-  border-top: 1px solid #ffffff12;
+  border-top: 1px solid var(--border);
   padding: 16px 28px;
   font-size: 11px;
-  color: #9ba29c;
+  color: var(--muted-foreground);
 }
 button {
   border: none;
   background: transparent;
-  color: #d5e6a0;
+  color: var(--brand);
   cursor: pointer;
   padding: 8px;
 }
 button:hover {
-  background: #d5e6a010;
+  background: var(--accent);
 }
 button:disabled {
   cursor: wait;
   opacity: 0.5;
 }
 button:focus-visible {
-  outline: 2px solid #d5e6a0;
+  outline: 2px solid var(--brand);
   outline-offset: 3px;
 }
 .message {
   padding: 28px;
-  color: #c9bc8c;
+  color: var(--muted-foreground);
   font-size: 13px;
   line-height: 1.8;
 }
@@ -180,17 +172,17 @@ button:focus-visible {
 }
 .error-detail {
   margin-top: 8px !important;
-  color: #eea79a;
+  color: var(--destructive);
   overflow-wrap: anywhere;
 }
 .scope-note {
   font-size: 11px;
-  color: #8f9690;
+  color: var(--muted-foreground);
   margin-top: 18px;
 }
 .page-footer {
   padding: 24px 0;
-  border-top: 1px solid #ffffff14;
+  border-top: 1px solid var(--border);
   letter-spacing: 1px;
 }
 @media (max-width: 760px) {

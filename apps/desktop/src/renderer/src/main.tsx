@@ -5,7 +5,7 @@ import { AppProviders } from '@/app/providers';
 import { createAppRouter } from '@/app/router';
 import { getEngineConnection } from '@/lib/desktop-bridge';
 import { createEngineClient } from '@/lib/engine-client';
-import './styles.css';
+import './styles/globals.css';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },

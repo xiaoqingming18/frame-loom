@@ -1,6 +1,17 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { APP_ORIGIN, isTrustedSender, isTrustedUrl, rendererFile } from './security.js';
+import {
+  APP_ORIGIN,
+  PRODUCTION_CSP,
+  isTrustedSender,
+  isTrustedUrl,
+  rendererFile,
+} from './security.js';
+
+it('生产 CSP 允许组件内联样式，脚本仍只允许同源', () => {
+  expect(PRODUCTION_CSP.split('; ')).toContain("style-src 'self' 'unsafe-inline'");
+  expect(PRODUCTION_CSP.split('; ')).toContain("script-src 'self'");
+});
 
 describe('可信页面边界', () => {
   it.each([APP_ORIGIN, `${APP_ORIGIN}/`, `${APP_ORIGIN}/index.html`])('允许应用页面 %s', (url) => {

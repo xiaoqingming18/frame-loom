@@ -4,7 +4,7 @@ Status: proposed
 
 ## Problem
 
-renderer 目前只有一个健康状态页，颜色直接写在 `styles.css` 里，只有一套暗色，窗口使用系统默认标题栏。用户提供了主界面的明亮与暗黑两份设计稿，以及项目 logo，要求：
+引入前 renderer 只有一个健康状态页，颜色直接写在 `styles.css` 里，只有一套暗色，窗口使用系统默认标题栏。用户提供了主界面的明亮与暗黑两份设计稿，以及项目 logo，要求：
 
 - 按设计稿实现自定义窗口标题栏、左侧栏和主画布。
 - 左栏底部的「设置中心」点击后打开弹窗，主题设置和现有的 engine 健康检查都放在弹窗里。
@@ -16,7 +16,7 @@ renderer 目前只有一个健康状态页，颜色直接写在 `styles.css` 里
 约束：
 
 - 主题必须在第一帧就正确，不能先闪一下另一种颜色。窗口背景色、Windows 标题栏上的原生窗口按钮、原生右键菜单和滚动条都要跟着主题变。
-- 生产 CSP 是 `style-src 'self'`。设置中心弹窗需要一个成熟的 Dialog 组件，常用的 Radix Dialog 会动态插入 `<style>` 标签。
+- 原生产 CSP 是 `style-src 'self'`。设置中心弹窗需要一个成熟的 Dialog 组件，常用的 Radix Dialog 会动态插入 `<style>` 标签。
 - 不改变 engine 的启动和鉴权方式。preload 新增的接口必须和现有 `engine:connection` 一样校验调用方。
 
 ## Proposal
@@ -49,7 +49,7 @@ renderer 目前只有一个健康状态页，颜色直接写在 `styles.css` 里
 | `brand` | `#1c64f2` | `#3b82f6` | `--blue-accent` | 强调图标、焦点环 |
 | `dot` | `#e5e7eb` | `rgb(255 255 255 / 0.08)` | 点阵背景 | 主画布 24px 点阵 |
 
-- 设计稿没有、但 shadcn 组件需要的 token 由本篇补齐，并标注为补充值：`ring` 指向 `brand`，保证键盘焦点清晰可见；`destructive` 明亮用 `#dc2626`、暗黑用 `#ef4444`；`secondary` 指向 `accent`。
+- 设计稿没有、但 shadcn 组件需要的 token 由本篇补齐，并标注为补充值：`ring` 指向 `brand`，保证键盘焦点清晰可见；`destructive` 明亮用 `#dc2626`、暗黑用 `#ef4444`，`destructive-foreground` 固定为 `#ffffff`；`secondary` 指向 `accent`；Dialog 遮罩的 `overlay` 固定为 `#000000`，由透明度控制遮罩强度，替代组件默认的 `bg-black/50`。
 - 阴影 token 有 `shadow-panel` 和 `shadow-panel-focus` 两个，取设计稿里输入框的两组阴影，明暗各一组。
 - 圆角直接用 Tailwind 默认刻度，正好和设计稿一致：`rounded-md` 6px、`rounded-lg` 8px、`rounded-2xl` 16px、`rounded-full` 胶囊。`--radius` 设为 `0.5rem` 供 shadcn 组件使用。
 - 字体：
@@ -183,7 +183,18 @@ renderer 目前只有一个健康状态页，颜色直接写在 `styles.css` 里
 | eslint-plugin-better-tailwindcss | 4.10.0 | peer 要求 ESLint 10、tailwindcss `^4.1.17` |
 | prettier-plugin-tailwindcss | 0.8.1 | peer 要求 prettier `^3` |
 
-所有包都放在 desktop 的 `devDependencies`，由 electron-vite 打进产物，`dependencies` 继续为空。
+UI 包都放在 desktop 的 `devDependencies`，由 electron-vite 打进产物，`dependencies` 继续为空。ESLint 与 Prettier 插件由仓库根配置消费，放在根 `devDependencies`；Tailwind 插件显式以 desktop 为 `cwd`，指定 CSS 入口、web tsconfig 并启用现有 CSS 类检测，避免在根目录找不到 Tailwind 而静默关闭规则。
+
+### 06 的已实现事实与验证
+
+- 主题 token、`nativeTheme` 首帧设置、`preferences.json` 原子替换、三个可信 IPC、preload 和 renderer 桥接、隐藏标题栏与 42px 原生按钮区已落地。偏好写入失败不改变当前主题，IPC 返回错误；偏好损坏回退 `system`。`nativeTheme.updated` 同时更新窗口背景与原生按钮颜色。
+- shadcn 4.22.1 已生成 Dialog、Tabs、ToggleGroup、Button、Menubar、Tooltip，以及 ToggleGroup 依赖的 Toggle。CLI 在根 tsconfig 只有 references 时把文件写入了 `@/components/ui` 物理目录；源码已迁到 `src/renderer/src/components/ui`，根 tsconfig 补充工具使用的 `@/*` 映射，dry-run 确认后续路径正确。当前上游 registry 组件另外导入并安装 `cn` 包；本仓库按既定方案改为 `@/lib/utils` 并移除该依赖，后续新增组件仍需检查这一点。node／web 继续分别类型检查，不给 renderer 加入 Node 全局。
+- 生成组件的硬编码黑白改为补充语义 token，关闭按钮文案为中文。Fast Refresh 只为 Button、Toggle、Tabs 放行其命名变体导出。既有健康页暂时保留布局，头部设为拖动区域，避免隐藏系统标题栏后无法移动窗口；颜色改为 token，并在 components 层导入旧样式，让新组件的 utility 样式能正常覆盖；42px 的完整标题栏与外壳替换在 07 完成。
+- 颜色检查覆盖调色板、十六进制／函数／命名／CSS 变量任意值、任意属性颜色及直接 JSX 内联颜色。尺寸任意值与语义 token 正例通过；8 项类名反例、2 项内联反例通过，临时探针删除后全仓 lint 通过。CSS 文件中的取色仍需评审，ESLint 不检查 CSS。
+- `pnpm test` 221 项通过（contracts 68、engine 80、desktop 73）；类型检查、格式检查、冻结安装及笔记／计划校验通过。第一次把打包和全仓单测同时运行时，原有 engine 冷启动测试超过五秒；停止并行打包后原命令通过，未扩大测试超时。
+- 桌面 e2e 2 项通过，覆盖损坏偏好、主题切换、窗口背景、非法输入、重启保持和退出命令。Playwright 默认模拟明亮模式，主题用例通过 `page.emulateMedia({ colorScheme: null })` 清除模拟，测试 Electron 实际驱动的媒体查询。
+- `package:dir` 复用本机同版本 Electron 45.0.0，通过生产 fuse 打包。开发模式和真实加固 exe 均完成即时切换、损坏回退、重启保持与正常退出检查，无页面错误或 CSP 违规；真实 Windows 应用主题切换后，跟随系统的页面和原生按钮同步变化，测试结束已恢复系统设置。`.cache/06-theme-{dev,packaged}-*.png` 是原生窗口截图，已核对明暗按钮；exe 提取图标是新 logo，asar 无 `resources/`，仅含 `out/` 与 `package.json`。
+- Computer Use 运行模块 `@oai/sky` 不可用，窗口通过 CDP 和 Win32 截图核对，不宣称完成手动 UI 点击。设置中心内的 Dialog CSP、完整外壳截图与 NSIS 安装／卸载留待相应阶段验证；本篇仍保留 proposed，待 07 整体验收后转入 implemented。
 
 ## Alternatives considered
 

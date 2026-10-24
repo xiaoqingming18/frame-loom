@@ -11,7 +11,8 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 ## Decision
 
 - `packages/contracts` 发布为私有 ESM workspace 包 `@frame-loom/contracts`，由 tsc 输出 `dist/index.js` 与 `.d.ts`；入口 `exports` 只有 `types`、`default`，分发文件只含 `dist`。相对导出写 `.js` 后缀。
-- 用 zod 定义同名的 schema 值和推导类型 `HealthResponse`、`EngineConnection`、`ErrorResponse`。调用方使用 `parse` 检查外部数据，类型直接从 schema 推导。
+- 用 zod 定义同名的 schema 值和推导类型 `HealthResponse`、`EngineConnection`、`ErrorResponse`、`ThemeSource`、`WindowCommand`。调用方使用 `parse` 检查外部数据，类型直接从 schema 推导。
+- `ThemeSource` 只接受 `system | light | dark`；`WindowCommand` 只接受 `minimize | toggle-maximize | toggle-fullscreen | quit`。主进程在可信 IPC 中校验输入，renderer 桥接校验主题返回值；偏好持久化与窗口行为见[主题与应用外壳](../../proposed/feature/2026-10-24-theme-and-app-shell.md)。
 - `HealthResponse` 要求 `status: 'ok'`、字符串 `engineVersion` 与 `schemaVersion`，以及带时区的 ISO 日期时间 `startedAt`；接受 `Z` 和显式时区偏移，不接受无时区时间或无效日期。
 - `EngineConnection.baseUrl` 只接受字面形式 `http://127.0.0.1:<port>`，端口为 1–65535 的十进制整数，不允许前导零、路径、用户信息、查询或片段。这样校验不会把其他主机或附加内容正规化成可信连接。`token` 只要求非空字符串；生成和鉴权规则属于 engine／主进程，不在此实现。
 - `ErrorResponse` 要求字符串 `code`、`message`，可选 `issues` 是 `{ path: string; message: string }[]`，不把 HTTP 状态码重复放入响应体。engine 统一错误映射与 stderr 日志见[engine 服务](2026-10-24-engine-service.md)；renderer 健康检查解析此契约，响应损坏时回退到中文 HTTP 状态提示。
@@ -42,6 +43,7 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 
 ## Verification
 
+- 新增桌面枚举后，contracts 共 68 项通过，覆盖所有合法主题／命令及 8 项非法输入；全仓共 221 项单测通过。schema 与同名推导类型从包入口导出，不给 sandbox preload 引入运行时校验依赖。
 - 新增 `ErrorResponse` 后，contracts 3 个测试文件、53 项测试通过，覆盖必填 code／message、可选 issues、嵌套字段与非法输入；全仓共 172 项测试、类型检查、lint、格式检查和笔记／计划校验通过。构建入口导出 schema 与同名类型，engine 的真实错误响应及 renderer 的中文提示使用同一契约。
 - Node 24.22.1、pnpm 12.15.0 下，`pnpm exec tsc -v` 输出 `Version 6.0.3`，`pnpm install --frozen-lockfile` 通过，无需新增构建脚本许可。
 - `pnpm build`、`pnpm typecheck`、`pnpm test` 通过。2 个测试文件共 43 项，覆盖合法输入、必填字段、字段类型、健康状态、ISO 日期时间、回环地址与端口边界。

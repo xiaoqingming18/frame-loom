@@ -1,9 +1,18 @@
-import { app, BrowserWindow, ipcMain, net, protocol, utilityProcess } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, utilityProcess } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { engineEntry, manageEngine } from './engine.js';
-import { APP_ORIGIN, isTrustedSender, isTrustedUrl, rendererFile } from './security.js';
+import {
+  APP_ORIGIN,
+  PRODUCTION_CSP,
+  isTrustedSender,
+  isTrustedUrl,
+  rendererFile,
+} from './security.js';
+import { registerDesktopIpc } from './desktop-ipc.js';
+import { readTheme } from './preferences.js';
+import { TITLE_BAR_COLORS, updateWindowTheme } from './theme.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 app.setName('Frame Loom');
@@ -56,8 +65,7 @@ async function start(): Promise<void> {
           status: response.status,
           headers: {
             'Content-Type': response.headers.get('Content-Type') ?? 'application/octet-stream',
-            'Content-Security-Policy':
-              "default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'",
+            'Content-Security-Policy': PRODUCTION_CSP,
           },
         });
       } catch {
@@ -94,13 +102,19 @@ async function start(): Promise<void> {
       console.error('本地服务启动失败：', error);
     }
 
+    nativeTheme.themeSource = readTheme(app.getPath('userData'));
+    const colors = TITLE_BAR_COLORS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'];
     window = new BrowserWindow({
       title: 'Frame Loom',
       width: 1120,
       height: 760,
       minWidth: 720,
       minHeight: 560,
-      backgroundColor: '#171918',
+      backgroundColor: colors.color,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { ...colors, height: 42 },
+      autoHideMenuBar: true,
+      ...(!app.isPackaged ? { icon: join(directory, '../../resources/icon.png') } : {}),
       show: false,
       webPreferences: {
         preload: join(directory, '../preload/index.cjs'),
@@ -110,6 +124,10 @@ async function start(): Promise<void> {
       },
     });
     const contents = window.webContents;
+    registerDesktopIpc(window, origin);
+    nativeTheme.on('updated', () => {
+      if (window && !window.isDestroyed()) updateWindowTheme(window);
+    });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
     contents.on('will-navigate', (event, url) => {
       if (!isTrustedUrl(url, origin)) event.preventDefault();

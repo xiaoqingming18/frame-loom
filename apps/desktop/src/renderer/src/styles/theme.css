@@ -1,0 +1,90 @@
+:root {
+  color-scheme: light;
+  --background: #f6f7f9;
+  --canvas: #ffffff;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #f7f7f8;
+  --foreground: #1a1a1a;
+  --foreground-strong: #1a1a1a;
+  --muted-foreground: #8c8c8c;
+  --placeholder: #b3b3b3;
+  --border: #eaeaea;
+  --border-strong: #d1d5db;
+  --accent: #eef0f3;
+  --accent-active: #e4e6e9;
+  --primary: #333333;
+  --primary-foreground: #ffffff;
+  --brand: #1c64f2;
+  --dot: #e5e7eb;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --overlay: #000000;
+  --panel-shadow: 0 4px 24px rgb(0 0 0 / 0.04), 0 1px 4px rgb(0 0 0 / 0.02);
+  --panel-focus-shadow: 0 4px 32px rgb(0 0 0 / 0.08);
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #0d0d0f;
+    --canvas: #141416;
+    --card: #1c1c1f;
+    --popover: #1c1c1f;
+    --muted: #161618;
+    --foreground: #e4e4e7;
+    --foreground-strong: #ffffff;
+    --muted-foreground: #a1a1aa;
+    --placeholder: #52525b;
+    --border: #2d2d31;
+    --border-strong: #3f3f46;
+    --accent: #27272a;
+    --accent-active: #323236;
+    --primary: #ffffff;
+    --primary-foreground: #000000;
+    --brand: #3b82f6;
+    --dot: rgb(255 255 255 / 0.08);
+    --destructive: #ef4444;
+    --panel-shadow: 0 4px 24px rgb(0 0 0 / 0.3), 0 1px 4px rgb(0 0 0 / 0.2);
+    --panel-focus-shadow: 0 4px 32px rgb(0 0 0 / 0.4);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-canvas: var(--canvas);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-foreground: var(--foreground);
+  --color-foreground-strong: var(--foreground-strong);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-placeholder: var(--placeholder);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--foreground);
+  --color-accent-active: var(--accent-active);
+  --color-secondary: var(--accent);
+  --color-secondary-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--brand);
+  --color-ring: var(--brand);
+  --color-dot: var(--dot);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-overlay: var(--overlay);
+  --shadow-panel: var(--panel-shadow);
+  --shadow-panel-focus: var(--panel-focus-shadow);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  --font-serif: Georgia, Cambria, 'Times New Roman', 'Songti SC', SimSun, serif;
+  --text-ui: 13px;
+  --text-display: 34px;
+}

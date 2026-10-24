@@ -6,7 +6,7 @@ export function EngineStatusPage({ engineClient }: { engineClient: EngineClient 
   const health = useQuery(healthQueryOptions(engineClient));
   const state = health.isError ? 'error' : health.isPending ? 'pending' : 'ready';
   return (
-    <div className="workspace min-h-screen flex flex-col">
+    <div className="workspace flex min-h-screen flex-col">
       <header className="topbar flex items-center justify-between">
         <div className="brand flex items-center">
           <span className="brand-mark" aria-hidden="true">
@@ -16,7 +16,7 @@ export function EngineStatusPage({ engineClient }: { engineClient: EngineClient 
         </div>
         <span className="edition">影视创作工作台</span>
       </header>
-      <main className="flex-1 flex flex-col justify-center">
+      <main className="flex flex-1 flex-col justify-center">
         <div className="eyebrow">工作台 / 运行状态</div>
         <div className="intro">
           <span className="index" aria-hidden="true">
