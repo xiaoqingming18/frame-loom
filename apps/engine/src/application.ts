@@ -6,10 +6,11 @@ import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module.js';
 import { EngineConfig } from './core/config/config.js';
 import { EngineGuard } from './core/security/engine.guard.js';
+import { EngineLogger } from './core/logging/engine-logger.js';
 
 export async function createEngine(config: EngineConfig): Promise<INestApplication<Server>> {
   const app = await NestFactory.create<INestApplication<Server>>(AppModule.register(config), {
-    logger: false,
+    logger: new EngineLogger(config.token),
     abortOnError: false,
   });
   const guard = app.get(EngineGuard);

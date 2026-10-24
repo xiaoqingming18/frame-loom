@@ -1,4 +1,4 @@
-import { HealthResponse } from '@frame-loom/contracts';
+import { ErrorResponse, HealthResponse } from '@frame-loom/contracts';
 import type { INestApplication } from '@nestjs/common';
 import { request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -47,14 +47,19 @@ describe('真实 HTTP 边界', () => {
   it.each<Record<string, string>>([{}, { Authorization: `Bearer ${'b'.repeat(64)}` }])(
     '缺失或错误令牌返回 401',
     async (headers) => {
-      expect((await call(headers)).status).toBe(401);
+      const response = await call(headers);
+      expect(response.status).toBe(401);
+      expect(ErrorResponse.parse(JSON.parse(response.body))).toEqual({
+        code: 'HTTP_401',
+        message: '访问令牌无效',
+      });
     },
   );
 
   it('持有正确令牌仍不能使用错误 Host', async () => {
-    expect(
-      (await call({ Authorization: `Bearer ${token}`, Host: `evil.example:${port}` })).status,
-    ).toBe(403);
+    const response = await call({ Authorization: `Bearer ${token}`, Host: `evil.example:${port}` });
+    expect(response.status).toBe(403);
+    expect(ErrorResponse.parse(JSON.parse(response.body)).code).toBe('HTTP_403');
   });
 
   it('正确请求返回符合共享契约的健康响应', async () => {
@@ -77,6 +82,7 @@ describe('真实 HTTP 边界', () => {
     async (Origin) => {
       const response = await call({ Authorization: `Bearer ${token}`, Origin });
       expect(response.status).toBe(403);
+      expect(ErrorResponse.parse(JSON.parse(response.body)).code).toBe('HTTP_403');
       expect(response.headers['access-control-allow-origin']).toBeUndefined();
     },
   );
@@ -93,14 +99,21 @@ describe('真实 HTTP 边界', () => {
     expect(response.status).toBe(204);
     expect(response.headers['access-control-allow-origin']).toBe('app://frame-loom');
     expect(response.headers['access-control-allow-headers']).toBe('Authorization');
-    expect((await call({ Origin: 'app://frame-loom' })).status).toBe(401);
+    const unauthorized = await call({ Origin: 'app://frame-loom' });
+    expect(unauthorized.status).toBe(401);
+    expect(ErrorResponse.parse(JSON.parse(unauthorized.body)).code).toBe('HTTP_401');
   });
 
   it('预检也检查 Host 和 Origin', async () => {
-    expect((await call({}, 'OPTIONS')).status).toBe(403);
-    expect((await call({ Origin: 'https://evil.example' }, 'OPTIONS')).status).toBe(403);
-    expect(
-      (await call({ Origin: 'app://frame-loom', Host: 'evil.example' }, 'OPTIONS')).status,
-    ).toBe(403);
+    const requests: Record<string, string>[] = [
+      {},
+      { Origin: 'https://evil.example' },
+      { Origin: 'app://frame-loom', Host: 'evil.example' },
+    ];
+    for (const headers of requests) {
+      const response = await call(headers, 'OPTIONS');
+      expect(response.status).toBe(403);
+      expect(ErrorResponse.parse(JSON.parse(response.body)).code).toBe('HTTP_403');
+    }
   });
 });

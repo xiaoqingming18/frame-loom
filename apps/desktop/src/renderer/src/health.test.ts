@@ -42,6 +42,27 @@ it('HTTP 错误和不符合契约的响应不会显示为健康', async () => {
   await expect(fetchHealth(new AbortController().signal)).rejects.toThrow();
 });
 
+it('HTTP 错误显示共享错误契约中的中文消息', async () => {
+  const fetch = setup();
+  fetch.mockResolvedValue(
+    Response.json({ code: 'HTTP_401', message: '访问令牌无效' }, { status: 401 }),
+  );
+  await expect(fetchHealth(new AbortController().signal)).rejects.toThrow('访问令牌无效');
+});
+
+it('错误体不是 JSON 或不符合契约时回退到中文 HTTP 提示', async () => {
+  const fetch = setup();
+  for (const response of [
+    new Response('Internal Server Error', { status: 500 }),
+    Response.json({ message: '缺少 code' }, { status: 500 }),
+  ]) {
+    fetch.mockResolvedValue(response);
+    await expect(fetchHealth(new AbortController().signal)).rejects.toThrow(
+      '本地服务请求失败（HTTP 500）',
+    );
+  }
+});
+
 it('健康请求使用调用者的取消信号', async () => {
   const fetch = setup();
   const controller = new AbortController();

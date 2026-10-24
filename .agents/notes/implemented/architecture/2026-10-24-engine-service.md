@@ -15,6 +15,8 @@ Status: implemented
 - `src/core/core.module.ts` 是全局模块，提供配置、数据库与鉴权 guard；`src/modules/health/health.module.ts` 声明健康检查。`AppModule.register(config)` 只组合这两个模块，领域模块从 core 获取横切设施。目录约定与后续 HTTP 基线见[基础设施提案](../../proposed/architecture/2026-10-24-engine-and-renderer-foundation.md)。
 - 启动时创建 `data/`、`media/`，打开 better-sqlite3、启用 WAL 和外键，按 `src/package-root.ts` 的包根定位点寻找 `drizzle/` 并迁移；健康服务也从包根读取 `package.json` 版本。drizzle-kit 汇总 `src/**/*.schema.ts`，当前元数据表位于 `src/core/database/app-meta.schema.ts`。首份迁移由 drizzle-kit 生成表结构，补充 `schema_version=1` 数据初始化；健康检查读取落盘版本。
 - 请求边界中间件检查实际 socket 端口对应的 Host 与 Origin，再配置仅允许指定源、GET 与 Authorization 的 CORS。浏览器的 OPTIONS 预检不能携带 Bearer，因此只在 Host 和允许列表中的 Origin 合法时返回预检响应；实际接口由全局 guard 使用等长检查与 `timingSafeEqual` 校验 Bearer，不存在匿名健康接口。缺少 Origin 的 OPTIONS 也拒绝。
+- `core/http/` 提供 `DomainError(code, status, message)`、按参数使用的 `ZodValidationPipe` 与全局 `EngineExceptionFilter`（`APP_FILTER`）。领域异常保留自身状态和代码；zod 错误返回 400、`VALIDATION_FAILED` 与点分路径的 issues；其他 HTTP 异常保留状态、返回 `HTTP_<status>` 和统一中文消息；未知异常返回 500、`INTERNAL`，响应不暴露详情或堆栈。所有错误体符合 contracts 的 `ErrorResponse`，包括由边界中间件 `next(error)` 传出的 403，无需重复写响应。pipe 使用中文默认校验消息，并保留 schema 显式消息。
+- `core/logging/engine-logger.ts` 继承 `ConsoleLogger`，默认开启 error、warn、log，全部级别写 stderr。正文、对象与堆栈屏蔽令牌和认证值；未知异常详情只进入日志。进程入口的启动／关闭错误也使用它，独立运行时 stdout 仅输出一行 ready JSON。`ConsoleLogger.printStackTrace` 实际可能收到 undefined，子类保留这一空值处理，避免错误日志打断关闭清理。
 - 监听 `127.0.0.1:0` 后上报 `{ type: 'ready', port }`；在普通 Node 中向 stdout 输出同一 JSON。Electron 通过 `process.parentPort` 发送 `{ type: 'shutdown' }` 退出；SIGTERM、SIGINT 同样关闭 Nest 与数据库。启动期间收到退出请求时，等待监听初始化完成再关闭，且不再上报 ready；入口不导入 Electron。Electron 45 的 utilityProcess 在清空监听后仍驻留，因此有 parentPort 时在关闭资源后显式 `process.exit`，启动失败显式退出 1；普通 Node 维持自然退出。
 - Vitest 4.1.12 的实际转换保留 Nest 注入所需的元数据，无需 SWC。engine 测试脚本先构建自身和 contracts，黑盒测试直接执行生产入口。
 - 根 `deploy:engine` 脚本先构建再执行 `pnpm --filter @frame-loom/engine deploy --prod <输出目录>`。pnpm 12.15.0 已能带齐 contracts，仓库继续保持默认 isolated 链接方式，不启用 `injectWorkspacePackages`；Windows 安装分发单独在 deploy 命令加 `--node-linker=hoisted`，避免分发目录链接指回仓库。
@@ -38,11 +40,14 @@ Status: implemented
 - 收益：engine 可独立构建、鉴权访问、迁移和部署；不依赖 Electron 或工作目录，接口响应复用 contracts。测试覆盖生产入口，避免只验证源码转换。
 - 代价：Nest 与原生数据库增加依赖和部署体积；启动同步执行迁移，失败时整个服务不可用。这符合迁移完成前不提供服务的边界。
 - 桌面主进程需要遵守 JSON 允许源格式与 shutdown 消息。CORS 预检允许无 Bearer 是浏览器协议要求，不能扩展为匿名业务接口。以后新增 HTTP 方法与请求头时，必须同步检查 CORS 列表。
+- 错误响应体由 Nest 默认格式切换为 `ErrorResponse`；同包发布的 renderer 已同步解析中文消息。新调用方必须使用共享契约，不能依赖旧 `statusCode`／`error` 字段。通用 HTTP 异常使用固定中文提示，具体业务提示应通过 `DomainError` 表达；普通运行日志仍保留 Nest 内置文案。
 - 发布 schema 改动时在对应迁移中更新 app_meta 的 schema_version，已分发的迁移不可重写。启动代码不覆盖版本或用户元数据。
 - Electron 45 的 Node-API 加载与真实 parentPort 的 ready/shutdown 已由桌面壳验证；NSIS 安装后健康检查、正常退出与卸载保留数据库也已通过。操作系统信号投递和跨平台运行仍待验证。本机测试使用 Node 24.22.1 与 Windows x64。数据目录与令牌不能防御同用户权限下读取进程环境的恶意程序。
 
 ## Verification
 
+- HTTP 基线实现后，`pnpm test` 通过共 172 项（contracts 53、desktop 39、engine 80），类型检查、lint、格式检查及 `verify` 通过。HTTP 测试覆盖领域异常、zod 校验、普通 HTTP 异常、未知异常与 404，并检查原始响应无额外内部字段；错误 Host、错误 Origin、无 Origin 的 OPTIONS 均返回契约化 403。生产入口断言 stdout 仅一行 ready、stderr 无正确／错误令牌，并保留监听失败与退出清理检查；日志测试覆盖全部级别、无堆栈错误、对象与字符串认证值脱敏。
+- HTTP 基线的目录打包、1 项桌面 e2e 和真实加固 exe 验证通过：健康状态显示 engine 0.1.0、schema 1；注入测试错误响应后显示中文“访问令牌无效”；关闭后退出码 0，子进程全部退出。默认打包最后一轮停在 Electron 下载／解包阶段，临时通过 `--config.electronDist` 复用已安装的 Electron 45.0.0 完成，未改仓库打包配置或生产 fuse；本轮未重测 NSIS 安装／卸载。
 - 调整为 `core/` 与 `modules/health/` 后，原有 70 项 engine 测试、类型检查、lint 和格式检查通过；`db:generate` 无 schema 变化，迁移文件未改。仓库外部署入口的 10 项黑盒测试通过；目录打包、1 项桌面 e2e 与真实加固 exe 均显示 engine 0.1.0、schema 1，关闭退出码 0 且子进程全部退出。
 - 迁到 `apps/engine` 后，冻结安装、类型检查及全仓 150 项单测通过；开发窗口、目录打包、desktop e2e 和真实加固 exe 均显示健康状态，关闭后无残留进程。包名、ready/shutdown 与安装后的 `resources/engine` 路径保持不变。
 - `pnpm install --frozen-lockfile`、`pnpm typecheck` 通过；`nest build` 生成 `dist/main.js`，生产输出不含测试。再次执行 `db:generate` 报告无 schema 变更。

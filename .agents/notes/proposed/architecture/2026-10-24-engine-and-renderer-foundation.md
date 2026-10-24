@@ -20,7 +20,7 @@ Status: proposed
 
 ### 仓库布局
 
-- engine 已从 `services/engine` 移到 `apps/engine`，并完成下述 `core/`、`modules/health/` 与包根定位的目录调整。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。HTTP 基线与 renderer 骨架仍为提案，不视为已实现。
+- engine 已从 `services/engine` 移到 `apps/engine`，并完成下述 `core/`、`modules/health/`、包根定位、错误契约与 stderr 日志；现有 renderer 健康请求同步解析错误消息。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。renderer 骨架仍为提案，本篇随该部分完成再整体转入 implemented；engine 已实现事实同步于[服务笔记](../../implemented/architecture/2026-10-24-engine-service.md)。
 - `pnpm-workspace.yaml` 只保留 `apps/*` 和 `packages/*`。
 - renderer 继续留在 `apps/desktop/src/renderer`，不拆成独立包。它只有一个使用者，electron-vite 的约定也是 main、preload、renderer 放在同一个包里。
 - 迁移是单独的 `refactor` 提交，不改变任何行为。必须同步的位置：
@@ -83,8 +83,8 @@ apps/engine/
   | 其他 `HttpException` | 原状态码，`HTTP_<status>` |
   | 未知异常 | 500，`INTERNAL`；堆栈只写日志，不进入响应体 |
 
-  消息使用中文。边界中间件由 `app.use` 注册，它抛出的错误如果不经过 Nest 过滤器，就在中间件里直接写出 `ErrorResponse`。
-- 日志继承 Nest `ConsoleLogger`，所有级别都写 stderr，默认级别为 `error`、`warn`、`log`。stdout 只保留独立运行时的单行 ready JSON。token 和 `Authorization` 头永远不写日志。
+  错误消息使用中文：领域异常保留显式消息，普通 HTTP 异常使用固定提示，pipe 使用 zod 中文默认消息。HTTP 测试确认 `app.use` 边界中间件通过 `next(error)` 传出的错误进入 `APP_FILTER`，不另写一套响应。
+- 日志继承 Nest `ConsoleLogger`，重写输出方法使所有级别都写 stderr，默认级别为 `error`、`warn`、`log`。stdout 只保留独立运行时的单行 ready JSON。token 和 `Authorization` 认证值永远不写日志；对象使用内置字段脱敏，正文与堆栈另行屏蔽令牌和认证值。保留无堆栈错误的空值处理，启动／退出失败也使用同一日志实现。
 - 第一个非 GET 接口上线时，CORS 的 `methods` 和 `allowedHeaders`（加 `Content-Type`）必须在同一提交中放开，并补充预检测试。
 
 ### renderer 目录
@@ -171,8 +171,8 @@ apps/desktop/src/renderer/src/
 
 ## Risks
 
-- 边界中间件的错误可能绕过 Nest 全局过滤器，403 响应体不符合 `ErrorResponse`；需用测试确认，必要时在中间件中直接写响应。
-- Nest 12 的 `ConsoleLogger` 可能无法通过子类把全部级别改写到 stderr；不行时改为实现约 20 行的 `LoggerService`。
+- HTTP 测试已确认边界中间件的 403 进入全局过滤器；后续若改中间件注册方式，必须继续覆盖错误 Host、错误 Origin 与无 Origin 的 OPTIONS。
+- Nest 12 的 `ConsoleLogger` 已能通过子类把全部级别改写到 stderr；其堆栈方法实际接收 undefined，与声明不同，日志测试必须保留无堆栈场景。
 - 错误响应体格式改变，renderer 必须同时改为解析 `ErrorResponse`。engine 与 renderer 在同一安装包内发布，不需要兼容旧格式。
 - `@tanstack/router-plugin` 在 electron-vite 中的 root 与 cwd 不同，`routesDirectory` 和 `generatedRouteTree` 必须写绝对路径，否则可能在错误位置生成路由树。
 - 迁移、engine 结构调整和 renderer 骨架都会影响开发路径或打包产物，每一步都要重跑加固 exe 的启动验证，自动 e2e 不能替代。

@@ -1,4 +1,4 @@
-import { HealthResponse } from '@frame-loom/contracts';
+import { ErrorResponse, HealthResponse } from '@frame-loom/contracts';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -61,7 +61,11 @@ async function launch(withParent: boolean) {
   });
   children.push(child);
   const lines = createInterface({ input: child.stdout });
+  let stdout = '';
   let stderr = '';
+  child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+    stdout += chunk;
+  });
   child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
     stderr += chunk;
   });
@@ -78,7 +82,7 @@ async function launch(withParent: boolean) {
     expect(ready.port).toBeLessThanOrEqual(65535);
     expect(existsSync(join(directory, 'data/frame-loom.sqlite'))).toBe(true);
     expect(existsSync(join(directory, 'media'))).toBe(true);
-    return { child, port: ready.port, directory };
+    return { child, port: ready.port, directory, output: () => ({ stdout, stderr }) };
   } finally {
     lines.close();
   }
@@ -209,14 +213,20 @@ it('监听初始化期间收到 shutdown 时退出，不再上报 ready', () => 
   );
   expect(result.status).toBe(0);
   expect(result.stdout).not.toContain('ready');
-  expect(result.stderr).toBe('');
+  expect(result.stderr).toContain('NestFactory');
+  expect(result.stderr).not.toContain(token);
   expect(existsSync(join(directory, 'data/frame-loom.sqlite-wal'))).toBe(false);
 });
 
 it('独立入口从其他工作目录启动，迁移后输出端口并提供鉴权健康检查', async () => {
-  const { port } = await launch(false);
+  const { port, output } = await launch(false);
   const baseUrl = `http://127.0.0.1:${port}/health`;
-  expect((await fetch(baseUrl)).status).toBe(401);
+  const unauthorized = await fetch(baseUrl);
+  expect(unauthorized.status).toBe(401);
+  expect(ErrorResponse.parse(await unauthorized.json()).code).toBe('HTTP_401');
+  expect(
+    (await fetch(baseUrl, { headers: { Authorization: 'Bearer private-wrong-token' } })).status,
+  ).toBe(401);
   const response = await fetch(baseUrl, { headers: { Authorization: `Bearer ${token}` } });
   expect(response.status).toBe(200);
   const { version } = JSON.parse(readFileSync(join(dirname(entry), '../package.json'), 'utf8')) as {
@@ -226,17 +236,25 @@ it('独立入口从其他工作目录启动，迁移后输出端口并提供鉴�
     engineVersion: version,
     schemaVersion: '1',
   });
+  expect(output().stdout.trim().split(/\r?\n/)).toEqual([JSON.stringify({ type: 'ready', port })]);
+  expect(output().stderr).toContain('NestFactory');
+  expect(output().stderr).not.toContain(token);
+  expect(output().stderr).not.toContain('private-wrong-token');
 });
 
 it.each(['shutdown', 'SIGTERM', 'SIGINT'])(
   '通过 parentPort 上报 ready，并处理 %s 关闭 HTTP 与数据库',
   async (type) => {
-    const { child, port, directory } = await launch(true);
+    const { child, port, directory, output } = await launch(true);
     const exited = once(child, 'exit', { signal: AbortSignal.timeout(10_000) });
     child.stdin.end(JSON.stringify({ type }));
     const [code] = (await exited) as unknown[];
     expect(code).toBe(0);
     expect(existsSync(join(directory, 'data/frame-loom.sqlite-wal'))).toBe(false);
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+    expect(output().stdout.trim().split(/\r?\n/)).toEqual([
+      JSON.stringify({ type: 'ready', port }),
+    ]);
+    expect(output().stderr).not.toContain(token);
   },
 );

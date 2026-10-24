@@ -11,9 +11,10 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 ## Decision
 
 - `packages/contracts` 发布为私有 ESM workspace 包 `@frame-loom/contracts`，由 tsc 输出 `dist/index.js` 与 `.d.ts`；入口 `exports` 只有 `types`、`default`，分发文件只含 `dist`。相对导出写 `.js` 后缀。
-- 用 zod 定义同名的 schema 值和推导类型 `HealthResponse`、`EngineConnection`。调用方使用 `parse` 检查外部数据，类型直接从 schema 推导。
+- 用 zod 定义同名的 schema 值和推导类型 `HealthResponse`、`EngineConnection`、`ErrorResponse`。调用方使用 `parse` 检查外部数据，类型直接从 schema 推导。
 - `HealthResponse` 要求 `status: 'ok'`、字符串 `engineVersion` 与 `schemaVersion`，以及带时区的 ISO 日期时间 `startedAt`；接受 `Z` 和显式时区偏移，不接受无时区时间或无效日期。
 - `EngineConnection.baseUrl` 只接受字面形式 `http://127.0.0.1:<port>`，端口为 1–65535 的十进制整数，不允许前导零、路径、用户信息、查询或片段。这样校验不会把其他主机或附加内容正规化成可信连接。`token` 只要求非空字符串；生成和鉴权规则属于 engine／主进程，不在此实现。
+- `ErrorResponse` 要求字符串 `code`、`message`，可选 `issues` 是 `{ path: string; message: string }[]`，不把 HTTP 状态码重复放入响应体。engine 统一错误映射与 stderr 日志见[engine 服务](2026-10-24-engine-service.md)；renderer 健康检查解析此契约，响应损坏时回退到中文 HTTP 状态提示。
 - 根 `tsconfig.base.json` 统一 strict、ES2023、NodeNext 与 skipLibCheck。contracts 的 `tsconfig.json` 包含测试，`tsconfig.build.json` 排除测试并输出声明；包内提供 build、test、typecheck，根脚本用 `pnpm -r` 调用。
 - TypeScript 6.0.3、Vitest 4.1.12、zod 4.6.7 精确锁定；Vitest 与 Nest 官方 ESM starter 的 4.x 主版本一致，不采用 registry 最新的 5.x。
 
@@ -41,6 +42,7 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 
 ## Verification
 
+- 新增 `ErrorResponse` 后，contracts 3 个测试文件、53 项测试通过，覆盖必填 code／message、可选 issues、嵌套字段与非法输入；全仓共 172 项测试、类型检查、lint、格式检查和笔记／计划校验通过。构建入口导出 schema 与同名类型，engine 的真实错误响应及 renderer 的中文提示使用同一契约。
 - Node 24.22.1、pnpm 12.15.0 下，`pnpm exec tsc -v` 输出 `Version 6.0.3`，`pnpm install --frozen-lockfile` 通过，无需新增构建脚本许可。
 - `pnpm build`、`pnpm typecheck`、`pnpm test` 通过。2 个测试文件共 43 项，覆盖合法输入、必填字段、字段类型、健康状态、ISO 日期时间、回环地址与端口边界。
 - 构建目录只有 `index`、`health`、`engine-connection` 各自的 JS 与声明文件，不含测试。

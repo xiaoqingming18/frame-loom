@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import type { AddressInfo } from 'node:net';
 import { createEngine } from './application.js';
 import { loadConfig } from './core/config/config.js';
+import { EngineLogger } from './core/logging/engine-logger.js';
 
 interface ParentPort {
   postMessage(message: { type: 'ready'; port: number }): void;
@@ -10,6 +11,7 @@ interface ParentPort {
 }
 
 const parentPort = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
+const logger = new EngineLogger(process.env.FRAME_LOOM_TOKEN ?? '');
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
@@ -24,7 +26,7 @@ async function main(): Promise<void> {
       await listening.catch(() => undefined);
       await app.close();
     } catch (error) {
-      console.error('engine 关闭失败：', error);
+      logger.error('engine 关闭失败：', error instanceof Error ? error.stack : String(error));
       process.exitCode = 1;
     } finally {
       process.off('SIGTERM', onSignal);
@@ -52,14 +54,14 @@ async function main(): Promise<void> {
     if (parentPort) parentPort.postMessage(ready);
     else console.log(JSON.stringify(ready));
   } catch (error) {
-    console.error('engine 启动失败：', error instanceof Error ? error.message : error);
+    logger.error('engine 启动失败：', error instanceof Error ? error.stack : String(error));
     process.exitCode = 1;
     await shutdown();
   }
 }
 
 main().catch((error: unknown) => {
-  console.error('engine 启动失败：', error instanceof Error ? error.message : error);
+  logger.error('engine 启动失败：', error instanceof Error ? error.stack : String(error));
   process.exitCode = 1;
   if (parentPort) process.exit(1);
 });

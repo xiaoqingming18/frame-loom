@@ -16,7 +16,7 @@ node apps/engine/dist/main.js
 
 必填配置：`FRAME_LOOM_TOKEN` 是 64 位十六进制字符串；`FRAME_LOOM_DATA_DIR` 是绝对目录，桌面主进程传 `app.getPath('userData')`。允许源是 JSON 字符串数组；开发时传开发服务器的完整源，打包后例如 `["app://frame-loom"]`，具体主机名由桌面壳统一确定。省略时默认为 `[]`，仅允许不带 Origin 的本地调试请求。
 
-启动先创建 `<dataDir>/data/` 与 `<dataDir>/media/`，然后在 `data/frame-loom.sqlite` 上启用 WAL、外键并执行入库迁移。迁移失败时非零退出，不提供服务。只有迁移成功并监听 `127.0.0.1:0` 后，stdout 才输出单行 JSON，例如 `{"type":"ready","port":45678}`。日志不输出令牌。
+启动先创建 `<dataDir>/data/` 与 `<dataDir>/media/`，然后在 `data/frame-loom.sqlite` 上启用 WAL、外键并执行入库迁移。迁移失败时非零退出，不提供服务。只有迁移成功并监听 `127.0.0.1:0` 后，stdout 才输出单行 JSON，例如 `{"type":"ready","port":45678}`。`src/core/logging/engine-logger.ts` 继承 Nest `ConsoleLogger`，默认开启 error、warn、log，所有级别都写 stderr；启动与关闭失败也使用它。日志屏蔽令牌和 Authorization 认证值，不记录请求头。
 
 保持服务运行，在另一个已设置相同令牌的 PowerShell 中测试，替换实际端口：
 
@@ -25,6 +25,19 @@ Invoke-RestMethod 'http://127.0.0.1:45678/health' -Headers @{ Authorization = "B
 ```
 
 缺少或错误令牌返回 401，错误 Host 或未允许 Origin 返回 403。Host 必须为 `127.0.0.1:<实际端口>`；不接受 `localhost`。可信浏览器的 OPTIONS 预检无需 Bearer，实际 GET 仍必须携带 Bearer。健康响应使用 contracts 的 `HealthResponse.parse` 校验，包含包版本、落盘 schema 版本和启动时间。
+
+所有错误响应使用 contracts 的 `ErrorResponse`：`{ code, message, issues? }`，`issues` 为 `{ path, message }[]`。这是对 Nest 默认错误体的不兼容调整；调用方需同时改为 `ErrorResponse.parse`，健康页已同步显示中文消息，错误体损坏时回退到中文 HTTP 状态提示。
+
+`src/core/http/engine-exception.filter.ts` 由 `CoreModule` 通过 `APP_FILTER` 注册，统一处理路由、guard 和边界中间件的错误：
+
+| 异常                                 | 状态与响应                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| `DomainError(code, status, message)` | 保留领域状态、代码与中文消息                                            |
+| `ZodError`                           | 400、`VALIDATION_FAILED`，附字段问题；路径用点连接，例如 `items.0.name` |
+| 其他 `HttpException`                 | 保留状态码、`HTTP_<status>`，使用统一中文消息                           |
+| 未知异常                             | 500、`INTERNAL`、`本地服务内部错误`；详情和堆栈仅写脱敏日志             |
+
+参数校验按需使用 `ZodValidationPipe`，例如 `@Query(new ZodValidationPipe(schema))`；它返回 schema 解析后的值，使用中文默认校验消息。不注册全局 pipe，也不新增业务接口或放开非 GET 的 CORS。
 
 ## 主进程对接
 
