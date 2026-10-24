@@ -32,7 +32,7 @@ Note: ../../notes/implemented/process/2026-10-24-pnpm-node24-toolchain.md
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
 | 01 | [工具链迁移到 pnpm 与 Node 24.22](01-toolchain.md) | done | — | 现有校验在 pnpm 下全部通过，文档和 CI 已同步 |
-| 02 | [workspace 与 contracts 包](02-contracts.md) | draft | 01 | 可构建的 `@frame-loom/contracts`，带 schema 测试 |
+| 02 | [workspace 与 contracts 包](02-contracts.md) | done | 01 | 可构建的 `@frame-loom/contracts`，带 schema 测试 |
 | 03 | [engine 服务骨架](03-engine.md) | draft | 02 | 能单独启动的 NestJS engine，包含鉴权、迁移和 `/health` |
 | 04 | [Electron 桌面壳](04-desktop.md) | draft | 03 | `pnpm dev` 打开窗口，显示 engine 健康状态 |
 | 05 | [Windows 打包与冒烟测试](05-package.md) | draft | 04 | 能安装的 NSIS 包，Playwright 冒烟测试通过，笔记转入 implemented |
@@ -55,5 +55,6 @@ Note: ../../notes/implemented/process/2026-10-24-pnpm-node24-toolchain.md
 
 ## 发现与偏差
 
-- 01 已完成：工具链笔记移入 `implemented/`，架构笔记仍待 05 落地；02–05 保持 `draft`。
+- 01、02 已完成：工具链笔记与共享契约笔记已移入 `implemented/`；完整架构笔记仍待 05 落地，03–05 保持 `draft`。
 - 01 安装时仅为 `esbuild@0.28.2` 登记构建许可；钩子全新安装改用隔离 Git 仓库验证。详情见[01 的发现与偏差](01-toolchain.md#发现与偏差)。
+- 02 的构建、类型检查和 43 项契约测试通过，生产输出不含测试；engine 鉴权与迁移测试仍待 03。详情见[02 的验证](02-contracts.md#验证)。

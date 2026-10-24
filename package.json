@@ -9,6 +9,9 @@
     "node": ">=24.22.0 <25"
   },
   "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
     "prepare": "node scripts/setup-git.mjs --hooks-only",
     "setup:git": "node scripts/setup-git.mjs",
     "verify-commit-message": "node scripts/verify-commit-message.mjs",
@@ -30,6 +33,8 @@
     "@commitlint/cli": "21.2.4",
     "@commitlint/config-conventional": "21.2.4",
     "husky": "9.1.7",
-    "tsx": "4.23.15"
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "4.1.12"
   }
 }

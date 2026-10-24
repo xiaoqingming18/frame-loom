@@ -2,7 +2,7 @@
 
 基于 **Electron + React** 的多模态 AI 智能影视工作台桌面 PC 应用。
 
-当前阶段完成 Git 仓库和决策笔记系统初始化，尚无可启动的应用程序。Electron／React 版本、工程骨架、模型服务和媒体处理方案在后续开发时确定。
+当前已完成仓库流程工具、pnpm workspace 与 `@frame-loom/contracts` 共享契约包，尚无可启动的应用程序。engine、Electron／React 桌面壳与安装包仍待后续子计划实现，见[应用骨架计划](.agents/plans/2026-10-24-app-skeleton/plan.md)。
 
 ## 准备环境
 
@@ -16,6 +16,18 @@ pnpm install --frozen-lockfile
 pnpm run setup:git
 pnpm run verify
 ```
+
+## 共享契约
+
+`packages/contracts` 用 zod 定义 `HealthResponse`、`EngineConnection`，同时导出同名的推导类型。后续 workspace 包通过 `workspace:*` 依赖 `@frame-loom/contracts`；运行时数据使用 schema 的 `parse` 校验。
+
+```sh
+pnpm build       # 构建各 workspace 包，contracts 输出 ESM 与声明文件
+pnpm test        # 运行各包的单元测试
+pnpm typecheck   # 检查源码与测试的类型
+```
+
+契约边界与构建方式见[共享契约决策](.agents/notes/implemented/architecture/2026-10-24-shared-contracts.md)。
 
 ## 决策笔记
 

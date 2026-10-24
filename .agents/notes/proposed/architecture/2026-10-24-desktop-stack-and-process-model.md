@@ -95,6 +95,7 @@ frame-loom/
 ```
 
 - 包名：`@frame-loom/desktop`、`@frame-loom/engine`、`@frame-loom/contracts`。
+- `packages/contracts` 已实现，字段、校验边界和构建约定见[共享契约包](../../implemented/architecture/2026-10-24-shared-contracts.md)；本篇仍跟踪完整应用骨架，其余应用包待实现。
 - desktop 的运行时依赖全部由 electron-vite 打进产物，`dependencies` 保持为空，这样 electron-builder 不需要收集 pnpm 的 `node_modules`。
 - engine 用 `pnpm deploy --prod` 生成一个独立目录，作为 electron-builder 的 `extraResources` 放进安装包。打包后的路径是 `process.resourcesPath/engine`，开发模式下用 `services/engine/dist`。
 - 打包时通过 electron-builder 的 `electronFuses` 关闭以下开关：`runAsNode`、`enableNodeOptionsEnvironmentVariable`、`enableNodeCliInspectArguments`。同时打开 `onlyLoadAppFromAsar` 和 ASAR 完整性校验。这样别的程序就不能把安装好的 exe 当作普通 Node 运行时来用。`utilityProcess` 不依赖 `runAsNode`。

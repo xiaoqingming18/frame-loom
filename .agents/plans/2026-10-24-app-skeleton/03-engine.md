@@ -49,4 +49,4 @@ engine 不依赖 Electron，用 Node 24.22 直接运行 `node dist/main.js` 就�
 
 ## 交接
 
-尚未开始，要等 02 完成。
+02 已完成；本计划尚未开始。`@frame-loom/contracts` 已提供 `HealthResponse`、`EngineConnection` 的 schema 与同名类型；开始本计划时先构建 contracts，再通过 `workspace:*` 引用。
