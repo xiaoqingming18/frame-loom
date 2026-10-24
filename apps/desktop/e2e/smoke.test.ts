@@ -15,27 +15,30 @@ test('窗口显示真实 engine 健康状态，关闭后服务退出', async () 
     await expect(page.getByRole('status')).toHaveText('运行正常');
     await expect(page.getByTestId('engine-version')).toHaveText(/\S+/);
     expect(await application.evaluate(({ app }) => app.getPath('userData'))).toBe(userData);
-    expect(await page.evaluate(() => {
-      const globals = globalThis as unknown as Record<string, unknown>;
-      return [typeof globals.require, typeof globals.process, typeof globals.ipcRenderer];
-    })).toEqual([
-      'undefined', 'undefined', 'undefined',
-    ]);
-    const enginePid = await application.evaluate(({ app }) =>
-      app.getAppMetrics().find((metric) => metric.name === 'Frame Loom Engine')?.pid);
+    expect(
+      await page.evaluate(() => {
+        const globals = globalThis as unknown as Record<string, unknown>;
+        return [typeof globals.require, typeof globals.process, typeof globals.ipcRenderer];
+      }),
+    ).toEqual(['undefined', 'undefined', 'undefined']);
+    const enginePid = await application.evaluate(
+      ({ app }) => app.getAppMetrics().find((metric) => metric.name === 'Frame Loom Engine')?.pid,
+    );
     expect(enginePid).toBeDefined();
     const closed = application.waitForEvent('close');
     await page.close();
     await closed;
-    await expect.poll(() => {
-      try {
-        process.kill(enginePid!, 0);
-        return false;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true;
-        throw error;
-      }
-    }).toBe(true);
+    await expect
+      .poll(() => {
+        try {
+          process.kill(enginePid!, 0);
+          return false;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true;
+          throw error;
+        }
+      })
+      .toBe(true);
   } finally {
     await application?.close();
     await rm(userData, { recursive: true, force: true });

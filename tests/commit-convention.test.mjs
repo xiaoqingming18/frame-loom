@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -16,9 +24,21 @@ test('提交规则接受中文和可选范围，拒绝不合规消息', async (t
     ['省略范围', 'docs: 补充使用说明', true],
     ['专有名称', 'build(deps): 升级 Electron 至已验证版本', true],
     ['机器人摘要', 'build(deps): bump Electron to a verified version', true],
-    ['长中文正文与尾注', `fix(media): 修复导出取消\n\n${'验证实际行为。'.repeat(30)}\n\nNote: .agents/notes/implemented/process/example.md\nRefs: #12`, true],
-    ['计划尾注', 'feat(ipc): 新增类型化版本查询\n\n验证界面显示版本。\n\nNote: .agents/notes/implemented/architecture/example.md\nPlan: .agents/plans/2026-11-02-example/02-renderer-ipc.md', true],
-    ['破坏性变更', 'feat(project)!: 升级清单格式\n\nBREAKING CHANGE: 旧文件需使用转换入口迁移。', true],
+    [
+      '长中文正文与尾注',
+      `fix(media): 修复导出取消\n\n${'验证实际行为。'.repeat(30)}\n\nNote: .agents/notes/implemented/process/example.md\nRefs: #12`,
+      true,
+    ],
+    [
+      '计划尾注',
+      'feat(ipc): 新增类型化版本查询\n\n验证界面显示版本。\n\nNote: .agents/notes/implemented/architecture/example.md\nPlan: .agents/plans/2026-11-02-example/02-renderer-ipc.md',
+      true,
+    ],
+    [
+      '破坏性变更',
+      'feat(project)!: 升级清单格式\n\nBREAKING CHANGE: 旧文件需使用转换入口迁移。',
+      true,
+    ],
     ['回退', `revert(ai): 回退不稳定的模型适配\n\n恢复已验证的模型路径。\n\nReverts: ${sha}`, true],
     ['Git 合并消息', "Merge branch 'feature/example'", true],
     ['72字符边界', `docs: ${'文'.repeat(66)}`, true],
@@ -55,16 +75,31 @@ test('真实 Git 钩子阻止错误提交，范围检查覆盖根提交及每条
   const fixture = mkdtempSync(join(cache, 'commit-convention-'));
   const emptyGitConfig = join(fixture, 'empty.gitconfig');
   writeFileSync(emptyGitConfig, '');
-  const env = { ...process.env, CI: '', HUSKY: '1', NODE_ENV: 'development', GIT_CONFIG_GLOBAL: emptyGitConfig, GIT_CONFIG_NOSYSTEM: '1' };
+  const env = {
+    ...process.env,
+    CI: '',
+    HUSKY: '1',
+    NODE_ENV: 'development',
+    GIT_CONFIG_GLOBAL: emptyGitConfig,
+    GIT_CONFIG_NOSYSTEM: '1',
+  };
   for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete env[name];
-  const run = (command, args, extra = {}) => spawnSync(command, args, { cwd: fixture, env, encoding: 'utf8', windowsHide: true, ...extra });
+  const run = (command, args, extra = {}) =>
+    spawnSync(command, args, { cwd: fixture, env, encoding: 'utf8', windowsHide: true, ...extra });
   const git = (...args) => {
     const result = run('git', args);
     assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
     return result.stdout.trim();
   };
   try {
-    for (const file of ['package.json', 'commitlint.config.mjs', '.gitmessage.txt', '.husky/commit-msg', 'scripts/setup-git.mjs', 'scripts/verify-commit-message.mjs']) {
+    for (const file of [
+      'package.json',
+      'commitlint.config.mjs',
+      '.gitmessage.txt',
+      '.husky/commit-msg',
+      'scripts/setup-git.mjs',
+      'scripts/verify-commit-message.mjs',
+    ]) {
       mkdirSync(dirname(join(fixture, file)), { recursive: true });
       copyFileSync(join(root, file), join(fixture, file));
     }
@@ -74,11 +109,16 @@ test('真实 Git 钩子阻止错误提交，范围检查覆盖根提交及每条
     const setup = run(process.execPath, ['scripts/setup-git.mjs']);
     assert.equal(setup.status, 0, `${setup.stdout}${setup.stderr}`);
     assert.equal(git('config', '--local', '--get', 'core.hooksPath'), '.husky/_');
-    assert.equal(realpathSync(git('config', '--local', '--get', 'commit.template')), realpathSync(join(fixture, '.gitmessage.txt')));
+    assert.equal(
+      realpathSync(git('config', '--local', '--get', 'commit.template')),
+      realpathSync(join(fixture, '.gitmessage.txt')),
+    );
 
     // CI 环境的准备过程不能重新写入 hooksPath。
     git('config', '--local', 'core.hooksPath', 'ci-preserve');
-    const ciSetup = run(process.execPath, ['scripts/setup-git.mjs', '--hooks-only'], { env: { ...env, CI: 'true', HUSKY: '0' } });
+    const ciSetup = run(process.execPath, ['scripts/setup-git.mjs', '--hooks-only'], {
+      env: { ...env, CI: 'true', HUSKY: '0' },
+    });
     assert.equal(ciSetup.status, 0);
     assert.equal(git('config', '--local', '--get', 'core.hooksPath'), 'ci-preserve');
     git('config', '--local', 'core.hooksPath', '.husky/_');
@@ -101,7 +141,11 @@ test('真实 Git 钩子阻止错误提交，范围检查覆盖根提交及每条
     git('commit', '--allow-empty', '-m', 'test(ai): 补充取消任务测试');
     const third = git('rev-parse', 'HEAD');
 
-    assert.deepEqual(selectCommits({ from: '0'.repeat(40), to: third, cwd: fixture }), [first, second, third]);
+    assert.deepEqual(selectCommits({ from: '0'.repeat(40), to: third, cwd: fixture }), [
+      first,
+      second,
+      third,
+    ]);
     assert.deepEqual(selectCommits({ from: first, to: third, cwd: fixture }), [second, third]);
     assert.deepEqual(selectCommits({ from: third, to: third, cwd: fixture }), []);
     assert.deepEqual(selectCommits({ to: '0'.repeat(40), cwd: fixture }), []);

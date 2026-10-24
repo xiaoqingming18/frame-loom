@@ -16,8 +16,12 @@ export function isTrustedSender(
   contents: { mainFrame: unknown },
   origin: string,
 ): boolean {
-  return event.sender === contents && event.senderFrame !== null
-    && event.senderFrame === contents.mainFrame && isTrustedUrl(event.senderFrame.url, origin);
+  return (
+    event.sender === contents &&
+    event.senderFrame !== null &&
+    event.senderFrame === contents.mainFrame &&
+    isTrustedUrl(event.senderFrame.url, origin)
+  );
 }
 
 export function rendererFile(root: string, requestUrl: string): string | undefined {
@@ -27,7 +31,8 @@ export function rendererFile(root: string, requestUrl: string): string | undefin
     if (pathname.includes('\\') || pathname.includes('\0')) return undefined;
     const file = resolve(root, `.${pathname === '/' ? '/index.html' : pathname}`);
     const path = relative(root, file);
-    if (path === '..' || path.startsWith('../') || path.startsWith('..\\') || isAbsolute(path)) return undefined;
+    if (path === '..' || path.startsWith('../') || path.startsWith('..\\') || isAbsolute(path))
+      return undefined;
     return file;
   } catch {
     return undefined;

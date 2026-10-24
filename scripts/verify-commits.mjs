@@ -5,7 +5,11 @@ import { parseArgs } from 'node:util';
 import { runCommitlint } from './verify-commit-message.mjs';
 
 function git(args, cwd, trim = true) {
-  const output = execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const output = execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   return trim ? output.trim() : output;
 }
 
@@ -13,9 +17,10 @@ export function selectCommits({ from = '', to = 'HEAD', cwd = process.cwd() } = 
   if (/^0+$/u.test(to)) return [];
   // 将外部传入的引用解析为提交，未知基线必须报错，不能静默漏检。
   const head = git(['rev-parse', '--verify', '--end-of-options', `${to}^{commit}`], cwd);
-  const base = !from || /^0+$/u.test(from)
-    ? null
-    : git(['rev-parse', '--verify', '--end-of-options', `${from}^{commit}`], cwd);
+  const base =
+    !from || /^0+$/u.test(from)
+      ? null
+      : git(['rev-parse', '--verify', '--end-of-options', `${from}^{commit}`], cwd);
   const commits = git(['rev-list', '--reverse', base ? `${base}..${head}` : head], cwd);
   return commits ? commits.split('\n') : [];
 }

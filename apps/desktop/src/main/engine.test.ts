@@ -11,8 +11,12 @@ class Child extends EventEmitter {
 afterEach(() => vi.useRealTimers());
 
 it('从应用路径而非工作目录解析开发及安装后的 engine 入口', () => {
-  expect(engineEntry(false, resolve('apps/desktop'), resolve('resources'))).toBe(resolve('apps/engine/dist/main.js'));
-  expect(engineEntry(true, resolve('app.asar'), resolve('resources'))).toBe(resolve('resources/engine/dist/main.js'));
+  expect(engineEntry(false, resolve('apps/desktop'), resolve('resources'))).toBe(
+    resolve('apps/engine/dist/main.js'),
+  );
+  expect(engineEntry(true, resolve('app.asar'), resolve('resources'))).toBe(
+    resolve('resources/engine/dist/main.js'),
+  );
 });
 
 describe('engine 就绪握手', () => {
@@ -57,7 +61,10 @@ describe('engine 生命周期', () => {
     const engine = manageEngine(child, 'secret', onExit);
     const connection = engine.getConnection();
     child.emit('message', { type: 'ready', port: 45678 });
-    await expect(connection).resolves.toEqual({ baseUrl: 'http://127.0.0.1:45678', token: 'secret' });
+    await expect(connection).resolves.toEqual({
+      baseUrl: 'http://127.0.0.1:45678',
+      token: 'secret',
+    });
     child.emit('exit', 3);
     await expect(engine.getConnection()).rejects.toThrow('已退出');
     expect(onExit).toHaveBeenCalledWith(3);
@@ -96,7 +103,9 @@ describe('engine 生命周期', () => {
   });
   it('shutdown 消息发送失败时终止进程', async () => {
     const child = new Child();
-    child.postMessage.mockImplementation(() => { throw new Error('通道关闭'); });
+    child.postMessage.mockImplementation(() => {
+      throw new Error('通道关闭');
+    });
     const engine = manageEngine(child, 'secret', vi.fn());
     child.emit('message', { type: 'ready', port: 45678 });
     await engine.stop();

@@ -17,15 +17,28 @@ const features = `${renderer}/features`;
 // 按现有 feature 目录生成同层隔离规则，新 feature 不需要手工登记。
 const featureZones = existsSync(resolve(root, features))
   ? readdirSync(resolve(root, features), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => ({ target: `${features}/${entry.name}`, from: features, except: [`./${entry.name}`] }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => ({
+        target: `${features}/${entry.name}`,
+        from: features,
+        except: [`./${entry.name}`],
+      }))
   : [];
 
 export default defineConfig(
   globalIgnores([
-    '**/dist/**', '**/out/**', '**/release/**', '**/build/**', '**/coverage/**',
-    '**/test-results/**', '**/playwright-report/**', '**/routeTree.gen.ts',
-    '.agents/**', '.cache/**', '.husky/**', 'docs/design/**',
+    '**/dist/**',
+    '**/out/**',
+    '**/release/**',
+    '**/build/**',
+    '**/coverage/**',
+    '**/test-results/**',
+    '**/playwright-report/**',
+    '**/routeTree.gen.ts',
+    '.agents/**',
+    '.cache/**',
+    '.husky/**',
+    'docs/design/**',
   ]),
   {
     files: ['**/*.{js,mjs,cjs}'],
@@ -41,7 +54,11 @@ export default defineConfig(
   },
   {
     files: ['apps/desktop/src/renderer/**/*.{ts,tsx}'],
-    extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite, query.configs['flat/recommended']],
+    extends: [
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+      query.configs['flat/recommended'],
+    ],
     languageOptions: { globals: globals.browser },
   },
   {
@@ -55,23 +72,36 @@ export default defineConfig(
     settings: {
       'import-x/resolver': {
         typescript: {
-          project: ['apps/desktop/tsconfig.json', 'apps/engine/tsconfig.json', 'packages/contracts/tsconfig.json'],
+          project: [
+            'apps/desktop/tsconfig.json',
+            'apps/engine/tsconfig.json',
+            'packages/contracts/tsconfig.json',
+          ],
           // 三个 workspace 项目是刻意配置，后续 tsconfig 拆分时同步此列表。
           noWarnOnMultipleProjects: true,
         },
       },
     },
     rules: {
-      'import-x/no-restricted-paths': ['error', {
-        basePath: root,
-        zones: [
-          { target: './apps/desktop/src/renderer', from: ['./apps/desktop/src/main', './apps/desktop/src/preload', './apps/engine'] },
-          { target: './apps/engine', from: './apps/desktop' },
-          { target: [`${renderer}/lib`, `${renderer}/components`], from: [features, `${renderer}/routes`, `${renderer}/app`] },
-          { target: features, from: [`${renderer}/routes`, `${renderer}/app`] },
-          ...featureZones,
-        ],
-      }],
+      'import-x/no-restricted-paths': [
+        'error',
+        {
+          basePath: root,
+          zones: [
+            {
+              target: './apps/desktop/src/renderer',
+              from: ['./apps/desktop/src/main', './apps/desktop/src/preload', './apps/engine'],
+            },
+            { target: './apps/engine', from: './apps/desktop' },
+            {
+              target: [`${renderer}/lib`, `${renderer}/components`],
+              from: [features, `${renderer}/routes`, `${renderer}/app`],
+            },
+            { target: features, from: [`${renderer}/routes`, `${renderer}/app`] },
+            ...featureZones,
+          ],
+        },
+      ],
     },
   },
   prettier,

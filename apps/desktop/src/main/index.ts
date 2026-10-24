@@ -16,10 +16,12 @@ let stopped = false;
 if (!hasLock) {
   app.quit();
 } else {
-  protocol.registerSchemesAsPrivileged([{
-    scheme: 'app',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
-  }]);
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'app',
+      privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+    },
+  ]);
 
   app.on('second-instance', () => {
     if (window?.isMinimized()) window.restore();
@@ -54,7 +56,8 @@ async function start(): Promise<void> {
           status: response.status,
           headers: {
             'Content-Type': response.headers.get('Content-Type') ?? 'application/octet-stream',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'",
+            'Content-Security-Policy':
+              "default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'",
           },
         });
       } catch {
@@ -65,16 +68,20 @@ async function start(): Promise<void> {
     let startupError: unknown;
     try {
       const token = randomBytes(32).toString('hex');
-      const child = utilityProcess.fork(engineEntry(app.isPackaged, app.getAppPath(), process.resourcesPath), [], {
-        serviceName: 'Frame Loom Engine',
-        stdio: 'pipe',
-        env: {
-          ...process.env,
-          FRAME_LOOM_TOKEN: token,
-          FRAME_LOOM_DATA_DIR: app.getPath('userData'),
-          FRAME_LOOM_ALLOWED_ORIGINS: JSON.stringify([origin]),
+      const child = utilityProcess.fork(
+        engineEntry(app.isPackaged, app.getAppPath(), process.resourcesPath),
+        [],
+        {
+          serviceName: 'Frame Loom Engine',
+          stdio: 'pipe',
+          env: {
+            ...process.env,
+            FRAME_LOOM_TOKEN: token,
+            FRAME_LOOM_DATA_DIR: app.getPath('userData'),
+            FRAME_LOOM_ALLOWED_ORIGINS: JSON.stringify([origin]),
+          },
         },
-      });
+      );
       child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
       // 令牌只通过环境和可信 IPC 传递，不写入日志。
       engine = manageEngine(child, token, (code) => {
@@ -88,11 +95,18 @@ async function start(): Promise<void> {
     }
 
     window = new BrowserWindow({
-      title: 'Frame Loom', width: 1120, height: 760, minWidth: 720, minHeight: 560,
-      backgroundColor: '#171918', show: false,
+      title: 'Frame Loom',
+      width: 1120,
+      height: 760,
+      minWidth: 720,
+      minHeight: 560,
+      backgroundColor: '#171918',
+      show: false,
       webPreferences: {
         preload: join(directory, '../preload/index.cjs'),
-        contextIsolation: true, sandbox: true, nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
       },
     });
     const contents = window.webContents;
@@ -104,7 +118,9 @@ async function start(): Promise<void> {
       if (!isTrustedUrl(url, origin)) event.preventDefault();
     });
     contents.on('will-attach-webview', (event) => event.preventDefault());
-    contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+    contents.session.setPermissionRequestHandler((_contents, _permission, callback) =>
+      callback(false),
+    );
     contents.session.setPermissionCheckHandler(() => false);
     ipcMain.handle('engine:connection', async (event) => {
       if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的连接请求');

@@ -34,7 +34,9 @@ async function main(): Promise<void> {
       if (parentPort) process.exit(process.exitCode ?? 0);
     }
   };
-  const onSignal = () => { void shutdown(); };
+  const onSignal = () => {
+    void shutdown();
+  };
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
   parentPort?.on('message', ({ data }) => {

@@ -8,7 +8,12 @@ import { HealthService } from './health.service.js';
 
 @Module({
   controllers: [HealthController],
-  providers: [DatabaseService, HealthService, EngineGuard, { provide: APP_GUARD, useExisting: EngineGuard }],
+  providers: [
+    DatabaseService,
+    HealthService,
+    EngineGuard,
+    { provide: APP_GUARD, useExisting: EngineGuard },
+  ],
 })
 export class AppModule {
   static register(config: EngineConfig): DynamicModule {

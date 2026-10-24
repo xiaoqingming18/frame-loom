@@ -8,14 +8,18 @@ export default defineConfig({
     build: { externalizeDeps: false, rollupOptions: { output: { format: 'es' } } },
   },
   preload: {
-    build: { externalizeDeps: false, rollupOptions: { output: { format: 'cjs', entryFileNames: 'index.cjs' } } },
+    build: {
+      externalizeDeps: false,
+      rollupOptions: { output: { format: 'cjs', entryFileNames: 'index.cjs' } },
+    },
   },
   renderer: {
     plugins: [react(), tailwindcss()],
     server: {
       host: '127.0.0.1',
       headers: {
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-src 'none'",
+        'Content-Security-Policy':
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-src 'none'",
       },
     },
   },

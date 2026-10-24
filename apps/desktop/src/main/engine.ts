@@ -24,9 +24,20 @@ export function waitForReady(child: EngineChild, timeout = 30_000): Promise<numb
       else resolveReady(port!);
     };
     const onMessage = (message: unknown) => {
-      if (typeof message !== 'object' || message === null || !('type' in message) || message.type !== 'ready') return;
-      if (!('port' in message) || typeof message.port !== 'number'
-        || !Number.isInteger(message.port) || message.port < 1 || message.port > 65535) {
+      if (
+        typeof message !== 'object' ||
+        message === null ||
+        !('type' in message) ||
+        message.type !== 'ready'
+      )
+        return;
+      if (
+        !('port' in message) ||
+        typeof message.port !== 'number' ||
+        !Number.isInteger(message.port) ||
+        message.port < 1 ||
+        message.port > 65535
+      ) {
         finish(new Error('本地服务返回了无效端口'));
       } else finish(undefined, message.port);
     };
@@ -52,14 +63,16 @@ export function manageEngine(child: EngineChild, token: string, onExit: (code: n
     failure = new Error(`本地服务已退出（退出码 ${code}），请重新启动应用`);
     onExit(code);
   });
-  const ready = waitForReady(child).then((port) => {
-    console.info(`engine 已就绪，端口 ${port}`);
-    return EngineConnection.parse({ baseUrl: `http://127.0.0.1:${port}`, token });
-  }).catch((error: Error) => {
-    failure = error;
-    child.kill();
-    return undefined;
-  });
+  const ready = waitForReady(child)
+    .then((port) => {
+      console.info(`engine 已就绪，端口 ${port}`);
+      return EngineConnection.parse({ baseUrl: `http://127.0.0.1:${port}`, token });
+    })
+    .catch((error: Error) => {
+      failure = error;
+      child.kill();
+      return undefined;
+    });
 
   return {
     async getConnection(): Promise<EngineConnection> {

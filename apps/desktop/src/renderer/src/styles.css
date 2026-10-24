@@ -1,38 +1,209 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-:root { color-scheme: dark; font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif; color: #e9e9e0; background: #171918; font-synthesis: none; }
-* { box-sizing: border-box; }
-body { margin: 0; }
-button { font: inherit; }
-.workspace { padding: 0 56px; background-image: linear-gradient(90deg, transparent calc(100% - 1px), #ffffff03 1px); background-size: 80px 100%; }
-.topbar { height: 92px; border-bottom: 1px solid #ffffff14; }
-.brand { gap: 14px; }
-.brand strong { font-family: "Bahnschrift", sans-serif; font-size: 15px; letter-spacing: 3px; font-weight: 600; }
-.brand-mark { font-family: "Georgia", serif; position: relative; font-size: 27px; color: #d5e6a0; line-height: 1; }
-.brand-mark span { margin-left: -7px; font-size: 21px; }
-.edition, .page-footer { font-size: 11px; color: #8f9690; letter-spacing: 2px; }
-main { width: min(100%, 840px); margin: 0 auto; padding: 28px 0; }
-.eyebrow { color: #9da496; font-size: 11px; letter-spacing: 3px; margin-bottom: 18px; }
-.intro { display: flex; align-items: baseline; gap: 24px; }
-.index { color: #7d8874; font-family: "Consolas", monospace; font-size: 12px; }
-h1 { font-family: "STSong", "SimSun", serif; font-size: clamp(28px, 4vw, 44px); font-weight: 400; letter-spacing: 3px; margin: 0; }
-h1 span { color: #d5e6a0; }
-.subtitle { color: #9ba29c; font-size: 13px; letter-spacing: 2px; margin: 16px 0 32px 42px; }
-.status-panel { border: 1px solid #ffffff21; border-radius: 3px; background: #1c1f1c; }
-.panel-heading { padding: 24px 28px; border-bottom: 1px solid #ffffff12; }
-h2 { font-size: 14px; font-weight: 500; letter-spacing: 2px; margin: 0; }
-.status { font-size: 12px; display: flex; align-items: center; gap: 8px; }
-.ready { color: #d5e6a0; }.pending { color: #c9bc8c; }.error { color: #eea79a; }
-.status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.metrics { margin: 0; padding: 34px 28px; gap: 28px; }
-dt { font-size: 11px; letter-spacing: 1px; color: #9ba29c; margin-bottom: 14px; }
-dd { margin: 0; font-family: "Consolas", "Microsoft YaHei UI", monospace; font-size: 24px; color: #e3e6d9; }
-dd.timestamp { font-size: 13px; padding-top: 6px; }
-.panel-footer { border-top: 1px solid #ffffff12; padding: 16px 28px; font-size: 11px; color: #9ba29c; }
-button { border: none; background: transparent; color: #d5e6a0; cursor: pointer; padding: 8px; }
-button:hover { background: #d5e6a010; }button:disabled { cursor: wait; opacity: .5; }button:focus-visible { outline: 2px solid #d5e6a0; outline-offset: 3px; }
-.message { padding: 28px; color: #c9bc8c; font-size: 13px; line-height: 1.8; }
-.message p { margin: 0; }.error-detail { margin-top: 8px !important; color: #eea79a; overflow-wrap: anywhere; }
-.scope-note { font-size: 11px; color: #8f9690; margin-top: 18px; }
-.page-footer { padding: 24px 0; border-top: 1px solid #ffffff14; letter-spacing: 1px; }
-@media (max-width: 760px) { .workspace { padding: 0 28px; }.intro { gap: 12px; }.subtitle { margin-left: 0; }.edition { letter-spacing: 0; } }
+:root {
+  color-scheme: dark;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  color: #e9e9e0;
+  background: #171918;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button {
+  font: inherit;
+}
+.workspace {
+  padding: 0 56px;
+  background-image: linear-gradient(90deg, transparent calc(100% - 1px), #ffffff03 1px);
+  background-size: 80px 100%;
+}
+.topbar {
+  height: 92px;
+  border-bottom: 1px solid #ffffff14;
+}
+.brand {
+  gap: 14px;
+}
+.brand strong {
+  font-family: 'Bahnschrift', sans-serif;
+  font-size: 15px;
+  letter-spacing: 3px;
+  font-weight: 600;
+}
+.brand-mark {
+  font-family: 'Georgia', serif;
+  position: relative;
+  font-size: 27px;
+  color: #d5e6a0;
+  line-height: 1;
+}
+.brand-mark span {
+  margin-left: -7px;
+  font-size: 21px;
+}
+.edition,
+.page-footer {
+  font-size: 11px;
+  color: #8f9690;
+  letter-spacing: 2px;
+}
+main {
+  width: min(100%, 840px);
+  margin: 0 auto;
+  padding: 28px 0;
+}
+.eyebrow {
+  color: #9da496;
+  font-size: 11px;
+  letter-spacing: 3px;
+  margin-bottom: 18px;
+}
+.intro {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+}
+.index {
+  color: #7d8874;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+}
+h1 {
+  font-family: 'STSong', 'SimSun', serif;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 400;
+  letter-spacing: 3px;
+  margin: 0;
+}
+h1 span {
+  color: #d5e6a0;
+}
+.subtitle {
+  color: #9ba29c;
+  font-size: 13px;
+  letter-spacing: 2px;
+  margin: 16px 0 32px 42px;
+}
+.status-panel {
+  border: 1px solid #ffffff21;
+  border-radius: 3px;
+  background: #1c1f1c;
+}
+.panel-heading {
+  padding: 24px 28px;
+  border-bottom: 1px solid #ffffff12;
+}
+h2 {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  margin: 0;
+}
+.status {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ready {
+  color: #d5e6a0;
+}
+.pending {
+  color: #c9bc8c;
+}
+.error {
+  color: #eea79a;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.metrics {
+  margin: 0;
+  padding: 34px 28px;
+  gap: 28px;
+}
+dt {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #9ba29c;
+  margin-bottom: 14px;
+}
+dd {
+  margin: 0;
+  font-family: 'Consolas', 'Microsoft YaHei UI', monospace;
+  font-size: 24px;
+  color: #e3e6d9;
+}
+dd.timestamp {
+  font-size: 13px;
+  padding-top: 6px;
+}
+.panel-footer {
+  border-top: 1px solid #ffffff12;
+  padding: 16px 28px;
+  font-size: 11px;
+  color: #9ba29c;
+}
+button {
+  border: none;
+  background: transparent;
+  color: #d5e6a0;
+  cursor: pointer;
+  padding: 8px;
+}
+button:hover {
+  background: #d5e6a010;
+}
+button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+button:focus-visible {
+  outline: 2px solid #d5e6a0;
+  outline-offset: 3px;
+}
+.message {
+  padding: 28px;
+  color: #c9bc8c;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.message p {
+  margin: 0;
+}
+.error-detail {
+  margin-top: 8px !important;
+  color: #eea79a;
+  overflow-wrap: anywhere;
+}
+.scope-note {
+  font-size: 11px;
+  color: #8f9690;
+  margin-top: 18px;
+}
+.page-footer {
+  padding: 24px 0;
+  border-top: 1px solid #ffffff14;
+  letter-spacing: 1px;
+}
+@media (max-width: 760px) {
+  .workspace {
+    padding: 0 28px;
+  }
+  .intro {
+    gap: 12px;
+  }
+  .subtitle {
+    margin-left: 0;
+  }
+  .edition {
+    letter-spacing: 0;
+  }
+}

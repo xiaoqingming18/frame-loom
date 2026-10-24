@@ -4,7 +4,9 @@ import { fetchHealth } from './health';
 afterEach(() => vi.unstubAllGlobals());
 
 function setup(connection: unknown = { baseUrl: 'http://127.0.0.1:45678', token: 'secret' }) {
-  vi.stubGlobal('window', { frameLoom: { getEngineConnection: vi.fn().mockResolvedValue(connection) } });
+  vi.stubGlobal('window', {
+    frameLoom: { getEngineConnection: vi.fn().mockResolvedValue(connection) },
+  });
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
   return fetch;
@@ -12,10 +14,18 @@ function setup(connection: unknown = { baseUrl: 'http://127.0.0.1:45678', token:
 
 it('使用 Bearer 请求健康接口并校验响应', async () => {
   const fetch = setup();
-  const health = { status: 'ok', engineVersion: '0.1.0', schemaVersion: '1', startedAt: '2026-10-24T00:00:00Z' };
+  const health = {
+    status: 'ok',
+    engineVersion: '0.1.0',
+    schemaVersion: '1',
+    startedAt: '2026-10-24T00:00:00Z',
+  };
   fetch.mockResolvedValue(Response.json(health));
   await expect(fetchHealth(new AbortController().signal)).resolves.toEqual(health);
-  expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:45678/health', expect.objectContaining({ headers: { Authorization: 'Bearer secret' } }));
+  expect(fetch).toHaveBeenCalledWith(
+    'http://127.0.0.1:45678/health',
+    expect.objectContaining({ headers: { Authorization: 'Bearer secret' } }),
+  );
 });
 
 it('连接无效时不发送带令牌的请求', async () => {
