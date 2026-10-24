@@ -1,8 +1,8 @@
 # Plan: ESLint 与 Prettier
 
-Status: draft
+Status: active
 Parent: plan.md
-Note: ../../notes/proposed/process/2026-10-24-lint-and-format.md
+Note: ../../notes/implemented/process/2026-10-24-lint-and-format.md
 
 ## 目标
 
@@ -15,13 +15,13 @@ Note: ../../notes/proposed/process/2026-10-24-lint-and-format.md
 
 ## 步骤
 
-- [ ] T1 以精确版本在根 `devDependencies` 安装笔记版本表中的包，确认无需新增 `allowBuilds` — 验证：`pnpm install --frozen-lockfile` 通过
-- [ ] T2 编写 `eslint.config.js`：`recommendedTypeChecked` 加 `projectService`、renderer 的 React 与 TanStack Query 插件、`import-x/no-restricted-paths` 边界区、`eslint-config-prettier`、忽略列表 — 验证：`pnpm exec eslint --print-config apps/desktop/src/renderer/src/main.tsx` 包含边界规则
-- [ ] T3 根脚本加入 `lint`、`format`、`format:check`，编写 `.prettierrc.json` 与 `.prettierignore` — 验证：`pnpm format:check` 只报告格式差异，不报告 `.agents/`、`docs/`、生成文件
-- [ ] T4 修复现有代码的 lint 报错，不改变行为；无法修复的规则在配置中关闭并写明原因 — 验证：`pnpm lint` 通过，`pnpm test`、`pnpm typecheck` 通过
-- [ ] T5 用临时文件验证边界反例：renderer 一个 feature 导入另一个 feature、renderer 导入 `src/main`、engine 导入 desktop — 验证：三处 `pnpm lint` 均报错；删除临时文件后通过
-- [ ] T6 在 `.github/workflows/build.yml` 的单测与类型检查之后加入 `pnpm lint` 与 `pnpm format:check` — 验证：配置审阅；远端未执行时如实记录
-- [ ] T7 提交 `build: 引入 ESLint 与 Prettier`，包含配置、脚本、CI 与 lint 修复，带 `Note:` 与 `Plan:` 尾注 — 验证：提交钩子与 `pnpm run verify` 通过
+- [x] T1 以精确版本在根 `devDependencies` 安装笔记版本表中的包，审核安装脚本 — 验证：`unrs-resolver@1.12.2` 精确登记 `allowBuilds: false` 后，`pnpm install --frozen-lockfile` 通过
+- [x] T2 编写 `eslint.config.js`：`recommendedTypeChecked` 加 `projectService`、renderer 的 React 与 TanStack Query 插件、`import-x/no-restricted-paths` 边界区、`eslint-config-prettier`、忽略列表 — 验证：`pnpm exec eslint --print-config apps/desktop/src/renderer/src/main.tsx` 包含边界规则
+- [x] T3 根脚本加入 `lint`、`format`、`format:check`，编写 `.prettierrc.json` 与 `.prettierignore` — 验证：`pnpm format:check` 只报告格式差异，不报告 `.agents/`、`docs/`、生成文件
+- [x] T4 修复现有代码的 lint 报错，不改变行为；无法修复的规则在配置中关闭并写明原因 — 验证：`pnpm lint`、`pnpm test`、`pnpm typecheck` 通过
+- [x] T5 用临时文件验证导入边界 — 验证：ESLint API 使用相同配置验证 7 项反例和 1 项正例，全部符合预期；临时源码已删除
+- [x] T6 在 `.github/workflows/build.yml` 的单测与类型检查之后加入 `pnpm lint` 与 `pnpm format:check` — 验证：配置已审阅，远端未执行
+- [x] T7 提交 `build: 引入 ESLint 与 Prettier`，包含配置、脚本、CI 与 lint 修复，带 `Note:` 与 `Plan:` 尾注 — 验证：提交钩子与提交前 `pnpm run verify`
 - [ ] T8 运行 `pnpm format`，单独提交 `style: 全仓格式化` — 验证：`git diff --stat` 不含 `.agents/`；`pnpm typecheck`、`pnpm test`、`pnpm format:check` 通过
 - [ ] T9 把 T8 提交的完整 SHA 写入 `.git-blame-ignore-revs`，README 说明 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，作为 `chore` 提交 — 验证：`git blame` 在配置后跳过格式化提交
 
@@ -33,11 +33,15 @@ Note: ../../notes/proposed/process/2026-10-24-lint-and-format.md
 ## 进度
 
 - 2026-10-24：创建子计划草稿。
+- 2026-10-24：01 已完成（`9a48d6f`），无其他本地未合并分支，开始执行 T1。
+- 2026-10-24：完成 T1～T7；11 项依赖精确锁定、配置与 CI 就绪，边界正反例验证通过；配置提交后的下一步为 T8 纯格式化。
 
 ## 发现与偏差
 
-无。
+- T1 原预计不新增 `allowBuilds`，实际解析器带 `unrs-resolver@1.12.2` 安装脚本；审阅并验证本机原生绑定无需脚本后精确登记 `false`，不开放脚本或兜底下载。
+- 首轮 lint 的 10 处错误通过补齐 Nest HTTP server 泛型、将 Node 事件结果标为 `unknown[]`、移除冗余非空断言修复；唯一规则豁免是当前无导出的渲染挂载入口的 Fast Refresh 检查，原因写在配置中。
+- T5 用 ESLint API 精确断言规则名与错误数，避免仅凭 CLI 非零退出误认边界有效；首次临时 main/preload/engine 导入多写一层相对路径，修正为真实可解析路径后通过。
 
 ## 交接
 
-尚未开始，等待 01 完成。
+T1～T7 已完成；下一步运行 `pnpm format`，只暂存格式改动提交 T8，再登记 SHA 完成 T9。

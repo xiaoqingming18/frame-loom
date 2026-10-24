@@ -1,6 +1,6 @@
 import { HealthResponse } from '@frame-loom/contracts';
 import type { INestApplication } from '@nestjs/common';
-import { request } from 'node:http';
+import { request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,7 +10,7 @@ import { createEngine } from './application.js';
 import { EngineConfig } from './config.js';
 
 const token = 'a'.repeat(64);
-let app: INestApplication;
+let app: INestApplication<Server>;
 let port: number;
 let directory: string;
 beforeAll(async () => {

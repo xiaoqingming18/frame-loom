@@ -1,29 +1,32 @@
 # Agent Note: 引入 ESLint 与 Prettier
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
-仓库目前只有 `tsc` 类型检查，没有 lint，也没有格式化工具。[engine 与 renderer 基础设施](../architecture/2026-10-24-engine-and-renderer-foundation.md)规定了几条导入边界：
+引入前仓库只有 `tsc` 类型检查，没有 lint，也没有格式化工具。[engine 与 renderer 基础设施](../../proposed/architecture/2026-10-24-engine-and-renderer-foundation.md)规定了几条导入边界：
 
 - renderer 内部依赖方向为 `lib`、`components` → `features` → `routes`、`app`。
 - feature 之间不能互相导入。
 - renderer 不能导入 main、preload 或 engine，engine 不能导入 desktop。
-- [Agent 内核选型](../architecture/2026-10-24-agent-runtime-pi.md)要求只有 engine 的 `modules/agent` 可以导入 `@earendil-works/*`，验收方式目前写的是手动 grep。
+- [Agent 内核选型](../../proposed/architecture/2026-10-24-agent-runtime-pi.md)要求只有 engine 的 `modules/agent` 可以导入 `@earendil-works/*`，验收方式目前写的是手动 grep。
 
 这些规则写在笔记里只能靠人工评审。engine 与主进程大量使用 Promise，遗漏 `await` 或 `void` 的调用，`tsc` 也查不出来。格式也没有约定，新增代码会混入多种风格。
 
-## Proposal
+## Decision
 
 ### ESLint
 
 - 根目录一份 `eslint.config.js`（flat config），由根脚本 `pnpm lint` 对全仓运行。
 - 所有 TypeScript 使用 `typescript-eslint` 的 `recommendedTypeChecked`，开启 `parserOptions.projectService`。主要用 `no-floating-promises`、`no-misused-promises` 检查遗漏的异步调用。
 - renderer 额外启用 `eslint-plugin-react-hooks`、`eslint-plugin-react-refresh` 和 `@tanstack/eslint-plugin-query`。
+- 当前 `main.tsx` 同时定义健康页并挂载应用，没有导出，只有此入口关闭 `react-refresh/only-export-components`，保持整页重载。普通组件仍启用该规则，不为消除一条 lint 提前执行 renderer 重构。
 - 导入边界用 `eslint-plugin-import-x` 的 `no-restricted-paths`，按目录划区，覆盖 Problem 中前三条规则。引入 pi 时，再加一条 `no-restricted-imports`：在 `apps/engine/src/modules/agent/` 之外禁止 `@earendil-works/*`，替代手动 grep。
+- feature 隔离根据现有 `features/` 子目录自动生成，允许同 feature 导入；未创建目录时不预建业务空壳。TypeScript 解析器读取三个包的 tsconfig，支持 `.js` 源码映射；后续 desktop 拆分 tsconfig 时同步解析器项目列表。
 - 末尾接 `eslint-config-prettier`，关闭和格式化冲突的规则。
+- `eslint-import-resolver-typescript` 的传递依赖 `unrs-resolver@1.12.2` 带 `napi-postinstall` 准备脚本。已读取脚本并验证 Windows x64 的可选原生绑定无需脚本即可加载，`allowBuilds` 精确登记 `false`，保留默认构建审核，不开放安装时兜底下载。
 - 忽略：`dist/`、`out/`、`release/`、`apps/desktop/build/`、`routeTree.gen.ts`、`.agents/`、`.cache/`、`docs/design/`。
-- Tailwind 类名的颜色限制（`eslint-plugin-better-tailwindcss`）和 Prettier 类名排序（`prettier-plugin-tailwindcss`）在 renderer 引入主题 token 时加入，规则见[主题系统与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
+- Tailwind 类名的颜色限制（`eslint-plugin-better-tailwindcss`）和 Prettier 类名排序（`prettier-plugin-tailwindcss`）在 renderer 引入主题 token 时加入，规则见[主题系统与应用外壳](../../proposed/feature/2026-10-24-theme-and-app-shell.md)。
 
 ### Prettier
 
@@ -69,16 +72,19 @@ Status: proposed
 - **只用 ESLint 的格式化规则（stylistic）**：少一个工具。但格式化规则和逻辑规则混在一起，自动修复的范围也小于 Prettier；typescript-eslint 官方建议格式化交给专门的工具。
 - **加 pre-commit 钩子（lint-staged）**：提交前就能发现问题。但带类型信息的 lint 每次都要加载 TypeScript 项目，提交会明显变慢；CI 已经能拦住问题，本地可以随时手动运行 `pnpm lint`。
 
-## Acceptance criteria
+## Consequences
 
-- `pnpm lint` 和 `pnpm format:check` 在全仓通过，CI 的 Windows 工作流包含这两步。
-- 边界规则有反例验证：在 renderer 的 feature 中临时导入另一个 feature、在 renderer 中导入 main，`pnpm lint` 报错；删除临时文件后通过。
-- 格式化提交只包含格式改动，提交后 `pnpm typecheck`、`pnpm test` 通过；`.git-blame-ignore-revs` 记录了它的 SHA。
-- `.agents/` 下没有文件被格式化改动，`pnpm run verify` 通过。
-
-## Risks
-
+- 收益：跨进程和 renderer 分层边界由同一配置检查；异步调用通过类型感知规则检查，格式交给 Prettier，CI 复用本地命令。
+- 代价：新增 11 项直接开发依赖和一项精确的脚本拒绝登记；首次格式化独立提交，需要用 blame 忽略文件保持历史可读。
 - typescript-eslint 8.72 的 peer 上限是 TypeScript 6.1 以下；升级 TypeScript 要等 typescript-eslint 跟进，或在同一提交里升级两者。
 - 类型感知 lint 会随代码量变慢。超过可接受时间时，先考虑缩小 `recommendedTypeChecked` 的范围，再考虑 oxlint。
 - 首次格式化会改动大量行，和进行中的分支冲突。在没有其他未合并分支时执行，并单独提交。
 - Prettier 对 Markdown 的改写可能和项目写作规范冲突，所以 `docs/` 和 `.agents/` 不纳入格式化；README 等根目录 Markdown 是否纳入，以首次运行的 diff 为准。
+- 初次纯格式化和 blame SHA 登记在配置提交之后独立完成；CI 配置已审阅，远端尚未执行。
+
+## Verification
+
+- 冻结安装通过，11 项依赖按版本表精确锁定；`unrs-resolver@1.12.2` 禁止安装脚本后，TypeScript resolver 仍能加载本机绑定。
+- `pnpm lint`、`pnpm typecheck` 和 `pnpm test` 通过，现有 150 项单测全部保留；lint 修复只涉及类型标注及冗余非空断言，没有运行时行为变化。
+- `eslint --print-config` 断言 renderer 的导入边界和 `no-floating-promises` 均为 error。临时源码配合 ESLint API 验证 7 项反例：跨 feature、renderer 导入 main/preload/engine、engine 导入 desktop、feature 导入 app、lib 导入 feature；同 feature 和 contracts 导入正例通过。反例均只报预期的边界错误，随后删除临时源码。
+- 首轮 `format:check` 仅报告 28 份源码、配置和测试的格式差异，未报告 `.agents/`、`docs/`、锁文件或迁移元数据；格式化完成结果由后续同组提交同步。

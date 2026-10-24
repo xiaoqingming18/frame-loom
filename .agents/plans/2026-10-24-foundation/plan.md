@@ -2,7 +2,7 @@
 
 Status: active
 Note: ../../notes/proposed/architecture/2026-10-24-engine-and-renderer-foundation.md
-Note: ../../notes/proposed/process/2026-10-24-lint-and-format.md
+Note: ../../notes/implemented/process/2026-10-24-lint-and-format.md
 Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 
 ## 目标
@@ -14,7 +14,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
   - 所有错误响应符合 contracts 的 `ErrorResponse`，日志只写 stderr；
   - renderer 使用文件路由、hash history、`features/` 目录和唯一的 engine client；
   - 开发、构建产物和加固 exe 的行为与迁移前一致。
-- [ESLint 与 Prettier](../../notes/proposed/process/2026-10-24-lint-and-format.md)：
+- [ESLint 与 Prettier](../../notes/implemented/process/2026-10-24-lint-and-format.md)：
   - `pnpm lint`、`pnpm format:check` 全仓通过并接入 CI；
   - 导入边界有反例验证。
 - [主题系统与应用外壳](../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md)：
@@ -45,7 +45,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
 | 01 | [engine 迁到 apps/engine](01-move-engine.md) | done | — | `services/` 不存在，开发、打包、e2e 行为不变 |
-| 02 | [ESLint 与 Prettier](02-lint-format.md) | draft | 01 | `pnpm lint`、`pnpm format:check` 通过，CI 已接入，格式化提交独立 |
+| 02 | [ESLint 与 Prettier](02-lint-format.md) | active | 01 | `pnpm lint`、`pnpm format:check` 通过，CI 已接入，格式化提交独立 |
 | 03 | [engine 目录调整](03-engine-structure.md) | draft | 02 | `core/` 加 `modules/health` 结构，现有测试与部署入口通过 |
 | 04 | [engine 错误契约与日志](04-engine-http-baseline.md) | draft | 03 | 所有错误响应符合 `ErrorResponse`，日志只写 stderr |
 | 05 | [renderer 骨架](05-renderer-skeleton.md) | draft | 02、04 | 文件路由、hash history、engine client、拆分的 tsconfig 与测试环境 |

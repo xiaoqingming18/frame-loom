@@ -36,6 +36,11 @@ jobs:
           pnpm -r test
           pnpm typecheck
 
+      - name: 检查代码规则与格式
+        run: |
+          pnpm lint
+          pnpm format:check
+
       - name: 构建 NSIS 安装包
         run: pnpm package:win
 

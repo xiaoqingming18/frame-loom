@@ -50,14 +50,14 @@ async function launch(withParent: boolean) {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   children.push(child);
-  const lines = createInterface({ input: child.stdout! });
+  const lines = createInterface({ input: child.stdout });
   let stderr = '';
-  child.stderr!.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk; });
+  child.stderr.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk; });
   try {
     const [line] = await Promise.race([
       once(lines, 'line', { signal: AbortSignal.timeout(10_000) }),
       once(child, 'exit').then(() => { throw new Error(`engine 未上报 ready：${stderr}`); }),
-    ]);
+    ]) as unknown[];
     const ready = JSON.parse(line as string) as { type: string; port: number };
     expect(ready.type).toBe('ready');
     expect(ready.port).toBeGreaterThan(0);
@@ -170,8 +170,8 @@ it('独立入口从其他工作目录启动，迁移后输出端口并提供鉴�
 it.each(['shutdown', 'SIGTERM', 'SIGINT'])('通过 parentPort 上报 ready，并处理 %s 关闭 HTTP 与数据库', async (type) => {
   const { child, port, directory } = await launch(true);
   const exited = once(child, 'exit', { signal: AbortSignal.timeout(10_000) });
-  child.stdin!.end(JSON.stringify({ type }));
-  const [code] = await exited;
+  child.stdin.end(JSON.stringify({ type }));
+  const [code] = await exited as unknown[];
   expect(code).toBe(0);
   expect(existsSync(join(directory, 'data/frame-loom.sqlite-wal'))).toBe(false);
   await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();

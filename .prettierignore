@@ -1,0 +1,37 @@
+# 依赖、本地产物及配置与 .gitignore 保持一致。
+node_modules/
+.husky/_/
+.npm/
+.cache/
+*.tsbuildinfo
+dist/
+dist-electron/
+out/
+build/
+release/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+/board.html
+/demo.html
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+
+# 文档、上游技能、归档封印及生成文件保持原样。
+.agents/
+docs/
+pnpm-lock.yaml
+**/routeTree.gen.ts
+apps/engine/drizzle/meta/
