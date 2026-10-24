@@ -14,6 +14,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "deploy:engine": "pnpm --filter @frame-loom/engine... build && pnpm --filter @frame-loom/engine deploy --prod",
+    "package:prepare": "pnpm --filter @frame-loom/engine... build && pnpm --filter @frame-loom/engine deploy --prod --force --node-linker=hoisted apps/desktop/build/engine && pnpm --filter @frame-loom/desktop build",
+    "package:win": "pnpm run package:prepare && pnpm --filter @frame-loom/desktop package:win",
     "prepare": "node scripts/setup-git.mjs --hooks-only",
     "setup:git": "node scripts/setup-git.mjs",
     "verify-commit-message": "node scripts/verify-commit-message.mjs",

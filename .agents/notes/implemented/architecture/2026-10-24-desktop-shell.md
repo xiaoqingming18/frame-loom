@@ -4,13 +4,13 @@ Status: implemented
 
 ## Problem
 
-[完整应用骨架提案](../../proposed/architecture/2026-10-24-desktop-stack-and-process-model.md)已确定 Electron、React 和 utilityProcess。需要把独立 engine 接入窗口，并保证令牌只交给应用自己的主框架，服务启动失败、意外退出与应用关闭都有明确行为。
+[完整应用骨架](2026-10-24-desktop-stack-and-process-model.md)确定 Electron、React 和 utilityProcess。需要把独立 engine 接入窗口，并保证令牌只交给应用自己的主框架，服务启动失败、意外退出与应用关闭都有明确行为。
 
 ## Decision
 
 - `apps/desktop` 用 electron-vite 6 构建 ESM 主进程、CommonJS preload 和 React 19 renderer；桌面运行时依赖全量打包，`dependencies` 为空。
 - 开发加载 Vite 的完整源，构建产物使用 `app://frame-loom`。自定义协议只提供 renderer 目录内的静态文件；新窗口与外部导航被拒绝。窗口开启隔离、沙箱并关闭 Node 集成。
-- 每次启动生成独立随机令牌，utilityProcess 直接加载 engine 的 ESM 入口，传入 userData 和唯一允许源。15 秒内没有合法 ready、提前退出或启动失败都拒绝连接请求。退出时先发送 shutdown，限时等待后强制结束子进程，避免残留。
+- 每次启动生成独立随机令牌，utilityProcess 直接加载 engine 的 ESM 入口，传入 userData 和唯一允许源。30 秒内没有合法 ready、提前退出或启动失败都拒绝连接请求；打包验证中首次部署启动曾超过原定 15 秒，因此给冷启动留出余量，仍保留超时失败。退出时先发送 shutdown，限时等待后强制结束子进程，避免残留。
 - preload 仅暴露 `getEngineConnection`。IPC 同时校验发起者属于应用窗口、是主框架、URL 属于可信源。engine 退出时主进程使 renderer 的健康查询失效；界面通过 TanStack Query 重新请求并显示中文错误，不增加第二个 preload API。
 - renderer 用 contracts 校验连接与健康响应。只建立根路由和状态页，显示 engine 版本、schema 版本与启动时间，不添加业务页面。
 - 根 `pnpm dev` 先构建 contracts、engine。engine 源码不热重载，需要重启命令。
@@ -44,7 +44,7 @@ Status: implemented
 - 桌面 37 项测试覆盖入口路径、合法与非法 ready、超时／提前退出／启动错误、shutdown 与强制终止、主框架及源校验、协议路径越界、Bearer 请求和响应校验。engine 70 项、contracts 43 项全通过；engine 的 parentPort shim 用活动定时器验证显式退出及启动失败路径，监听失败保留退出码 1 并关闭数据库。
 - 对当前 HEAD 的干净克隆应用本次改动，不复制 node_modules 或构建产物。`pnpm install --frozen-lockfile` 自动安装 Electron 二进制，随后 `pnpm dev` 打开窗口，CDP 断言版本 0.1.0、schema 1、Node 全局不可用、preload 仅有约定方法、匿名及错误令牌 401、新窗口与外部导航被阻止。
 - 仓库中的开发窗口手动终止 engine 后显示中文连接中断；生产构建的 `app://frame-loom/` 页面通过同样的健康与隔离检查，页面截图已检查。修复后的干净克隆关闭窗口，engine 以 0 退出，无超时强杀或残留进程。
-- 验证脚本与截图位于忽略的 `.cache/`，只用于本次开发联调；正式 Playwright 冒烟测试留给子计划 05。
+- 验证脚本与截图位于忽略的 `.cache/`；正式 Playwright 冒烟由 `apps/desktop/e2e/smoke.test.ts` 覆盖构建产物，生产加固与安装分发的验证见完整架构。
 
 ## Consequences
 
@@ -52,4 +52,4 @@ Status: implemented
 - 代价：安装依赖需要下载 Electron 二进制；engine 源码修改后需要重启开发命令，暂不增加多进程热重载设施。
 - 退出通知通过重载状态页实现，会重置当前页面状态；仅适用于本里程碑的单一健康页面。引入有状态业务页面时必须改为类型化事件，不沿用重载。
 - 显式 process.exit 仅用于有 parentPort 的 engine，且始终在 HTTP／数据库关闭后执行；主进程仍保留五秒强制终止作为异常兜底。未实现自动重启。
-- NSIS、asar 外部署、fuse 和安装后行为仍由 05 验证；当前的 app 协议预览不能代替安装包测试。权限边界不能防御同用户权限下读取进程环境的恶意程序。
+- NSIS、asar 外部署、fuse 和安装后行为已由分发验证覆盖；app 协议预览仍不能代替安装包测试。权限边界不能防御同用户权限下读取进程环境的恶意程序。

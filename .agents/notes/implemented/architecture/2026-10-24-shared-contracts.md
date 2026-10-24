@@ -4,7 +4,7 @@ Status: implemented
 
 ## Problem
 
-engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边界。只共享 TypeScript 接口无法检查运行时收到的数据，分别定义 schema 又可能让调用双方逐渐不一致。需要落实[桌面应用架构](../../proposed/architecture/2026-10-24-desktop-stack-and-process-model.md)中的 contracts 包，让后续 engine 和 desktop 使用同一入口。
+engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边界。只共享 TypeScript 接口无法检查运行时收到的数据，分别定义 schema 又可能让调用双方逐渐不一致。需要落实[桌面应用架构](2026-10-24-desktop-stack-and-process-model.md)中的 contracts 包，让 engine 和 desktop 使用同一入口。
 
 本篇只记录 contracts 的具体边界；完整桌面架构仍由上文跟踪。检索活跃笔记后，架构提案属于部分重叠，互相链接；已实现的工具链笔记保留 Node 与 pnpm 决定，不重复记录。
 

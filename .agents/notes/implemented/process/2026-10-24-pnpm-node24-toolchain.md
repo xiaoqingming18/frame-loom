@@ -8,7 +8,7 @@ Status: implemented
 
 应用骨架要建三个包，需要 workspace。现有工具链有两个问题：
 
-- **Node 版本对不上。** [应用骨架方案](../../proposed/architecture/2026-10-24-desktop-stack-and-process-model.md)计划让 engine 运行在 Electron 45 的 `utilityProcess` 里，使用其内置的 Node 24.22.0。如果开发和测试用 Node 22 或 26，可能用到目标运行时没有的特性，或者漏测目标运行时才有的行为。本篇只落地工具链，应用包仍由后续开发建立。
+- **Node 版本对不上。** [应用骨架](../architecture/2026-10-24-desktop-stack-and-process-model.md)让 engine 运行在 Electron 45 的 `utilityProcess` 里，使用其内置的 Node 24.22.0。如果开发和测试用 Node 22 或 26，可能用到目标运行时没有的特性，或者漏测目标运行时才有的行为。本篇记录工具链，应用包边界见应用骨架。
 - **Node 版本下限不够。** pi 要求 Node 22.19 以上。NestJS 12 的 `nest new`、`nest g` 这类脚手架命令要求 Node 22.22.3+、24.15+ 或 26+（见 [Nest 迁移指南](https://docs.nestjs.com/migration-guide)）。
 
 ## Decision
@@ -27,7 +27,7 @@ Status: implemented
 - 根目录 `package.json` 写 `"packageManager": "pnpm@12.15.0"`，通过 `corepack enable pnpm` 启用命令，由 Corepack 安装精确版本。2026-10-24 查询 [npm registry](https://registry.npmjs.org/pnpm/latest) 的最新稳定版本为 12.15.0；在线结果可能随时间变化，仓库以锁定版本为准。
 - 新增 `pnpm-workspace.yaml`，包含 `apps/*`、`services/*`、`packages/*` 三个目录。
 - 依赖构建脚本的白名单写在 `pnpm-workspace.yaml` 的 `allowBuilds` 里。pnpm 11 起已经不认 `onlyBuiltDependencies`；pnpm 12 遇到没登记的构建脚本会直接让安装失败（见 [pnpm 迁移说明](https://pnpm.io/migration)）。白名单只登记已审核的包版本，不关闭默认构建审核。
-- 保持 pnpm 默认的 isolated 链接方式，不设 `node-linker=hoisted`。后续应用方案采用 desktop 依赖打入 electron-vite 产物、engine 用 `pnpm deploy` 生成独立目录的路径，打包效果仍由后续子计划验证。
+- 仓库保持 pnpm 默认的 isolated 链接方式，不设全仓 `node-linker=hoisted`。desktop 依赖打入 electron-vite 产物；Windows 打包时单独对 engine 的 `pnpm deploy` 使用 `--node-linker=hoisted`，消除分发目录指回仓库的 Windows 目录链接，开发布局不变。
 - 删除 `package-lock.json`，改为提交 `pnpm-lock.yaml`。
 - 先用 `pnpm import` 导入旧锁文件，保留现有依赖版本，再删除旧文件。实测 `tsx` 的间接依赖 `esbuild@0.28.2` 会触发 `ERR_PNPM_IGNORED_BUILDS`；审阅其二进制准备与版本校验脚本后，仅为该版本配置 `allowBuilds`，保留默认拒绝其他未审核构建的行为。配置语义见 [pnpm 构建设置](https://pnpm.io/settings/build#allowbuilds)。
 
@@ -46,7 +46,7 @@ Status: implemented
 - **继续用 npm workspaces**：不用改任何约定和文档，仓库现有的流程原样可用。用户明确选了 pnpm，参考项目（OpenWork、OpenReel、竞品）也都用 pnpm，它的严格依赖隔离能防止 workspace 包偷用没声明的依赖。
 - **开发用 Node 26 LTS**：2026-10-28 就进入 Active LTS，支持期更长。但它和 engine 实际运行的 Electron 内置 Node 24.22 不一致，测试通过不代表线上能跑。等 Electron 换到 Node 26 时再一起升级。
 - **开发用 Node 22**：沿用原工具链，无需改变既有环境约定。但原 Node 22.23.2 和目标运行时不一致，更早的 Node 22 还满足不了 Nest 12 脚手架的要求。
-- **设置 `node-linker=hoisted` 迁就 electron-builder**：这是 electron-builder 文档长期的推荐做法，社区例子多。但会失去 pnpm 的依赖隔离，而且这个仓库的打包路径不需要它（desktop 的依赖全部打进产物，engine 用 `pnpm deploy`）。
+- **全仓设置 `node-linker=hoisted` 迁就 electron-builder**：这是 electron-builder 文档长期的推荐做法，社区例子多。但会失去开发依赖隔离；desktop 的依赖全部打进产物，engine 仅在分发部署时生成 hoisted 树，不需要改变全仓布局。
 
 ## Consequences
 
@@ -54,7 +54,7 @@ Status: implemented
 - 代价：开发环境需要 Node 24.22.x 与已启用 pnpm 的 Corepack；构建脚本升级或新增时必须重新审核。pnpm 12 的行为由精确版本锁定，升级时单独提交。
 - `esbuild` 的安装脚本获得执行权限，仅批准 `0.28.2`；其他依赖仍受默认审核限制。首轮冻结安装确认不登记会失败，登记后安装脚本与根 `prepare` 均执行成功。
 - 上游技能原文继续包含 `npm run`，本仓库命令以项目指南和 `AGENTS.md` 为准；迁移说明中保留旧命令是有意记录。
-- 远端 GitHub Actions 尚未执行，Ubuntu 与 Windows 工作流仅完成配置审阅；Electron、engine 和安装包行为仍待后续开发验证。
+- 远端 GitHub Actions 尚未执行，Ubuntu 与 Windows 工作流仅完成配置审阅；Electron、engine 和安装包的后续本地验证记录见应用骨架，不能替代远端 CI。
 
 ## Verification
 

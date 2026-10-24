@@ -4,9 +4,9 @@ Status: implemented
 
 ## Problem
 
-[桌面架构提案](../../proposed/architecture/2026-10-24-desktop-stack-and-process-model.md)中的 engine 需要在桌面壳落地前独立验证：数据库迁移必须先于监听，HTTP 只能由持有令牌的应用访问，生产部署必须带齐 SQLite 原生模块与共享契约。仅通过开发目录启动，无法证明安装包中的独立服务可用。
+[桌面架构](2026-10-24-desktop-stack-and-process-model.md)中的 engine 需要独立验证：数据库迁移必须先于监听，HTTP 只能由持有令牌的应用访问，生产部署必须带齐 SQLite 原生模块与共享契约。仅通过开发目录启动，无法证明安装包中的独立服务可用。
 
-检索活跃笔记后，桌面架构、[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)与[工具链](../../implemented/process/2026-10-24-pnpm-node24-toolchain.md)均为部分重叠，保留各自决定并互链。本篇落实 engine；真实 Electron 对接与退出差异见[桌面壳](2026-10-24-desktop-shell.md)，安装包仍待验证。
+检索活跃笔记后，桌面架构、[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)与[工具链](../../implemented/process/2026-10-24-pnpm-node24-toolchain.md)均为部分重叠，保留各自决定并互链。本篇落实 engine；真实 Electron 对接与退出差异见[桌面壳](2026-10-24-desktop-shell.md)，安装分发验证见整体架构。
 
 ## Decision
 
@@ -16,7 +16,7 @@ Status: implemented
 - 请求边界中间件检查实际 socket 端口对应的 Host 与 Origin，再配置仅允许指定源、GET 与 Authorization 的 CORS。浏览器的 OPTIONS 预检不能携带 Bearer，因此只在 Host 和允许列表中的 Origin 合法时返回预检响应；实际接口由全局 guard 使用等长检查与 `timingSafeEqual` 校验 Bearer，不存在匿名健康接口。缺少 Origin 的 OPTIONS 也拒绝。
 - 监听 `127.0.0.1:0` 后上报 `{ type: 'ready', port }`；在普通 Node 中向 stdout 输出同一 JSON。Electron 通过 `process.parentPort` 发送 `{ type: 'shutdown' }` 退出；SIGTERM、SIGINT 同样关闭 Nest 与数据库。启动期间收到退出请求时，等待监听初始化完成再关闭，且不再上报 ready；入口不导入 Electron。Electron 45 的 utilityProcess 在清空监听后仍驻留，因此有 parentPort 时在关闭资源后显式 `process.exit`，启动失败显式退出 1；普通 Node 维持自然退出。
 - Vitest 4.1.12 的实际转换保留 Nest 注入所需的元数据，无需 SWC。engine 测试脚本先构建自身和 contracts，黑盒测试直接执行生产入口。
-- 根 `deploy:engine` 脚本先构建再执行 `pnpm --filter @frame-loom/engine deploy --prod <输出目录>`。pnpm 12.15.0 已能带齐 contracts，继续保持默认 isolated 链接方式，不启用 `injectWorkspacePackages`。
+- 根 `deploy:engine` 脚本先构建再执行 `pnpm --filter @frame-loom/engine deploy --prod <输出目录>`。pnpm 12.15.0 已能带齐 contracts，仓库继续保持默认 isolated 链接方式，不启用 `injectWorkspacePackages`；Windows 安装分发单独在 deploy 命令加 `--node-linker=hoisted`，避免分发目录链接指回仓库。
 - better-sqlite3 13.0.3 没有安装生命周期脚本且自带 Node-API 预编译文件，`allowBuilds` 精确登记为 `false`。drizzle-kit 传递依赖的 esbuild 0.18.20 与 0.25.12 安装脚本负责定位／校验平台二进制，按精确版本登记 `true`；保留已有 esbuild 0.28.2 许可，不关闭默认审核。
 
 ## 版本依据
@@ -38,7 +38,7 @@ Status: implemented
 - 代价：Nest 与原生数据库增加依赖和部署体积；启动同步执行迁移，失败时整个服务不可用。这符合迁移完成前不提供服务的边界。
 - 桌面主进程需要遵守 JSON 允许源格式与 shutdown 消息。CORS 预检允许无 Bearer 是浏览器协议要求，不能扩展为匿名业务接口。以后新增 HTTP 方法与请求头时，必须同步检查 CORS 列表。
 - 发布 schema 改动时在对应迁移中更新 app_meta 的 schema_version，已分发的迁移不可重写。启动代码不覆盖版本或用户元数据。
-- Electron 45 的 Node-API 加载与真实 parentPort 的 ready/shutdown 已由桌面壳验证；操作系统信号投递、NSIS 安装和跨平台运行仍待验证。本机测试使用 Node 24.22.1 与 Windows x64。数据目录与令牌不能防御同用户权限下读取进程环境的恶意程序。
+- Electron 45 的 Node-API 加载与真实 parentPort 的 ready/shutdown 已由桌面壳验证；NSIS 安装后健康检查、正常退出与卸载保留数据库也已通过。操作系统信号投递和跨平台运行仍待验证。本机测试使用 Node 24.22.1 与 Windows x64。数据目录与令牌不能防御同用户权限下读取进程环境的恶意程序。
 
 ## Verification
 

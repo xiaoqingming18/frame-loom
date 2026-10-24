@@ -32,10 +32,12 @@ describe('engine 就绪握手', () => {
     child.emit('message', { type: 'ready', port });
     await expect(ready).rejects.toThrow('无效端口');
   });
-  it('15 秒未就绪时拒绝并清理监听', async () => {
+  it('允许冷启动等待，30 秒未就绪时拒绝并清理监听', async () => {
     vi.useFakeTimers();
     const child = new Child();
     const result = expect(waitForReady(child)).rejects.toThrow('超时');
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(child.listenerCount('message')).toBe(1);
     await vi.advanceTimersByTimeAsync(15_000);
     await result;
     expect(child.listenerCount('message')).toBe(0);
@@ -67,7 +69,7 @@ describe('engine 生命周期', () => {
     const child = new Child();
     const engine = manageEngine(child, 'secret', vi.fn());
     const result = expect(engine.getConnection()).rejects.toThrow('超时');
-    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(30_000);
     await result;
     expect(child.kill).toHaveBeenCalledOnce();
   });

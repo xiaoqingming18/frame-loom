@@ -1,0 +1,27 @@
+appId: com.frameloom.desktop
+productName: Frame Loom
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: build
+    to: .
+    filter: [engine/**/*]
+npmRebuild: false
+asar: true
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  perMachine: false
+  deleteAppDataOnUninstall: false
+publish: null

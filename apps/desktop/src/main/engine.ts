@@ -13,7 +13,7 @@ export function engineEntry(isPackaged: boolean, appPath: string, resourcesPath:
     : resolve(appPath, '../../services/engine/dist/main.js');
 }
 
-export function waitForReady(child: EngineChild, timeout = 15_000): Promise<number> {
+export function waitForReady(child: EngineChild, timeout = 30_000): Promise<number> {
   return new Promise((resolveReady, reject) => {
     const finish = (error?: Error, port?: number) => {
       clearTimeout(timer);
@@ -32,7 +32,7 @@ export function waitForReady(child: EngineChild, timeout = 15_000): Promise<numb
     };
     const onExit = (code: number) => finish(new Error(`本地服务在就绪前退出（退出码 ${code}）`));
     const onError = () => finish(new Error('本地服务进程启动失败'));
-    const timer = setTimeout(() => finish(new Error('本地服务启动超时（15 秒）')), timeout);
+    const timer = setTimeout(() => finish(new Error('本地服务启动超时（30 秒）')), timeout);
     child.on('message', onMessage);
     child.once('exit', onExit);
     child.once('error', onError);

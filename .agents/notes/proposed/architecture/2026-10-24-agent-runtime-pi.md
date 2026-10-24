@@ -18,7 +18,7 @@ Status: proposed
 
 - 影视生产的大部分步骤是确定的业务操作，要能落库、重试、断点续跑、计费。这部分不管选哪个 Agent 都要自己写。
 - 视频生成耗时几分钟，不能让一次模型调用一直等到它完成。
-- engine 用 NestJS 12，整体 ESM（见 [技术栈与进程模型](2026-10-24-desktop-stack-and-process-model.md)）。
+- engine 用 NestJS 12，整体 ESM（见 [技术栈与进程模型](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)）。
 
 ## Proposal
 

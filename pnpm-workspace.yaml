@@ -6,6 +6,7 @@ packages:
 allowBuilds:
   better-sqlite3@13.0.3: false
   electron@45.0.0: true
+  electron-winstaller@5.4.0: false
   esbuild@0.18.20: true
   esbuild@0.25.12: true
   esbuild@0.28.2: true

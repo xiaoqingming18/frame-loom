@@ -1,0 +1,50 @@
+name: Windows 安装包
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      HUSKY: '0'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.22'
+          cache: pnpm
+
+      - name: 安装锁定依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 校验类型与单元测试
+        run: |
+          pnpm -r test
+          pnpm typecheck
+
+      - name: 构建 NSIS 安装包
+        run: pnpm package:win
+
+      - name: 桌面冒烟测试
+        run: pnpm --filter @frame-loom/desktop test:e2e
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: frame-loom-windows-x64
+          path: apps/desktop/release/*.exe
+          if-no-files-found: error
