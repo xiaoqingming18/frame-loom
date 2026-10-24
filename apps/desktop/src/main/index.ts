@@ -94,7 +94,7 @@ async function start(): Promise<void> {
       // 令牌只通过环境和可信 IPC 传递，不写入日志。
       engine = manageEngine(child, token, (code) => {
         console.info(`engine 已退出，退出码 ${code}`);
-        // shortcut: 当前只有健康页，增加有状态业务页面时改为类型化退出事件。
+        // shortcut: 当前仅有静态页面和路由设置，增加有状态业务页面时改为类型化退出事件。
         if (!quitting && window && !window.isDestroyed()) window.webContents.reload();
       });
     } catch (error) {

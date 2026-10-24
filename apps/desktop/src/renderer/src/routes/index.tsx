@@ -1,9 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { EngineStatusPage } from '@/features/engine-status/components/engine-status-page';
+import { HomePage } from '@/features/home/components/home-page';
 
-export const Route = createFileRoute('/')({ component: IndexPage });
-
-function IndexPage() {
-  const { engineClient } = Route.useRouteContext();
-  return <EngineStatusPage engineClient={engineClient} />;
-}
+export const Route = createFileRoute('/')({ component: HomePage });

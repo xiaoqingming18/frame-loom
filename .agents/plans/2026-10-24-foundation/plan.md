@@ -1,15 +1,15 @@
 # Plan: engine 与 renderer 基础设施
 
-Status: active
-Note: ../../notes/proposed/architecture/2026-10-24-engine-and-renderer-foundation.md
+Status: done
+Note: ../../notes/implemented/architecture/2026-10-24-engine-and-renderer-foundation.md
 Note: ../../notes/implemented/process/2026-10-24-lint-and-format.md
-Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
+Note: ../../notes/implemented/feature/2026-10-24-theme-and-app-shell.md
 
 ## 目标
 
 达成三篇笔记的验收标准：
 
-- [engine 与 renderer 基础设施](../../notes/proposed/architecture/2026-10-24-engine-and-renderer-foundation.md)：
+- [engine 与 renderer 基础设施](../../notes/implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)：
   - engine 位于 `apps/engine`，按 `core/` 加 `modules/` 组织；
   - 所有错误响应符合 contracts 的 `ErrorResponse`，日志只写 stderr；
   - renderer 使用文件路由、hash history、`features/` 目录和唯一的 engine client；
@@ -17,7 +17,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 - [ESLint 与 Prettier](../../notes/implemented/process/2026-10-24-lint-and-format.md)：
   - `pnpm lint`、`pnpm format:check` 全仓通过并接入 CI；
   - 导入边界有反例验证。
-- [主题系统与应用外壳](../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md)：
+- [主题系统与应用外壳](../../notes/implemented/feature/2026-10-24-theme-and-app-shell.md)：
   - 明暗主题由 token 驱动，偏好持久化并跟随系统，首帧无闪烁；
   - 自定义标题栏、侧栏、主画布与设计稿一致；
   - 设置中心弹窗包含主题设置与 engine 健康检查，logo 使用用户提供的图片；
@@ -50,7 +50,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 | 04 | [engine 错误契约与日志](04-engine-http-baseline.md) | done | 03 | 所有错误响应符合 `ErrorResponse`，日志只写 stderr |
 | 05 | [renderer 骨架](05-renderer-skeleton.md) | done | 02、04 | 文件路由、hash history、engine client、拆分的 tsconfig 与测试环境 |
 | 06 | [主题系统与窗口标题栏](06-theme-system.md) | done | 05 | 明暗 token、偏好持久化、主题与窗口 IPC、原生按钮配色、shadcn、颜色 lint、新图标 |
-| 07 | [应用外壳与设置中心](07-app-shell.md) | draft | 06 | 与设计稿一致的外壳和首页、设置中心弹窗、UI 规范文档，笔记转入 implemented |
+| 07 | [应用外壳与设置中心](07-app-shell.md) | done | 06 | 与设计稿一致的外壳和首页、设置中心弹窗、UI 规范文档，笔记转入 implemented |
 
 ## 依赖与顺序
 
@@ -68,13 +68,14 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 - [x] 401、403、400、500 响应体符合 `ErrorResponse`，日志无 token，stdout 只有 ready — 证据：04 验证
 - [x] 加固 exe 中结束 engine 后，hash 路由重载仍在原路由并显示中文错误；renderer 中的 `process` 无法通过 web 类型检查 — 证据：05 验证
 - [x] 偏好损坏时照常启动，IPC 拒绝非法输入，颜色 lint 反例报错，exe 显示新图标 — 证据：06 验证
-- [ ] 明暗截图与设计稿相符，主题重启后保持并跟随系统，设置中心显示健康状态，加固 exe 无 CSP 违规 — 证据：07 验证
-- [ ] 三篇笔记移入 `implemented/` 并按实际结果改写，计划转 `done` — 证据：07 收尾步骤
+- [x] 明暗截图与设计稿相符，主题重启后保持并跟随系统，设置中心显示健康状态，加固 exe 无 CSP 违规 — 证据：07 验证
+- [x] 三篇笔记均位于 `implemented/` 并按实际结果改写，计划转 `done` — 证据：07 收尾步骤；lint 笔记已在 02 实现，本次原地更新
 
 ## 发现与偏差
 
+- 2026-10-24 按用户授权完成 07：完整外壳、静态首页、项目库与设置中心已实现；230 项单测、3 项 e2e、质量门禁及开发／加固 exe 的明暗、原生菜单、主题重启与实际系统切换、引擎故障页签保留和退出无残留检查通过。补齐 UI 规范，迁移基础设施和主题笔记，lint 笔记原地更新；所有子计划及父计划 done。未重做 NSIS 安装／卸载或远端 CI；工具回退、zod 直接依赖及无障碍禁用方式见 07。
 - 2026-10-24 按用户授权完成 06：主题持久化、可信 IPC、明暗 token、原生标题栏配色、shadcn、颜色门禁与新图标已实现；221 项单测、2 项桌面 e2e、质量门禁、颜色正反例、开发及加固 exe 的切换／重启／系统主题检查通过。父计划保持 active，07 保持 draft，共享主题提案保留至 07 整体验收；CLI 别名、上游 `cn` 导入及 monorepo lint 解析偏差见 06。
 - 2026-10-24 按用户授权完成 05：renderer 文件路由、hash 初始化、engine client、健康 feature、node／web 类型隔离与双测试 project 已落地；183 项单测、质量门禁、冻结安装、桌面 e2e、开发窗口和真实加固 exe 的路由／故障检查通过。06、07 保持 draft，父计划保持 active；共享基础设施笔记仍待 07 的设置中心验收后整体转入 implemented，当前已实现事实同步到桌面壳与 lint 笔记。
 - 2026-10-24 按用户授权完成 03、04：engine 目录、包根定位、错误契约、stderr 日志及现有健康页错误解析已落地；172 项单测、质量门禁、桌面 e2e 和两轮真实加固 exe 检查通过。最后一轮打包临时复用本地同版本 Electron，详见 04。05～07 保持 draft，父计划保持 active，共享基础设施笔记等待 renderer 部分完成后再整体转入 implemented。
 - 2026-10-24 按用户授权完成 01、02；lint 笔记已移入 `implemented/`，另两篇笔记保留提案状态，父计划保持 active；03～07 为未执行草稿。后续拆分 desktop tsconfig 时需同步 `eslint.config.js` 的解析器项目列表。
-- 2026-10-24 收到主界面明暗设计稿与 logo，新增[主题系统与应用外壳](../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md)笔记和子计划 06、07；05 只保留骨架，收尾步骤移到 07。shadcn 从延后项改为随 06 引入，CSP 调整从风险项改为 06 的明确步骤。
+- 2026-10-24 收到主界面明暗设计稿与 logo，新增[主题系统与应用外壳](../../notes/implemented/feature/2026-10-24-theme-and-app-shell.md)笔记和子计划 06、07；05 只保留骨架，收尾步骤移到 07。shadcn 从延后项改为随 06 引入，CSP 调整从风险项改为 06 的明确步骤。

@@ -1,7 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme.css';
-@import '../styles.css' layer(components);
 
 @layer base {
   * {
@@ -11,6 +10,7 @@
     @apply bg-background font-sans text-ui text-foreground;
     margin: 0;
     font-synthesis: none;
+    overflow: hidden;
   }
   ::-webkit-scrollbar {
     width: 6px;
@@ -25,5 +25,19 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: var(--placeholder);
+  }
+}
+
+@layer components {
+  .title-bar {
+    app-region: drag;
+    width: env(titlebar-area-width, 100%);
+  }
+  .title-bar [role='menubar'] {
+    app-region: no-drag;
+  }
+  .canvas-grid {
+    background-image: radial-gradient(circle, var(--dot) 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 }

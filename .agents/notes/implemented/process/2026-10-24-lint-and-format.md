@@ -4,7 +4,7 @@ Status: implemented
 
 ## Problem
 
-引入前仓库只有 `tsc` 类型检查，没有 lint，也没有格式化工具。[engine 与 renderer 基础设施](../../proposed/architecture/2026-10-24-engine-and-renderer-foundation.md)规定了几条导入边界：
+引入前仓库只有 `tsc` 类型检查，没有 lint，也没有格式化工具。[engine 与 renderer 基础设施](../architecture/2026-10-24-engine-and-renderer-foundation.md)规定了几条导入边界：
 
 - renderer 内部依赖方向为 `lib`、`components` → `features` → `routes`、`app`。
 - feature 之间不能互相导入。
@@ -26,7 +26,7 @@ Status: implemented
 - 末尾接 `eslint-config-prettier`，关闭和格式化冲突的规则。
 - `eslint-import-resolver-typescript` 的传递依赖 `unrs-resolver@1.12.2` 带 `napi-postinstall` 准备脚本。已读取脚本并验证 Windows x64 的可选原生绑定无需脚本即可加载，`allowBuilds` 精确登记 `false`，保留默认构建审核，不开放安装时兜底下载。
 - 忽略：`dist/`、`out/`、`release/`、`apps/desktop/build/`、`routeTree.gen.ts`、`.agents/`、`.cache/`、`docs/design/`。
-- renderer 启用 `eslint-plugin-better-tailwindcss@4.10.0` 的四条 correctness 规则与 `no-restricted-classes`，禁止调色板和任意值颜色；`no-restricted-syntax` 拒绝直接 JSX 内联颜色。插件在根目录安装，以 desktop 为解析 `cwd`，读取 `styles/globals.css` 和 web tsconfig，并检测旧健康页的自定义 CSS 类，避免误报或因缺少 Tailwind 静默停用。规则范围见[主题系统与应用外壳](../../proposed/feature/2026-10-24-theme-and-app-shell.md)。
+- renderer 启用 `eslint-plugin-better-tailwindcss@4.10.0` 的四条 correctness 规则与 `no-restricted-classes`，禁止调色板和任意值颜色；`no-restricted-syntax` 拒绝直接 JSX 内联颜色。插件在根目录安装，以 desktop 为解析 `cwd`，读取 `styles/globals.css` 和 web tsconfig，并检测标题栏与画布等自定义 CSS 类，避免误报或因缺少 Tailwind 静默停用。规则范围见[主题系统与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
 - shadcn 的 Button、Toggle、Tabs 命名变体需要供其他组件复用，只在三份源码中放行对应导出，其余组件仍检查 Fast Refresh。
 
 ### Prettier
@@ -86,6 +86,7 @@ Status: implemented
 
 ## Verification
 
+- 完整外壳接入后旧健康页 `styles.css` 与遗留组件已删除；标题栏和点阵 CSS 只引用语义 token，全仓 lint、格式检查通过。新增 `home`、`theme` feature 自动受现有导入边界约束，不放宽配置；本篇在 02 已转入 implemented，07 原地同步当前事实。
 - 主题接入后，颜色和未知类名的 8 项反例、内联样式的 2 项反例被预期规则拒绝；语义 token 与尺寸任意值通过。真实临时 `.tsx` 中的 `bg-zinc-800`、`text-[#333]`、未知类使 `pnpm lint` 报三条对应错误，删除后 lint 与 `format:check` 全仓通过。插件没有因根目录找不到 Tailwind 而停用；新增两项插件均精确锁定。
 - renderer 骨架接入后，desktop resolver 使用拆分的 node／web 配置，`pnpm lint` 通过；临时在 `lib/` 用 `@/` 重导出 feature 的反例仍触发 `import-x/no-restricted-paths`，随后删除探针。
 - 冻结安装通过，11 项依赖按版本表精确锁定；`unrs-resolver@1.12.2` 禁止安装脚本后，TypeScript resolver 仍能加载本机绑定。

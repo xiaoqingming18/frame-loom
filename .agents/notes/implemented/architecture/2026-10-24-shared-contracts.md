@@ -12,7 +12,7 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 
 - `packages/contracts` 发布为私有 ESM workspace 包 `@frame-loom/contracts`，由 tsc 输出 `dist/index.js` 与 `.d.ts`；入口 `exports` 只有 `types`、`default`，分发文件只含 `dist`。相对导出写 `.js` 后缀。
 - 用 zod 定义同名的 schema 值和推导类型 `HealthResponse`、`EngineConnection`、`ErrorResponse`、`ThemeSource`、`WindowCommand`。调用方使用 `parse` 检查外部数据，类型直接从 schema 推导。
-- `ThemeSource` 只接受 `system | light | dark`；`WindowCommand` 只接受 `minimize | toggle-maximize | toggle-fullscreen | quit`。主进程在可信 IPC 中校验输入，renderer 桥接校验主题返回值；偏好持久化与窗口行为见[主题与应用外壳](../../proposed/feature/2026-10-24-theme-and-app-shell.md)。
+- `ThemeSource` 只接受 `system | light | dark`；`WindowCommand` 只接受 `minimize | toggle-maximize | toggle-fullscreen | quit`。主进程在可信 IPC 中校验输入，renderer 桥接校验主题返回值；偏好持久化与窗口行为见[主题与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
 - `HealthResponse` 要求 `status: 'ok'`、字符串 `engineVersion` 与 `schemaVersion`，以及带时区的 ISO 日期时间 `startedAt`；接受 `Z` 和显式时区偏移，不接受无时区时间或无效日期。
 - `EngineConnection.baseUrl` 只接受字面形式 `http://127.0.0.1:<port>`，端口为 1–65535 的十进制整数，不允许前导零、路径、用户信息、查询或片段。这样校验不会把其他主机或附加内容正规化成可信连接。`token` 只要求非空字符串；生成和鉴权规则属于 engine／主进程，不在此实现。
 - `ErrorResponse` 要求字符串 `code`、`message`，可选 `issues` 是 `{ path: string; message: string }[]`，不把 HTTP 状态码重复放入响应体。engine 统一错误映射与 stderr 日志见[engine 服务](2026-10-24-engine-service.md)；renderer 健康检查解析此契约，响应损坏时回退到中文 HTTP 状态提示。

@@ -12,7 +12,7 @@ Status: implemented
 
 - engine 位于 `apps/engine`，沿用 Nest 官方 `ts-esm` 模板的 ESM、装饰器元数据和 `nest build`，以 Express 适配器运行；生产入口为 `dist/main.js`，测试不进入产物。
 - zod 校验环境变量：64 位十六进制 token、绝对数据目录；`FRAME_LOOM_ALLOWED_ORIGINS` 使用 JSON 字符串数组，省略时不允许浏览器源。只接受完整 HTTP(S) 或 `app://<host>` 源，不接受通配符、`null`、凭据和路径。Node 调试请求可以不带 Origin。
-- `src/core/core.module.ts` 是全局模块，提供配置、数据库与鉴权 guard；`src/modules/health/health.module.ts` 声明健康检查。`AppModule.register(config)` 只组合这两个模块，领域模块从 core 获取横切设施。目录约定与后续 HTTP 基线见[基础设施提案](../../proposed/architecture/2026-10-24-engine-and-renderer-foundation.md)。
+- `src/core/core.module.ts` 是全局模块，提供配置、数据库与鉴权 guard；`src/modules/health/health.module.ts` 声明健康检查。`AppModule.register(config)` 只组合这两个模块，领域模块从 core 获取横切设施。目录约定与 HTTP 基线见[基础设施笔记](2026-10-24-engine-and-renderer-foundation.md)。
 - 启动时创建 `data/`、`media/`，打开 better-sqlite3、启用 WAL 和外键，按 `src/package-root.ts` 的包根定位点寻找 `drizzle/` 并迁移；健康服务也从包根读取 `package.json` 版本。drizzle-kit 汇总 `src/**/*.schema.ts`，当前元数据表位于 `src/core/database/app-meta.schema.ts`。首份迁移由 drizzle-kit 生成表结构，补充 `schema_version=1` 数据初始化；健康检查读取落盘版本。
 - 请求边界中间件检查实际 socket 端口对应的 Host 与 Origin，再配置仅允许指定源、GET 与 Authorization 的 CORS。浏览器的 OPTIONS 预检不能携带 Bearer，因此只在 Host 和允许列表中的 Origin 合法时返回预检响应；实际接口由全局 guard 使用等长检查与 `timingSafeEqual` 校验 Bearer，不存在匿名健康接口。缺少 Origin 的 OPTIONS 也拒绝。
 - `core/http/` 提供 `DomainError(code, status, message)`、按参数使用的 `ZodValidationPipe` 与全局 `EngineExceptionFilter`（`APP_FILTER`）。领域异常保留自身状态和代码；zod 错误返回 400、`VALIDATION_FAILED` 与点分路径的 issues；其他 HTTP 异常保留状态、返回 `HTTP_<status>` 和统一中文消息；未知异常返回 500、`INTERNAL`，响应不暴露详情或堆栈。所有错误体符合 contracts 的 `ErrorResponse`，包括由边界中间件 `next(error)` 传出的 403，无需重复写响应。pipe 使用中文默认校验消息，并保留 schema 显式消息。

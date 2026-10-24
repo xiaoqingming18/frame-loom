@@ -1,6 +1,6 @@
 # Agent Note: engine 与 renderer 的目录约定和基础设施
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
@@ -16,7 +16,7 @@ Status: proposed
 
 约束：engine 继续保持 ESM、NodeNext、`nest build`（tsc）编译；SQLite 与 Drizzle、zod 契约包、Vitest、TanStack Router/Query、Tailwind 4 都已确定，不在本篇重新选择。
 
-## Proposal
+## Decision
 
 ### 仓库布局
 
@@ -95,11 +95,13 @@ apps/desktop/src/renderer/src/
 ├─ app/                         # providers.tsx、router.tsx
 ├─ routes/                      # TanStack 文件路由，只放薄路由文件
 │  ├─ __root.tsx                # createRootRouteWithContext、布局、错误页、404 页
-│  └─ index.tsx
+│  ├─ index.tsx
+│  └─ projects.tsx
 ├─ routeTree.gen.ts             # 由 @tanstack/router-plugin 生成并入库
 ├─ features/<feature>/{api,components,hooks,stores}
-│  ├─ engine-status/            # 现有健康检查，显示在设置中心
-│  └─ theme/                    # 主题模式读取与切换
+│  ├─ engine-status/            # 健康检查，显示在设置中心
+│  ├─ theme/                    # 主题模式读取与切换
+│  └─ home/                     # 静态首页与禁用创作控件
 ├─ components/
 │  └─ ui/                       # shadcn 生成的基础组件
 ├─ assets/                      # logo 等静态资源
@@ -124,7 +126,8 @@ apps/desktop/src/renderer/src/
 - 服务端数据只走 TanStack Query；Zustand 只保存界面状态和画布编辑状态，在第一个需要它的功能中引入。
 - desktop 的 tsconfig 拆成两份：`tsconfig.node.json` 覆盖 main、preload 和配置文件，只有 node 类型；`tsconfig.web.json` 覆盖 renderer，只有 DOM 和 `vite/client`。`@/` 别名指向 `src/renderer/src`，只在 web 配置和 Vite renderer 配置中声明。
 - Vitest 分成两个 project：main、preload 使用 node 环境，renderer 使用 jsdom 环境并收集 `.tsx`。组件测试使用 Testing Library，通过路由 context 传入替身 engine client。
-- 健康页沿用现有界面和样式，新增路由错误页与 404 页。健康查询不阻塞路由 loader，以便 feature 自己呈现加载中和连接失败；跨路由与 feature 的组合测试放在 `app/`，不放宽 feature 不能依赖 app 的边界。
+- 首页使用静态创作界面，健康面板位于设置中心；保留路由错误页与 404 页，删除旧健康页组件和 `styles.css`。健康查询由外壳挂载时发起，不阻塞路由 loader；结果在侧栏和弹窗间共享，不轮询、不因页签挂载自动重试，用户可以手动重查。跨路由与 feature 的组合测试放在 `app/`，不放宽 feature 不能依赖 app 的边界。
+- 根路由使用 desktop 直接声明的 zod 4.6.7 校验 `settings?: appearance | engine | about`，非法值回退为关闭；hash 保留路径和页签，engine 退出后的页面重载仍能展示中文错误。应用版本由 Vite 从 desktop `package.json` 读取并注入 renderer，不暴露 Node 全局。
 
 ### 延后建立
 
@@ -146,7 +149,7 @@ apps/desktop/src/renderer/src/
 - [应用骨架](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)、[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)部分重叠：进程模型、鉴权边界和 ready/shutdown 协议都不变；落地时原地同步其中的路径和目录事实，本篇记录新增的目录约定与横切设施。preload API 的扩展和 CSP 调整由[主题系统与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)负责。
 - [共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)部分重叠：继续使用 zod schema 与同名类型的约定，本篇只新增 `ErrorResponse`。
 - [工具链](../../implemented/process/2026-10-24-pnpm-node24-toolchain.md)部分重叠：只同步 workspace 目录列表，Node 与 pnpm 的决定不变。
-- [Agent 内核选型](2026-10-24-agent-runtime-pi.md)部分重叠：`modules/agent` 的位置与本篇的模块约定一致，只同步路径。
+- [Agent 内核选型](../../proposed/architecture/2026-10-24-agent-runtime-pi.md)部分重叠：`modules/agent` 的位置与本篇的模块约定一致，只同步路径。
 - 其余流程笔记无关。
 
 ## Alternatives considered
@@ -162,20 +165,23 @@ apps/desktop/src/renderer/src/
 - **使用 ts-rest、oRPC 或生成 OpenAPI 客户端**：端点、方法和类型由一处定义，客户端自动获得类型。现在只有一个端点，contracts 中的 zod schema 已能在两端复用；接口达到 3 到 5 个时再评估手写端点描述 `{ method, path, request, response }`，不引入框架。
 - **Feature-Sliced Design 全套分层**：`app`、`pages`、`widgets`、`features`、`entities`、`shared` 六层规则完整。项目还没有业务，四层（`lib`/`components`、`features`、`routes`、`app`）已能表达依赖方向，层数随实际需要再加。
 
-## Acceptance criteria
+## Verification
 
-- `services/` 目录不存在，`apps/engine` 构建、测试通过；`pnpm dev` 健康页正常；`package:dir` 产物与 e2e 冒烟通过；加固 exe 能启动并显示健康状态。
+- `services/` 目录不存在，`apps/engine` 构建、测试通过；01～06 的开发启动、独立部署入口、目录迁移、错误基线、类型隔离、主题与颜色门禁均已验收，历史证据保留在对应实施记录。
 - engine 结构调整后，现有 engine 测试全部通过，`db:generate` 报告没有 schema 变化，部署目录的生产入口黑盒测试通过。
 - 401、403、400、500 的响应体都能用 `ErrorResponse.parse` 解析，500 响应体不包含堆栈；测试断言日志中没有 token，独立运行时 stdout 只有一行 ready JSON。
-- renderer 健康检查迁入 `features/engine-status`，使用 hash 路由；在加固 exe 中手动结束 engine，重载后仍停留在原路由，设置中心里显示中文错误。
+- renderer 健康检查迁入 `features/engine-status`，使用 hash 路由；桌面 e2e 3 项通过，加固 exe 通过 CDP 与 Win32 验证，终止 engine 后仍保留原路由与「本地引擎」页签，显示中文错误和入口圆点，退出无残留进程。
 - renderer 中引用 `process` 的代码无法通过 `tsconfig.web.json` 的类型检查；renderer 组件测试在 jsdom 中使用替身 engine client 通过。
-- `pnpm typecheck`、`pnpm test`、`pnpm lint` 全部通过。
+- `pnpm typecheck`、`pnpm test`、`pnpm lint` 通过；本轮全仓共 230 项单测（contracts 68、engine 80、desktop 82）。真实 exe 打开 Dialog 无 CSP 违规，保留生产 fuse；本轮不重做 NSIS 安装／卸载和远端 CI。
 
-## Risks
+## Consequences
+
+- 收益：engine 的目录、错误响应与 stderr 日志有统一边界；renderer 的请求、主题、路由与跨 feature 组合各有归属，开发及加固产物使用同一套实现。
+- 代价：维护生成路由树、两份桌面类型配置、错误 schema、UI token 与组件源码；引入业务状态后需要替换 engine 退出时的全页重载。
 
 - HTTP 测试已确认边界中间件的 403 进入全局过滤器；后续若改中间件注册方式，必须继续覆盖错误 Host、错误 Origin 与无 Origin 的 OPTIONS。
 - Nest 12 的 `ConsoleLogger` 已能通过子类把全部级别改写到 stderr；其堆栈方法实际接收 undefined，与声明不同，日志测试必须保留无堆栈场景。
-- 错误响应体格式改变，renderer 必须同时改为解析 `ErrorResponse`。engine 与 renderer 在同一安装包内发布，不需要兼容旧格式。
+- renderer 统一解析 `ErrorResponse`；engine 与 renderer 在同一安装包内发布，不需要兼容旧格式。
 - `@tanstack/router-plugin` 在 electron-vite 中的 root 与 cwd 不同，`routesDirectory` 和 `generatedRouteTree` 必须写绝对路径，否则可能在错误位置生成路由树。
 - 迁移、engine 结构调整和 renderer 骨架都会影响开发路径或打包产物，每一步都要重跑加固 exe 的启动验证，自动 e2e 不能替代。
 - 回滚：每一步是独立提交，可以单独 revert；迁移提交被 revert 时，需要同时恢复锁文件并重装依赖。

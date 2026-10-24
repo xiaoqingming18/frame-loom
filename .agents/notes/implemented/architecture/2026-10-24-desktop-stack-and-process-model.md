@@ -36,7 +36,7 @@ Frame Loom 要做多模态 AI 影视工作台：剧本、角色和场景资产�
 | 层 | 当前实现 | 后续边界（未实现） |
 | --- | --- | --- |
 | 桌面壳 | Electron 45.0.0，electron-vite 6.0.0 | 运行时升级单独验证 |
-| 渲染层 | React 19、TanStack Router 和 Query、Tailwind 的健康状态页 | shadcn 风格组件、Zustand、`@xyflow/react` 等到业务需求再引入 |
+| 渲染层 | React 19、TanStack Router 和 Query、Tailwind 4、shadcn、lucide；明暗主题外壳、静态首页、项目库与设置中心 | Zustand、`@xyflow/react` 等到业务需求再引入 |
 | 本地服务 engine | NestJS 12 加 Express，整体 ESM，运行在 `utilityProcess` 中 | 领域服务和 Agent 模块 |
 | 数据库 | SQLite WAL、better-sqlite3 13.0.3、Drizzle，生成的迁移入库 | 业务表和任务恢复 |
 | 媒体 | 仅建立空 `media/` 目录 | ffmpeg、ffprobe、sharp 和按 SHA-256 存储媒体 |
@@ -60,9 +60,10 @@ Electron 主进程 ──utilityProcess.fork──> engine（NestJS，Electron �
 - 主进程启动时用 `crypto.randomBytes(32)` 生成一次性 token，通过环境变量交给 engine，同时传入 `FRAME_LOOM_DATA_DIR`。
 - engine 只监听 `127.0.0.1`，端口填 0 让系统分配。监听成功后，通过 `process.parentPort.postMessage({ type: 'ready', port })` 把实际端口告诉主进程。主进程收到之前，renderer 拿不到连接信息。
 - engine 实际接口校验 `Authorization: Bearer <token>`；`Host` 必须是 `127.0.0.1:<port>`，防止 DNS rebinding；携带 Origin 时必须匹配应用自己的完整源。任一校验不满足即拒绝，`/health` 同样鉴权。浏览器可信 OPTIONS 预检不带 Bearer，仅在 Host 和 Origin 都合法时放行，不扩展为匿名业务接口；允许源由主进程以 JSON 数组传入。
-- preload 只通过 `contextBridge` 暴露 `frameLoom.getEngineConnection()`，返回 `{ baseUrl, token }`。不暴露 `ipcRenderer`，也不暴露 Node 能力。
+- preload 通过 `contextBridge` 暴露 `frameLoom.getEngineConnection()`，返回 `{ baseUrl, token }`，以及 `theme.get/set`、`window.command` 固定方法；所有 IPC 校验可信主框架，主题与窗口命令使用 contracts 枚举校验。不暴露 `ipcRenderer` 或 Node 能力，renderer 只经 `lib/desktop-bridge.ts` 访问。
 - 后续实时推送约定用 SSE（Nest 的 `@Sse()`），当前没有推送端点。浏览器原生 `EventSource` 不能带请求头，因此使用 `fetch` 读流，token 始终放请求头，不放 URL；命令走普通 HTTP。
-- engine 退出时，主进程记录退出码，重载当前健康页以显示中文错误。此捷径只适用于无业务状态的单页，引入有状态页面时改为类型化事件。当前不自动重启 engine；启动等待上限为 30 秒，退出先发 shutdown，最多等 5 秒后强杀。
+- engine 退出时，主进程记录退出码并重载当前页面，hash 保留路径和设置页签，本地引擎面板显示中文错误，设置入口显示错误圆点。此捷径只适用于当前静态页面，新增可编辑业务页面时改为类型化事件。当前不自动重启 engine；启动等待上限为 30 秒，退出先发 shutdown，最多等 5 秒后强杀。
+- `app/shell/` 组合 42px 标题栏、260px 侧栏、点阵画布与设置弹窗；主题由主进程在窗口创建前读取并驱动 `prefers-color-scheme`，偏好损坏回退系统。主题 token 位于 `styles/theme.css`，设置开关与页签经根路由 zod 校验。生产 CSP 的 `style-src` 是 `'self' 'unsafe-inline'`，支持 Radix 的样式注入，`script-src` 仍为 `'self'`，详见[主题与外壳笔记](../feature/2026-10-24-theme-and-app-shell.md)。
 
 ### 数据位置
 
@@ -140,6 +141,7 @@ frame-loom/
 
 ## Verification
 
+- 基础设施与外壳完成后，全仓 230 项单测、类型检查和 lint 通过，桌面 e2e 3 项通过。加固 exe 保留生产 fuse，明暗外壳、设置中心 CSP、主题持久化和 engine 退出后的页签保留均已验证；当前 UI 规范见 `docs/ui-guidelines.md`，本轮不重复 NSIS 安装／卸载或远端 CI。
 - Node 24.22.1、pnpm 12.15.0、Windows 11 x64（10.0.26200）：冻结安装、类型检查、150 项应用单测通过（contracts 43、engine 70、desktop 37）；37 项计划测试与 29 项提交规范测试通过。
 - 桌面壳已完成干净克隆开发启动与 `app://` 构建预览验证；主进程托管 engine，健康响应显示版本与迁移版本。engine 单测覆盖 401、错误 Host／Origin 的 403、可信预检和迁移幂等性。
 - `pnpm --filter @frame-loom/desktop package:dir` 和重复执行的 `pnpm package:win` 均成功。最终 asar 仅含 `out/` 和 package.json；读取 exe 验证五项 fuse。`resources/engine/node_modules` 扫描为 7,676 个文件、零目录链接，部署入口黑盒 10 项通过。

@@ -1,6 +1,6 @@
 # Agent Note: 主题系统与应用外壳
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
@@ -19,7 +19,7 @@ Status: proposed
 - 原生产 CSP 是 `style-src 'self'`。设置中心弹窗需要一个成熟的 Dialog 组件，常用的 Radix Dialog 会动态插入 `<style>` 标签。
 - 不改变 engine 的启动和鉴权方式。preload 新增的接口必须和现有 `engine:connection` 一样校验调用方。
 
-## Proposal
+## Decision
 
 ### 技术选择
 
@@ -101,8 +101,10 @@ Status: proposed
   - hero：设计稿 logo 选框的四角控制点保留，选框里换成用户提供的 logo，旁边是「帧织」标题和副标题。
   - 输入区：外观按设计稿实现，但文本框、模型、技能、版本、发送、选择项目全部禁用，并用提示说明「创作功能尚未开放」。
   - 公告胶囊「首版发布」在有发布说明之前不显示。
+- 未开放的按钮使用 `aria-disabled` 并阻止操作，文本框为只读；保留键盘焦点，用 Tooltip 和常驻 `aria-describedby` 提供提示，避免原生 `disabled` 导致提示无法被键盘访问。版本选择只标为「版本」，不宣称存在设计稿的 V3；输入提示移除尚不存在的 Design 使用指南。
 - 项目库（`/projects`）只显示空状态。
 - 健康查询在外壳挂载时执行一次。查询失败时，设置中心按钮上显示一个 `destructive` 圆点，否则 engine 出错用户无从得知。
+- 健康结果在外壳和设置面板间共享，`staleTime: Infinity`、`retryOnMount: false` 避免打开页签重复查询或自动重试；重新检查按钮显式刷新，主进程终止通知仍走重载。
 
 ### 设置中心弹窗
 
@@ -111,6 +113,7 @@ Status: proposed
   - **本地引擎**：显示连接状态、engine 版本、schema 版本、启动时间和「重新检查」按钮，内容来自 `features/engine-status`。
   - **关于**：显示 logo、应用名和版本号。版本号由 Vite `define` 在构建时从 `apps/desktop/package.json` 注入。
 - 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'about'`，由 zod 校验。engine 退出时主进程会重载页面，弹窗在重载后仍然打开，停在同一个页签上显示错误。
+- 非法 search 值回退为关闭；打开、切页和关闭保留当前路径。Dialog 关闭后焦点恢复到侧栏设置入口。外观读写使用 Query 与 mutation，读取失败可重试，写入失败保留原选择并显示中文错误；保存期间禁用切换，避免并发覆盖。
 
 ### logo 资源
 
@@ -158,6 +161,7 @@ Status: proposed
 | 侧栏品牌图标 | 「M」字 SVG，暗黑模式反色 | 圆角 logo 图片，不反色 | 用户指定 logo |
 | 公告胶囊 | 「首版发布 >」 | 暂不显示 | 还没有可链接的发布说明 |
 | 输入区控件 | 可交互 | 禁用并提示尚未开放 | 创作功能还没有实现 |
+| 版本与使用指南 | V3 新版、Design 使用指南 | 仅显示「版本」，移除指南占位 | 不展示不存在的版本或入口 |
 | 中文衬线字体 | 未指定 | 补充宋体后备 | Georgia 没有中文字形 |
 
 ### 待确认
@@ -185,16 +189,16 @@ Status: proposed
 
 UI 包都放在 desktop 的 `devDependencies`，由 electron-vite 打进产物，`dependencies` 继续为空。ESLint 与 Prettier 插件由仓库根配置消费，放在根 `devDependencies`；Tailwind 插件显式以 desktop 为 `cwd`，指定 CSS 入口、web tsconfig 并启用现有 CSS 类检测，避免在根目录找不到 Tailwind 而静默关闭规则。
 
-### 06 的已实现事实与验证
+### 主题基础设施的实现与验证
 
 - 主题 token、`nativeTheme` 首帧设置、`preferences.json` 原子替换、三个可信 IPC、preload 和 renderer 桥接、隐藏标题栏与 42px 原生按钮区已落地。偏好写入失败不改变当前主题，IPC 返回错误；偏好损坏回退 `system`。`nativeTheme.updated` 同时更新窗口背景与原生按钮颜色。
 - shadcn 4.22.1 已生成 Dialog、Tabs、ToggleGroup、Button、Menubar、Tooltip，以及 ToggleGroup 依赖的 Toggle。CLI 在根 tsconfig 只有 references 时把文件写入了 `@/components/ui` 物理目录；源码已迁到 `src/renderer/src/components/ui`，根 tsconfig 补充工具使用的 `@/*` 映射，dry-run 确认后续路径正确。当前上游 registry 组件另外导入并安装 `cn` 包；本仓库按既定方案改为 `@/lib/utils` 并移除该依赖，后续新增组件仍需检查这一点。node／web 继续分别类型检查，不给 renderer 加入 Node 全局。
-- 生成组件的硬编码黑白改为补充语义 token，关闭按钮文案为中文。Fast Refresh 只为 Button、Toggle、Tabs 放行其命名变体导出。既有健康页暂时保留布局，头部设为拖动区域，避免隐藏系统标题栏后无法移动窗口；颜色改为 token，并在 components 层导入旧样式，让新组件的 utility 样式能正常覆盖；42px 的完整标题栏与外壳替换在 07 完成。
+- 生成组件的硬编码黑白改为补充语义 token，关闭按钮文案为中文。Fast Refresh 只为 Button、Toggle、Tabs 放行其命名变体导出。完整 42px 标题栏由 `app/shell/title-bar.tsx` 提供，菜单区 no-drag；旧健康页和 `styles.css` 已删除，所有界面复用主题 token。
 - 颜色检查覆盖调色板、十六进制／函数／命名／CSS 变量任意值、任意属性颜色及直接 JSX 内联颜色。尺寸任意值与语义 token 正例通过；8 项类名反例、2 项内联反例通过，临时探针删除后全仓 lint 通过。CSS 文件中的取色仍需评审，ESLint 不检查 CSS。
 - `pnpm test` 221 项通过（contracts 68、engine 80、desktop 73）；类型检查、格式检查、冻结安装及笔记／计划校验通过。第一次把打包和全仓单测同时运行时，原有 engine 冷启动测试超过五秒；停止并行打包后原命令通过，未扩大测试超时。
 - 桌面 e2e 2 项通过，覆盖损坏偏好、主题切换、窗口背景、非法输入、重启保持和退出命令。Playwright 默认模拟明亮模式，主题用例通过 `page.emulateMedia({ colorScheme: null })` 清除模拟，测试 Electron 实际驱动的媒体查询。
 - `package:dir` 复用本机同版本 Electron 45.0.0，通过生产 fuse 打包。开发模式和真实加固 exe 均完成即时切换、损坏回退、重启保持与正常退出检查，无页面错误或 CSP 违规；真实 Windows 应用主题切换后，跟随系统的页面和原生按钮同步变化，测试结束已恢复系统设置。`.cache/06-theme-{dev,packaged}-*.png` 是原生窗口截图，已核对明暗按钮；exe 提取图标是新 logo，asar 无 `resources/`，仅含 `out/` 与 `package.json`。
-- Computer Use 运行模块 `@oai/sky` 不可用，窗口通过 CDP 和 Win32 截图核对，不宣称完成手动 UI 点击。设置中心内的 Dialog CSP、完整外壳截图与 NSIS 安装／卸载留待相应阶段验证；本篇仍保留 proposed，待 07 整体验收后转入 implemented。
+- Computer Use 运行模块 `@oai/sky` 不可用，窗口通过 CDP 和 Win32 截图核对。完整外壳、Dialog CSP 与窗口操作已在真实加固 exe 验证；本轮不重复 NSIS 安装／卸载，不将自动化检查描述为人工点击。
 
 ## Alternatives considered
 
@@ -211,21 +215,25 @@ UI 包都放在 desktop 的 `devDependencies`，由 electron-vite 打进产物�
 - **设计稿不入库，只在笔记中摘录 token**：仓库更干净，不会有过期的参考文件。但间距、尺寸、阴影和结构细节无法全部摘录，后续会话找不到原始文件。设计稿作为不再修改的快照入库，以 `theme.css` 为准。
 - **主题切换用 `.dark` class（shadcn 默认）**：和 shadcn 文档、生成的组件完全一致。但需要 JS 在首帧之前加 class，还要和 `nativeTheme` 双向同步。用 `prefers-color-scheme` 由 Electron 驱动，不需要 JS。shadcn 组件里的 `dark:` 写法在 Tailwind 4 默认就是媒体查询，组件不用改。
 
-## Acceptance criteria
+## Verification
 
-- 在明亮和暗黑两种模式下，标题栏、侧栏、主画布、首页、项目库空状态和设置中心的截图都和对应设计稿一致，与上面的偏差表相符。
+- 明暗两组原生窗口截图覆盖首页、项目库、外观、本地引擎和关于，布局与快照主体及偏差表相符；额外检查最小窗口与引擎错误截图。证据为忽略目录 `.cache/07-shell-{dev,packaged}-*.png`。
 - 设置中心切换主题后立即生效。关闭应用后用同一个 userData 重新启动，主题不变，首帧没有闪烁。「跟随系统」模式下切换 Windows 主题，界面和原生按钮同步变化。
-- 标题栏可以拖动窗口，双击可以最大化，菜单栏和原生按钮不会被拖动区域吞掉；菜单的退出、最小化、最大化、全屏和关于都正常。
+- `.cache/verify-shell-runtime.mjs dev` 和 `packaged` 通过；Win32 原生输入验证标题栏拖动和双击最大化／还原，CDP 点击菜单后用 Win32 读取窗口状态，确认退出、最小化、最大化、全屏与关于均正常。最终加固 exe 另通过设置界面选择「跟随系统」并实际切换 Windows 应用明暗偏好，媒体查询和原生按钮同步，截图已核对，系统设置已恢复。无页面错误、CSP 违规或退出残留。
 - 「本地引擎」页签显示版本、schema 和启动时间。手动结束 engine 后，页面重载，弹窗仍停在「本地引擎」页签并显示中文错误，设置中心按钮出现错误圆点。
 - `theme:set` 和 `window:command` 拒绝非法参数和不可信调用方，有单测覆盖。`preferences.json` 损坏时应用照常启动，使用「跟随系统」。
 - 打包的加固 exe 打开设置中心时，控制台没有 CSP 违规；exe、安装包和任务栏显示新 logo。
 - `pnpm lint` 能拦截调色板颜色类和任意值颜色（有反例验证）。`theme.css` 与主进程颜色常量的一致性测试通过。
 - e2e 冒烟覆盖：打开设置中心查看健康状态、切换到暗黑后 `prefers-color-scheme: dark` 生效、重启后主题保持。
+- 全仓 230 项单测通过，desktop 82 项中的 renderer 27 项覆盖路由、侧栏、设置、主题失败及菜单桥接；桌面 e2e 3 项通过，保留隔离与退出断言，并覆盖引擎故障后的路由／页签保留。`pnpm lint`、`pnpm typecheck` 通过，desktop 直接声明复用锁定的 zod 4.6.7，构建注入应用版本。
 
-## Risks
+## Consequences
 
-- shadcn CLI 可能识别不了 electron-vite 项目结构。`components.json` 写好别名和 CSS 路径后，如果 CLI 仍失败，就按官方手动安装文档复制组件源码。
-- Windows 上设置 `titleBarStyle: 'hidden'` 后，默认应用菜单栏是否完全隐藏需要实测；如果出现，就设置 `autoHideMenuBar`。另外，默认菜单在生产包里仍保留重新加载和开发者工具的快捷键，这是现有行为，不在本篇处理。
+- 收益：标题栏、外壳与设置统一使用语义 token 和成熟交互组件；主题由主进程持久化并驱动原生窗口及媒体查询，健康故障可见且保留诊断页签。
+- 代价：需要维护两份主题值、生成组件源码和原生／renderer 颜色一致性测试；生产样式 CSP 放宽，明亮次要文字保持设计稿原值仍有对比度缺口。
+
+- shadcn CLI 依赖根 tsconfig 的别名和 `components.json`，生成后仍须核对实际路径、`cn` 导入和颜色 token；前述 06 验证保留这项兼容成本。
+- Windows 使用 `autoHideMenuBar` 隐藏默认应用菜单栏，实测自定义菜单可点击。默认菜单在生产包里仍保留重新加载和开发者工具的快捷键，这是现有行为，不在本篇处理。
 - 原生按钮的图标和设计稿不同，属于已接受的偏差；如果设计方坚持自绘，需要另写笔记重新评估 `frame: false`。
 - 明亮模式次要文字对比度不足，等待设计确认，见上文「待确认」。
 - 首页输入区的控件都已禁用。等创作功能开放、输入框可以输入时，engine 退出触发的页面重载会清空已输入内容，此时必须按[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)记录的条件，把重载改为类型化事件。

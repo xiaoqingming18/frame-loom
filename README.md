@@ -2,7 +2,7 @@
 
 基于 **Electron + React** 的多模态 AI 智能影视工作台桌面 PC 应用。
 
-当前已完成仓库流程工具、pnpm workspace、共享契约、NestJS engine、Electron／React 桌面壳及 Windows x64 NSIS 打包。开发和安装后的窗口都显示本地引擎健康信息，见[应用骨架计划](.agents/plans/2026-10-24-app-skeleton/plan.md)。创作业务、Agent、代码签名与自动更新尚未实现。
+当前已完成仓库流程工具、pnpm workspace、共享契约、NestJS engine、Electron／React 桌面壳及 Windows x64 NSIS 打包。窗口包含明暗主题、标题栏菜单、可折叠侧栏、静态创作首页和项目库空状态；设置中心提供外观、本地引擎与关于页，见[基础设施计划](.agents/plans/2026-10-24-foundation/plan.md)。创作业务、Agent、代码签名与自动更新尚未实现。
 
 ## 准备环境
 
@@ -23,7 +23,7 @@ pnpm run verify
 pnpm dev        # 先构建 contracts 和 engine，再打开桌面窗口
 ```
 
-窗口显示本地引擎健康信息。修改 engine 源码后需要重启命令；关闭窗口会回收服务进程。开发和生产共用 `%APPDATA%\Frame Loom` 数据目录，使用说明见[桌面壳](apps/desktop/README.md)。
+侧栏底部打开设置中心，可切换跟随系统／明亮／暗黑主题，查看本地引擎版本与健康状态。主题重启后保持，健康异常显示中文错误与入口圆点。首页创作控件暂不可操作。修改 engine 源码后需要重启命令；关闭窗口会回收服务进程。开发和生产共用 `%APPDATA%\Frame Loom` 数据目录，使用说明见[桌面壳](apps/desktop/README.md)，后续界面遵守 [UI 规范](docs/ui-guidelines.md)。
 
 Windows x64 打包与冒烟测试：
 

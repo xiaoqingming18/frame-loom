@@ -2,7 +2,7 @@
 
 Status: done
 Parent: plan.md
-Note: ../../notes/proposed/architecture/2026-10-24-engine-and-renderer-foundation.md
+Note: ../../notes/implemented/architecture/2026-10-24-engine-and-renderer-foundation.md
 Note: ../../notes/implemented/architecture/2026-10-24-desktop-shell.md
 
 ## 目标

@@ -2,7 +2,7 @@
 
 Status: done
 Parent: plan.md
-Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
+Note: ../../notes/implemented/feature/2026-10-24-theme-and-app-shell.md
 
 ## 目标
 
