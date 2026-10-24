@@ -20,9 +20,9 @@ Status: implemented
 - 根目录一份 `eslint.config.js`（flat config），由根脚本 `pnpm lint` 对全仓运行。
 - 所有 TypeScript 使用 `typescript-eslint` 的 `recommendedTypeChecked`，开启 `parserOptions.projectService`。主要用 `no-floating-promises`、`no-misused-promises` 检查遗漏的异步调用。
 - renderer 额外启用 `eslint-plugin-react-hooks`、`eslint-plugin-react-refresh` 和 `@tanstack/eslint-plugin-query`。
-- 当前 `main.tsx` 同时定义健康页并挂载应用，没有导出，只有此入口关闭 `react-refresh/only-export-components`，保持整页重载。普通组件仍启用该规则，不为消除一条 lint 提前执行 renderer 重构。
+- 仅在 `routes/**/*.tsx` 关闭 `react-refresh/only-export-components`：文件路由导出配置对象并由 Router 插件处理热更新。入口不再关闭此规则，普通 feature 组件仍受检查。
 - 导入边界用 `eslint-plugin-import-x` 的 `no-restricted-paths`，按目录划区，覆盖 Problem 中前三条规则。引入 pi 时，再加一条 `no-restricted-imports`：在 `apps/engine/src/modules/agent/` 之外禁止 `@earendil-works/*`，替代手动 grep。
-- feature 隔离根据现有 `features/` 子目录自动生成，允许同 feature 导入；未创建目录时不预建业务空壳。TypeScript 解析器读取三个包的 tsconfig，支持 `.js` 源码映射；后续 desktop 拆分 tsconfig 时同步解析器项目列表。
+- feature 隔离根据现有 `features/` 子目录自动生成，允许同 feature 导入；未创建目录时不预建业务空壳。TypeScript resolver 读取 desktop 的 node、web 两份 tsconfig，加上 engine、contracts 共四份配置，支持 renderer 的 `@/` 别名与 `.js` 源码映射；类型感知解析继续由 projectService 根据根 references 发现项目。
 - 末尾接 `eslint-config-prettier`，关闭和格式化冲突的规则。
 - `eslint-import-resolver-typescript` 的传递依赖 `unrs-resolver@1.12.2` 带 `napi-postinstall` 准备脚本。已读取脚本并验证 Windows x64 的可选原生绑定无需脚本即可加载，`allowBuilds` 精确登记 `false`，保留默认构建审核，不开放安装时兜底下载。
 - 忽略：`dist/`、`out/`、`release/`、`apps/desktop/build/`、`routeTree.gen.ts`、`.agents/`、`.cache/`、`docs/design/`。
@@ -84,6 +84,7 @@ Status: implemented
 
 ## Verification
 
+- renderer 骨架接入后，desktop resolver 使用拆分的 node／web 配置，`pnpm lint` 通过；临时在 `lib/` 用 `@/` 重导出 feature 的反例仍触发 `import-x/no-restricted-paths`，随后删除探针。
 - 冻结安装通过，11 项依赖按版本表精确锁定；`unrs-resolver@1.12.2` 禁止安装脚本后，TypeScript resolver 仍能加载本机绑定。
 - `pnpm lint`、`pnpm typecheck` 和 `pnpm test` 通过，现有 150 项单测全部保留；lint 修复只涉及类型标注及冗余非空断言，没有运行时行为变化。
 - `eslint --print-config` 断言 renderer 的导入边界和 `no-floating-promises` 均为 error。临时源码配合 ESLint API 验证 7 项反例：跨 feature、renderer 导入 main/preload/engine、engine 导入 desktop、feature 导入 app、lib 导入 feature；同 feature 和 contracts 导入正例通过。反例均只报预期的边界错误，随后删除临时源码。

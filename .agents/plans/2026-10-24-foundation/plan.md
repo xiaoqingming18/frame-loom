@@ -48,7 +48,7 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 | 02 | [ESLint 与 Prettier](02-lint-format.md) | done | 01 | `pnpm lint`、`pnpm format:check` 通过，CI 已接入，格式化提交独立 |
 | 03 | [engine 目录调整](03-engine-structure.md) | done | 02 | `core/` 加 `modules/health` 结构，现有测试与部署入口通过 |
 | 04 | [engine 错误契约与日志](04-engine-http-baseline.md) | done | 03 | 所有错误响应符合 `ErrorResponse`，日志只写 stderr |
-| 05 | [renderer 骨架](05-renderer-skeleton.md) | draft | 02、04 | 文件路由、hash history、engine client、拆分的 tsconfig 与测试环境 |
+| 05 | [renderer 骨架](05-renderer-skeleton.md) | done | 02、04 | 文件路由、hash history、engine client、拆分的 tsconfig 与测试环境 |
 | 06 | [主题系统与窗口标题栏](06-theme-system.md) | draft | 05 | 明暗 token、偏好持久化、主题与窗口 IPC、原生按钮配色、shadcn、颜色 lint、新图标 |
 | 07 | [应用外壳与设置中心](07-app-shell.md) | draft | 06 | 与设计稿一致的外壳和首页、设置中心弹窗、UI 规范文档，笔记转入 implemented |
 
@@ -66,13 +66,14 @@ Note: ../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md
 - [x] `pnpm lint`、`pnpm format:check` 通过，边界反例报错，CI 包含两步 — 证据：02 验证
 - [x] engine 结构调整后测试全过，`db:generate` 无变化，部署入口黑盒通过 — 证据：03 验证
 - [x] 401、403、400、500 响应体符合 `ErrorResponse`，日志无 token，stdout 只有 ready — 证据：04 验证
-- [ ] 加固 exe 中结束 engine 后，hash 路由重载仍在原路由并显示中文错误；renderer 中的 `process` 无法通过 web 类型检查 — 证据：05 验证
+- [x] 加固 exe 中结束 engine 后，hash 路由重载仍在原路由并显示中文错误；renderer 中的 `process` 无法通过 web 类型检查 — 证据：05 验证
 - [ ] 偏好损坏时照常启动，IPC 拒绝非法输入，颜色 lint 反例报错，exe 显示新图标 — 证据：06 验证
 - [ ] 明暗截图与设计稿相符，主题重启后保持并跟随系统，设置中心显示健康状态，加固 exe 无 CSP 违规 — 证据：07 验证
 - [ ] 三篇笔记移入 `implemented/` 并按实际结果改写，计划转 `done` — 证据：07 收尾步骤
 
 ## 发现与偏差
 
+- 2026-10-24 按用户授权完成 05：renderer 文件路由、hash 初始化、engine client、健康 feature、node／web 类型隔离与双测试 project 已落地；183 项单测、质量门禁、冻结安装、桌面 e2e、开发窗口和真实加固 exe 的路由／故障检查通过。06、07 保持 draft，父计划保持 active；共享基础设施笔记仍待 07 的设置中心验收后整体转入 implemented，当前已实现事实同步到桌面壳与 lint 笔记。
 - 2026-10-24 按用户授权完成 03、04：engine 目录、包根定位、错误契约、stderr 日志及现有健康页错误解析已落地；172 项单测、质量门禁、桌面 e2e 和两轮真实加固 exe 检查通过。最后一轮打包临时复用本地同版本 Electron，详见 04。05～07 保持 draft，父计划保持 active，共享基础设施笔记等待 renderer 部分完成后再整体转入 implemented。
 - 2026-10-24 按用户授权完成 01、02；lint 笔记已移入 `implemented/`，另两篇笔记保留提案状态，父计划保持 active；03～07 为未执行草稿。后续拆分 desktop tsconfig 时需同步 `eslint.config.js` 的解析器项目列表。
 - 2026-10-24 收到主界面明暗设计稿与 logo，新增[主题系统与应用外壳](../../notes/proposed/feature/2026-10-24-theme-and-app-shell.md)笔记和子计划 06、07；05 只保留骨架，收尾步骤移到 07。shadcn 从延后项改为随 06 引入，CSP 调整从风险项改为 06 的明确步骤。

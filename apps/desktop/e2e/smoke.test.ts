@@ -14,6 +14,14 @@ test('窗口显示真实 engine 健康状态，关闭后服务退出', async () 
     const page = await application.firstWindow();
     await expect(page.getByRole('status')).toHaveText('运行正常');
     await expect(page.getByTestId('engine-version')).toHaveText(/\S+/);
+    expect(new URL(page.url()).hash).toBe('#/');
+    await page.goto(`${page.url().split('#')[0]}#/missing`);
+    await expect(page.getByRole('heading', { name: '页面不存在' })).toBeVisible();
+    await page.reload();
+    expect(new URL(page.url()).hash).toBe('#/missing');
+    await expect(page.getByRole('heading', { name: '页面不存在' })).toBeVisible();
+    await page.getByRole('link', { name: '返回首页' }).click();
+    await expect(page.getByRole('status')).toHaveText('运行正常');
     expect(await application.evaluate(({ app }) => app.getPath('userData'))).toBe(userData);
     expect(
       await page.evaluate(() => {

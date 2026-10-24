@@ -20,7 +20,7 @@ Status: proposed
 
 ### 仓库布局
 
-- engine 已从 `services/engine` 移到 `apps/engine`，并完成下述 `core/`、`modules/health/`、包根定位、错误契约与 stderr 日志；现有 renderer 健康请求同步解析错误消息。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。renderer 骨架仍为提案，本篇随该部分完成再整体转入 implemented；engine 已实现事实同步于[服务笔记](../../implemented/architecture/2026-10-24-engine-service.md)。
+- engine 已从 `services/engine` 移到 `apps/engine`，并完成下述 `core/`、`modules/health/`、包根定位、错误契约与 stderr 日志。renderer 文件路由、统一客户端、feature 与测试骨架已落地，健康页保持原样，主题与设置中心尚未实现。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。本篇包含设置中心中的健康检查验收，随外壳完成后整体转入 implemented；已有事实同步于[服务笔记](../../implemented/architecture/2026-10-24-engine-service.md)与[桌面壳笔记](../../implemented/architecture/2026-10-24-desktop-shell.md)。
 - `pnpm-workspace.yaml` 只保留 `apps/*` 和 `packages/*`。
 - renderer 继续留在 `apps/desktop/src/renderer`，不拆成独立包。它只有一个使用者，electron-vite 的约定也是 main、preload、renderer 放在同一个包里。
 - 迁移是单独的 `refactor` 提交，不改变任何行为。必须同步的位置：
@@ -112,17 +112,19 @@ apps/desktop/src/renderer/src/
 
 - 应用外壳（标题栏、侧栏、主画布、设置中心弹窗）放在 `app/shell/`，由 `app` 层组合多个 feature，避免 feature 互相导入。主题 token、外壳布局和设置中心的具体规则见[主题系统与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
 - 依赖方向固定为 `lib`、`components` → `features` → `routes`、`app`。feature 之间不能互相导入，renderer 不能导入 main、preload 或 engine。规则由 ESLint 检查（见 [lint 与格式化](../../implemented/process/2026-10-24-lint-and-format.md)）。
-- 路由使用 `createHashHistory()`。路径在 `#` 之后，重载始终请求 `/`，`rendererFile` 和协议处理函数不改。
+- 路由使用 `createHashHistory()`。初始化时将空 hash 归一为 `#/`，保留已有 hash 路径与查询参数。路径在 `#` 之后，重载始终请求 `/`，`rendererFile` 和协议处理函数不改。
 - 路由文件只负责：用 zod 校验 params 和 search、在 loader 中调用 `ensureQueryData`、把 `component` 指向 feature。
 - `engine-client.ts` 导出 `createEngineClient(getConnection)`：
-  - 首次请求时从 preload 获取连接并缓存；获取失败时清除缓存，下一次请求重新获取。
+  - 首次请求时从 preload 获取连接并缓存，使用同一个 Promise 合并并发获取；获取、校验或请求失败时清除对应缓存，下一次请求重新获取，过时请求不能清除新连接。
   - token 只存在闭包里，不写 storage、cookie 或 URL。
-  - `request(path, schema, init)` 默认 5 秒超时，用调用方传入的 schema 解析成功响应；非 2xx 响应按 `ErrorResponse` 解析，抛出 `EngineRequestError { status, code, message }`。
+  - `request(path, schema, init)` 在连接就绪后开始默认 5 秒的 HTTP 超时，冷启动仍由主进程的 30 秒 ready 超时约束。支持调用方取消，用传入的 schema 解析成功响应；非 2xx 响应按 `ErrorResponse` 解析，抛出 `EngineRequestError { status, code, message }`。非法错误体回退到中文 HTTP 提示，网络、取消、超时和非法成功响应也提供中文错误。
+  - 请求地址必须与已校验的连接同源且不含用户信息；拒绝重定向，避免令牌发送到其他目标。
   - SSE 的 `stream()` 在第一个 SSE 端点出现时加入，使用 fetch 读流，token 放请求头。
 - engine client 和 QueryClient 通过路由 context 注入，组件和测试都不直接 import 单例。每个 feature 的 `api/` 导出 query key 工厂和 `queryOptions`。mutation 只使精确的 key 失效。QueryClient 默认关闭 `retry` 和 `refetchOnWindowFocus`。
 - 服务端数据只走 TanStack Query；Zustand 只保存界面状态和画布编辑状态，在第一个需要它的功能中引入。
 - desktop 的 tsconfig 拆成两份：`tsconfig.node.json` 覆盖 main、preload 和配置文件，只有 node 类型；`tsconfig.web.json` 覆盖 renderer，只有 DOM 和 `vite/client`。`@/` 别名指向 `src/renderer/src`，只在 web 配置和 Vite renderer 配置中声明。
 - Vitest 分成两个 project：main、preload 使用 node 环境，renderer 使用 jsdom 环境并收集 `.tsx`。组件测试使用 Testing Library，通过路由 context 传入替身 engine client。
+- 健康页沿用现有界面和样式，新增路由错误页与 404 页。健康查询不阻塞路由 loader，以便 feature 自己呈现加载中和连接失败；跨路由与 feature 的组合测试放在 `app/`，不放宽 feature 不能依赖 app 的边界。
 
 ### 延后建立
 

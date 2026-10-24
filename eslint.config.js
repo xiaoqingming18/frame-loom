@@ -62,8 +62,8 @@ export default defineConfig(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['apps/desktop/src/renderer/src/main.tsx'],
-    // 当前挂载入口没有导出，使用整页重载；普通组件文件仍检查 Fast Refresh 边界。
+    files: ['apps/desktop/src/renderer/src/routes/**/*.tsx'],
+    // 文件路由导出的是路由配置，组件仍由 Router 插件处理热更新。
     rules: { 'react-refresh/only-export-components': 'off' },
   },
   {
@@ -73,11 +73,12 @@ export default defineConfig(
       'import-x/resolver': {
         typescript: {
           project: [
-            'apps/desktop/tsconfig.json',
+            'apps/desktop/tsconfig.node.json',
+            'apps/desktop/tsconfig.web.json',
             'apps/engine/tsconfig.json',
             'packages/contracts/tsconfig.json',
           ],
-          // 三个 workspace 项目是刻意配置，后续 tsconfig 拆分时同步此列表。
+          // Node 与浏览器配置分别解析，保持 renderer 别名和跨层检查一致。
           noWarnOnMultipleProjects: true,
         },
       },

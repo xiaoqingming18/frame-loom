@@ -1,6 +1,10 @@
 import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
+import { fileURLToPath } from 'node:url';
+
+const rendererSource = fileURLToPath(new URL('./src/renderer/src/', import.meta.url));
 
 export default defineConfig({
   main: {
@@ -14,7 +18,19 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [react(), tailwindcss()],
+    resolve: { alias: { '@': rendererSource } },
+    plugins: [
+      tanstackRouter({
+        target: 'react',
+        autoCodeSplitting: true,
+        routesDirectory: fileURLToPath(new URL('./src/renderer/src/routes', import.meta.url)),
+        generatedRouteTree: fileURLToPath(
+          new URL('./src/renderer/src/routeTree.gen.ts', import.meta.url),
+        ),
+      }),
+      react(),
+      tailwindcss(),
+    ],
     server: {
       host: '127.0.0.1',
       headers: {
