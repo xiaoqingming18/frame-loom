@@ -1,10 +1,11 @@
-import { Info, Palette, Server } from 'lucide-react';
+import { Info, Palette, Server, X } from 'lucide-react';
 import logo from '@/assets/logo.png';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -30,55 +31,89 @@ export function SettingsDialog({
       }}
     >
       <DialogContent
-        className="max-h-[calc(100dvh-3rem)] w-[calc(100%-2rem)] overflow-y-auto bg-card sm:max-w-[720px]"
+        className="h-[min(640px,calc(100dvh-7rem))] w-[calc(100%-3rem)] gap-0 overflow-hidden rounded-[20px] bg-muted p-1 shadow-panel-focus sm:max-w-[1000px]"
+        showCloseButton={false}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           document.getElementById('settings-button')?.focus();
         }}
       >
-        <DialogHeader>
-          <DialogTitle>设置中心</DialogTitle>
-          <DialogDescription>管理工作台外观，查看本地引擎与应用信息。</DialogDescription>
-        </DialogHeader>
+        <DialogTitle className="sr-only">设置中心</DialogTitle>
+        <DialogDescription className="sr-only">
+          管理工作台外观，查看本地引擎与应用信息。
+        </DialogDescription>
+        <DialogClose asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="关闭"
+            className="absolute top-4 right-4 z-10 rounded-full text-muted-foreground"
+          >
+            <X aria-hidden="true" className="size-5" />
+          </Button>
+        </DialogClose>
         <Tabs
           orientation="vertical"
           value={tab}
           onValueChange={(value) => onTabChange(settingsTab.parse(value))}
-          className="min-h-72 gap-6"
+          className="min-h-0 gap-0"
         >
-          <TabsList aria-label="设置分类" className="w-32 shrink-0 gap-1 bg-transparent p-0">
-            <TabsTrigger value="appearance" className="px-3 py-2.5">
-              <Palette />
-              外观
-            </TabsTrigger>
-            <TabsTrigger value="engine" className="px-3 py-2.5">
-              <Server />
-              本地引擎
-            </TabsTrigger>
-            <TabsTrigger value="about" className="px-3 py-2.5">
-              <Info />
-              关于
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="appearance" className="min-w-0 border-l pl-6">
+          <div className="w-44 shrink-0 overflow-y-auto px-2 py-6 sm:w-52 md:w-56">
+            <p className="mb-5 px-3 text-sm text-muted-foreground">设置</p>
+            <TabsList aria-label="设置分类" className="w-full gap-1.5 bg-transparent p-0">
+              {(
+                [
+                  { value: 'appearance', label: '外观', Icon: Palette },
+                  { value: 'engine', label: '本地引擎', Icon: Server },
+                  { value: 'about', label: '关于', Icon: Info },
+                ] as const
+              ).map(({ value, label, Icon }) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="h-11 flex-none gap-3 rounded-xl px-3 font-normal hover:bg-accent data-[state=active]:bg-accent-active data-[state=active]:shadow-none"
+                >
+                  <Icon aria-hidden="true" />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          <TabsContent
+            value="appearance"
+            className="min-w-0 overflow-y-auto rounded-2xl bg-card px-6 py-8 lg:px-9"
+          >
             <AppearanceSettings />
           </TabsContent>
-          <TabsContent value="engine" className="min-w-0 border-l pl-6">
+          <TabsContent
+            value="engine"
+            className="min-w-0 overflow-y-auto rounded-2xl bg-card px-6 py-8 lg:px-9"
+          >
             <EngineStatusPanel engineClient={engineClient} />
           </TabsContent>
-          <TabsContent value="about" className="min-w-0 border-l pl-6">
-            <section
-              aria-labelledby="about-heading"
-              className="flex flex-col items-center pt-6 text-center"
-            >
-              <img src={logo} alt="帧织 logo" className="mb-4 size-16 rounded-2xl" />
-              <h2 id="about-heading" className="font-serif text-xl">
-                帧织 · Frame Loom
+          <TabsContent
+            value="about"
+            className="min-w-0 overflow-y-auto rounded-2xl bg-card px-6 py-8 lg:px-9"
+          >
+            <section aria-labelledby="about-heading">
+              <h2 id="about-heading" className="text-xl font-semibold">
+                关于
               </h2>
-              <p className="mt-2 text-muted-foreground">影视创作工作台</p>
-              <p className="mt-6 text-xs text-muted-foreground">
-                应用版本 <span data-testid="app-version">{__APP_VERSION__}</span>
-              </p>
+              <div className="mt-9 flex items-center gap-4">
+                <img src={logo} alt="帧织 logo" className="size-14 rounded-2xl" />
+                <div>
+                  <h3 className="font-serif text-lg">帧织 · Frame Loom</h3>
+                  <p className="mt-1.5 text-xs text-muted-foreground">影视创作工作台</p>
+                </div>
+              </div>
+              <dl className="mt-8">
+                <div className="flex items-center justify-between gap-4 py-4 text-sm">
+                  <dt>应用版本</dt>
+                  <dd data-testid="app-version" className="text-muted-foreground">
+                    {__APP_VERSION__}
+                  </dd>
+                </div>
+              </dl>
             </section>
           </TabsContent>
         </Tabs>

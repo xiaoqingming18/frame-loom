@@ -6,39 +6,47 @@ import type { EngineClient } from '@/lib/engine-client';
 export function EngineStatusPanel({ engineClient }: { engineClient: EngineClient }) {
   const health = useQuery(healthQueryOptions(engineClient));
   return (
-    <section aria-labelledby="engine-heading" className="space-y-5">
-      <h2 id="engine-heading" className="text-base font-medium">
+    <section aria-labelledby="engine-heading">
+      <h2 id="engine-heading" className="text-xl font-semibold">
         本地引擎
       </h2>
-      <p
-        role="status"
-        aria-live="polite"
-        className={health.isError ? 'text-destructive' : 'text-foreground'}
-      >
-        {health.isError ? '连接中断' : health.isPending ? '正在连接' : '运行正常'}
-      </p>
+      <div className="mt-9 mb-6 flex items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <h3 className="text-sm font-medium">连接状态</h3>
+          <p className="text-xs text-muted-foreground">服务运行于此设备</p>
+        </div>
+        <p
+          role="status"
+          aria-live="polite"
+          className={
+            health.isError ? 'text-sm text-destructive' : 'rounded-lg bg-muted px-3 py-1.5 text-sm'
+          }
+        >
+          {health.isError ? '连接中断' : health.isPending ? '正在连接' : '运行正常'}
+        </p>
+      </div>
       {health.isPending && <p className="text-muted-foreground">正在启动本地服务，请稍候…</p>}
       {health.isError && (
-        <div role="alert" className="space-y-2 text-destructive">
+        <div role="alert" className="space-y-2 break-words text-destructive">
           <p>暂时无法连接本地引擎，请重新启动应用。</p>
           <p>{health.error.message}</p>
         </div>
       )}
       {health.data && !health.isError && (
-        <dl className="space-y-4">
-          <div>
-            <dt className="text-xs text-muted-foreground">引擎版本</dt>
-            <dd data-testid="engine-version" className="mt-1">
+        <dl className="divide-y text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 py-5">
+            <dt>引擎版本</dt>
+            <dd data-testid="engine-version" className="text-muted-foreground">
               {health.data.engineVersion}
             </dd>
           </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">数据库版本</dt>
-            <dd className="mt-1">{health.data.schemaVersion}</dd>
+          <div className="flex flex-wrap items-center justify-between gap-3 py-5">
+            <dt>数据库版本</dt>
+            <dd className="text-muted-foreground">{health.data.schemaVersion}</dd>
           </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">启动时间</dt>
-            <dd className="mt-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 py-5">
+            <dt>启动时间</dt>
+            <dd className="text-muted-foreground">
               <time dateTime={health.data.startedAt}>
                 {new Date(health.data.startedAt).toLocaleString('zh-CN', { hour12: false })}
               </time>
@@ -46,8 +54,7 @@ export function EngineStatusPanel({ engineClient }: { engineClient: EngineClient
           </div>
         </dl>
       )}
-      <div className="flex items-center justify-between gap-3 border-t pt-4">
-        <span className="text-xs text-muted-foreground">服务运行于此设备</span>
+      <div className="mt-3 flex justify-end border-t pt-5">
         <Button
           variant="outline"
           size="sm"

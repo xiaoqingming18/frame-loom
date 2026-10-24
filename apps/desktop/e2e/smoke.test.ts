@@ -4,6 +4,72 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+test('快捷面板向上展开，键盘关闭及模态焦点交接在折叠侧栏和小窗口可用', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'frame-loom-settings-e2e-'));
+  const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
+  let application: ElectronApplication | undefined;
+  try {
+    application = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
+    const page = await application.firstWindow();
+    await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
+    const trigger = page.getByRole('button', { name: '设置中心' });
+    const quick = page.getByRole('dialog', { name: '快捷设置' });
+    const settings = page.getByRole('dialog', { name: '设置中心' });
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(quick).toBeVisible();
+    await expect(settings).toBeHidden();
+    expect((await quick.boundingBox())!.y + (await quick.boundingBox())!.height).toBeLessThan(
+      (await trigger.boundingBox())!.y,
+    );
+    await page.keyboard.press('Escape');
+    await expect(quick).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await page.getByRole('heading', { name: '帧织' }).click();
+    await expect(quick).toBeHidden();
+    await page.getByRole('button', { name: '折叠侧栏' }).click();
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(720, 560),
+    );
+    await trigger.click();
+    await page.getByRole('radio', { name: '暗黑' }).click();
+    await expect(page.getByRole('radio', { name: '暗黑' })).toHaveAttribute('aria-checked', 'true');
+    await expect(quick).toBeVisible();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(quick).toBeHidden();
+    await expect(settings).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate<boolean>(
+          `document.querySelector('[data-slot="dialog-content"]')?.contains(document.activeElement)`,
+        ),
+      )
+      .toBe(true);
+    await expect(page.getByRole('radio', { name: '暗黑' })).toHaveAttribute('aria-checked', 'true');
+    expect(
+      await settings.evaluate(
+        (element: { scrollWidth: number; clientWidth: number }) =>
+          element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    const appearance = page.getByRole('tab', { name: '外观' });
+    await appearance.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('tab', { name: '本地引擎' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('status')).toHaveText('运行正常');
+    await page.keyboard.press('Escape');
+    await expect(settings).toBeHidden();
+    await expect(trigger).toBeFocused();
+  } finally {
+    await application?.close();
+    await rm(userData, { recursive: true, force: true });
+  }
+});
+
 test('窗口显示真实 engine 健康状态，关闭后服务退出', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'frame-loom-e2e-'));
   const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -15,6 +81,7 @@ test('窗口显示真实 engine 健康状态，关闭后服务退出', async () 
     await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
     expect(new URL(page.url()).hash).toBe('#/');
     await page.getByRole('button', { name: '设置中心' }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     await page.getByRole('tab', { name: '本地引擎' }).click();
     await expect(page.getByRole('status')).toHaveText('运行正常');
     await expect(page.getByTestId('engine-version')).toHaveText(/\S+/);
@@ -25,6 +92,7 @@ test('窗口显示真实 engine 健康状态，关闭后服务退出', async () 
     await expect(page.getByRole('heading', { name: '页面不存在' })).toBeVisible();
     await page.getByRole('link', { name: '返回首页' }).click();
     await page.getByRole('button', { name: '设置中心' }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     await page.getByRole('tab', { name: '本地引擎' }).click();
     await expect(page.getByRole('status')).toHaveText('运行正常');
     expect(await application.evaluate(({ app }) => app.getPath('userData'))).toBe(userData);
@@ -117,7 +185,7 @@ test('损坏偏好可启动，主题同步原生窗口并在重启后保持', as
       await application.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors),
     );
     const closed = application.waitForEvent('close');
-    await page.getByRole('button', { name: '关闭', exact: true }).click();
+    await page.keyboard.press('Escape');
     await page.getByRole('menuitem', { name: '文件', exact: true }).click();
     await page.getByRole('menuitem', { name: '退出', exact: true }).click();
     await closed;
@@ -141,6 +209,7 @@ test('引擎意外退出后重载仍停在设置的本地引擎页', async () =>
     });
     await page.getByRole('link', { name: '项目库' }).click();
     await page.getByRole('button', { name: '设置中心' }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     await page.getByRole('tab', { name: '本地引擎' }).click();
     await expect(page.getByRole('status')).toHaveText('运行正常');
     const before = page.url();

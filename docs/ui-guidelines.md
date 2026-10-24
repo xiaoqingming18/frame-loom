@@ -1,6 +1,6 @@
 # UI 开发规范
 
-Frame Loom 的颜色、字体与阴影统一来自 `apps/desktop/src/renderer/src/styles/theme.css`。设计快照见[设计稿说明](design/README.md)，取舍见[主题与应用外壳笔记](../.agents/notes/implemented/feature/2026-10-24-theme-and-app-shell.md)。
+Frame Loom 的颜色、字体与阴影统一来自 `apps/desktop/src/renderer/src/styles/theme.css`。设计快照见[设计稿说明](design/README.md)，取舍见[主题与应用外壳笔记](../.agents/notes/implemented/feature/2026-10-24-theme-and-app-shell.md)与[设置快捷面板笔记](../.agents/notes/implemented/feature/2026-10-24-settings-quick-panel.md)。
 
 ## 主题与颜色
 
@@ -21,6 +21,8 @@ Frame Loom 的颜色、字体与阴影统一来自 `apps/desktop/src/renderer/sr
 ## 交互与验收
 
 - 弹窗复用 Dialog 的焦点锁、Esc 关闭与读屏语义，关闭后恢复到可操作入口；Tabs 支持键盘导航。
+- 左栏底部的设置中心先向上打开快捷面板，提供主题三段切换与设置入口。快捷面板使用 Radix Popover，主题切换后保持打开；Esc 和点击外部可关闭。设置行关闭面板并将焦点交给模态窗口，避免关闭面板时抢回入口。
+- 设置模态窗口采用大圆角底座、左侧分类导航和右侧独立滚动内容面板；设置行优先左侧标题／描述、右侧控件。快捷面板与外观页复用主题组件和保存状态，保存期间两处均禁用重复写入。
 - 未开放的创作控件使用 `aria-disabled` 和只读文本框，阻止实际操作，同时保留键盘聚焦。通过 Tooltip 与常驻 `aria-describedby` 提示「创作功能尚未开放」，不添加虚假项目或版本数据。
 - 设置中心开关与页签保存在路由 search 的 `settings` 参数中，允许 `appearance`、`engine`、`about`；非法值回退为关闭。引擎故障重载后保留路径与页签。健康查询在外壳执行，失败时设置入口显示错误圆点；本地引擎页提供手动重查。
 - 每个新界面检查明亮、暗黑两种模式、最小窗口尺寸、键盘焦点、禁用和错误状态。设置中心等 Portal 组件还需在加固 exe 检查 CSP。

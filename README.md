@@ -23,7 +23,7 @@ pnpm run verify
 pnpm dev        # 先构建 contracts 和 engine，再打开桌面窗口
 ```
 
-侧栏底部打开设置中心，可切换跟随系统／明亮／暗黑主题，查看本地引擎版本与健康状态。主题重启后保持，健康异常显示中文错误与入口圆点。首页创作控件暂不可操作。修改 engine 源码后需要重启命令；关闭窗口会回收服务进程。开发和生产共用 `%APPDATA%\Frame Loom` 数据目录，使用说明见[桌面壳](apps/desktop/README.md)，后续界面遵守 [UI 规范](docs/ui-guidelines.md)。
+侧栏底部的设置中心提供主题快捷切换，点击面板中的「设置」打开分栏模态窗口，查看外观、本地引擎与关于信息。主题重启后保持，健康异常显示中文错误与入口圆点。首页创作控件暂不可操作。修改 engine 源码后需要重启命令；关闭窗口会回收服务进程。开发和生产共用 `%APPDATA%\Frame Loom` 数据目录，使用说明见[桌面壳](apps/desktop/README.md)，后续界面遵守 [UI 规范](docs/ui-guidelines.md)。
 
 Windows x64 打包与冒烟测试：
 

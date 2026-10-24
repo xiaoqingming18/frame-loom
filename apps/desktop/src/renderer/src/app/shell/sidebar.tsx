@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Folder, PanelLeft, Plus, Search, Settings, SquarePen } from 'lucide-react';
+import { Folder, PanelLeft, Plus, Search, SquarePen } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { SettingsMenu } from './settings-menu';
 
 export function Sidebar({ hasError, onSettings }: { hasError: boolean; onSettings: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -72,23 +73,7 @@ export function Sidebar({ hasError, onSettings }: { hasError: boolean; onSetting
         </div>
       )}
       <div className="mt-auto px-3 py-3">
-        <Button
-          id="settings-button"
-          variant="ghost"
-          className={cn('relative gap-2.5 text-muted-foreground', collapsed && 'w-full px-0')}
-          aria-label="设置中心"
-          onClick={onSettings}
-        >
-          <Settings className="size-4" />
-          {!collapsed && '设置中心'}
-          {hasError && (
-            <span
-              role="img"
-              aria-label="本地引擎连接失败"
-              className="size-1.5 rounded-full bg-destructive"
-            />
-          )}
-        </Button>
+        <SettingsMenu collapsed={collapsed} hasError={hasError} onSettings={onSettings} />
       </div>
     </aside>
   );

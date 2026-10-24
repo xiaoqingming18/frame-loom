@@ -108,6 +108,8 @@ Status: implemented
 
 ### 设置中心弹窗
 
+设置入口与窗口布局由[设置快捷面板与分栏模态窗口](2026-10-24-settings-quick-panel.md)承接；本篇保留原始交互选择及主题、窗口机制的依据。
+
 - 使用 shadcn `Dialog` 加竖向 `Tabs`，共三个页签：
   - **外观**：用 `ToggleGroup` 选择跟随系统、明亮、暗黑，切换后立即生效。
   - **本地引擎**：显示连接状态、engine 版本、schema 版本、启动时间和「重新检查」按钮，内容来自 `features/engine-status`。

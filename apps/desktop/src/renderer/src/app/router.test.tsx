@@ -102,6 +102,7 @@ it('错误状态显示中文业务消息且不自动重试', async () => {
   fireEvent.click(screen.getByRole('button', { name: '关闭' }));
   await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   fireEvent.click(screen.getByRole('button', { name: '设置中心' }));
+  fireEvent.click(await screen.findByRole('button', { name: '设置' }));
   fireEvent.mouseDown(await screen.findByRole('tab', { name: '本地引擎' }), {
     button: 0,
     ctrlKey: false,
@@ -146,7 +147,16 @@ it('侧栏随路由高亮，可折叠和恢复，首页控件不可提交但可�
 it('设置可打开、切页、关闭，路由保存页签，关于显示构建版本', async () => {
   const router = await renderPage(vi.fn().mockResolvedValue(healthy), '/projects');
   fireEvent.click(screen.getByRole('button', { name: '设置中心' }));
+  await screen.findByRole('dialog', { name: '快捷设置' });
+  expect(screen.queryByRole('dialog', { name: '设置中心' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
   await screen.findByRole('dialog', { name: '设置中心' });
+  await vi.waitFor(() => expect(screen.queryByRole('dialog', { name: '快捷设置' })).toBeNull());
+  await vi.waitFor(() =>
+    expect(screen.getByRole('dialog', { name: '设置中心' }).contains(document.activeElement)).toBe(
+      true,
+    ),
+  );
   await screen.findByRole('radio', { name: /跟随系统/ });
   expect(router.state.location.search.settings).toBe('appearance');
   fireEvent.mouseDown(screen.getByRole('tab', { name: '本地引擎' }), { button: 0, ctrlKey: false });
@@ -172,6 +182,67 @@ it('外观通过桥接读写主题，保存失败显示错误且保留原选择'
   fireEvent.click(screen.getByRole('radio', { name: /明亮/ }));
   expect((await screen.findByRole('alert')).textContent).toContain('主题保存失败');
   expect(dark.getAttribute('aria-checked')).toBe('true');
+});
+
+it('快捷面板切换主题不关闭，打开设置后选择同步，Esc 恢复入口焦点', async () => {
+  const router = await renderPage(vi.fn().mockResolvedValue(healthy));
+  fireEvent.click(screen.getByRole('button', { name: '设置中心' }));
+  fireEvent.click(await screen.findByRole('radio', { name: '暗黑' }));
+  await vi.waitFor(() =>
+    expect(screen.getByRole('radio', { name: '暗黑' }).getAttribute('aria-checked')).toBe('true'),
+  );
+  expect(screen.getByRole('dialog', { name: '快捷设置' })).toBeDefined();
+  expect(router.state.location.search.settings).toBeUndefined();
+  vi.mocked(getTheme).mockResolvedValue('dark');
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
+  await screen.findByRole('dialog', { name: '设置中心' });
+  expect((await screen.findByRole('radio', { name: '暗黑' })).getAttribute('aria-checked')).toBe(
+    'true',
+  );
+  fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+  await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  fireEvent.click(screen.getByRole('button', { name: '设置中心' }));
+  await screen.findByRole('dialog', { name: '快捷设置' });
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('settings-button'));
+});
+
+it('保存主题期间从面板进入设置仍禁止重复保存', async () => {
+  let finish!: (source: 'dark') => void;
+  vi.mocked(setTheme).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await renderPage(vi.fn().mockResolvedValue(healthy));
+  fireEvent.click(screen.getByRole('button', { name: '设置中心' }));
+  fireEvent.click(await screen.findByRole('radio', { name: '暗黑' }));
+  await vi.waitFor(() => expect(setTheme).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
+  await screen.findByRole('dialog', { name: '设置中心' });
+  await vi.waitFor(() =>
+    expect(screen.getByRole<HTMLButtonElement>('radio', { name: '明亮' }).disabled).toBe(true),
+  );
+  vi.mocked(getTheme).mockResolvedValue('dark');
+  finish('dark');
+  await vi.waitFor(() =>
+    expect(screen.getByRole('radio', { name: '暗黑' }).getAttribute('aria-checked')).toBe('true'),
+  );
+  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '明亮' }).disabled).toBe(false);
+});
+
+it('快捷主题读取失败可重试，保存失败保留原选择', async () => {
+  vi.mocked(getTheme).mockRejectedValueOnce(new Error('读取失败'));
+  await renderPage(vi.fn().mockResolvedValue(healthy));
+  fireEvent.click(screen.getByRole('button', { name: '设置中心' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('主题读取失败');
+  fireEvent.click(screen.getByRole('button', { name: '重新读取' }));
+  vi.mocked(setTheme).mockRejectedValueOnce(new Error('磁盘不可写'));
+  fireEvent.click(await screen.findByRole('radio', { name: '明亮' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('主题保存失败');
+  expect(screen.getByRole('radio', { name: '跟随系统' }).getAttribute('aria-checked')).toBe('true');
 });
 
 it('非法设置参数回退到关闭状态，未出错时没有错误圆点', async () => {

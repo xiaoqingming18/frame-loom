@@ -11,7 +11,7 @@ pnpm dev
 
 安装时桌面包的 `postinstall` 执行 Electron 45 提供的 `install-electron` 下载二进制。首次安装需要能访问 Electron 下载站点。`pnpm dev` 先构建 contracts 与 engine，再启动 Vite 和窗口。renderer、main、preload 由 electron-vite 管理；修改 engine 后需要重启该命令。
 
-侧栏底部打开设置中心，外观页切换跟随系统／明亮／暗黑，本地引擎页显示 engine 版本、数据库版本与启动时间，关于页显示构建注入的应用版本。服务启动失败或意外退出显示中文错误，设置入口出现圆点；重载保留 hash 路径与设置页签。当前不自动重启 engine，退出后需要重新启动应用。关闭窗口会发送 shutdown，等待 HTTP 与 SQLite 关闭；超过五秒仍未退出才强制终止。
+侧栏底部的设置中心先向上弹出快捷面板，可直接切换暗黑／明亮／跟随系统主题，或通过「设置」打开分栏模态窗口。外观页提供相同主题选择，本地引擎页显示 engine 版本、数据库版本与启动时间，关于页显示构建注入的应用版本。服务启动失败或意外退出显示中文错误，设置入口出现圆点；重载保留 hash 路径与设置页签。当前不自动重启 engine，退出后需要重新启动应用。关闭窗口会发送 shutdown，等待 HTTP 与 SQLite 关闭；超过五秒仍未退出才强制终止。
 
 renderer 使用 TanStack 文件路由与 hash history，首页地址为 `#/`；未知路由显示中文 404，重载保留 hash 路径。`app/router.tsx` 与 `app/providers.tsx` 组合应用，健康查询和界面位于 `features/engine-status/`。只有 `lib/desktop-bridge.ts` 读取 preload，所有 engine 请求经 `lib/engine-client.ts` 校验连接和响应；HTTP 请求默认五秒超时，连接就绪前保留主进程的三十秒冷启动等待。客户端和 QueryClient 通过路由 context 注入，默认不重试、不随窗口聚焦刷新。
 
