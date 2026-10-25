@@ -24,6 +24,7 @@ import { registerDesktopIpc } from './desktop-ipc.js';
 import { readTheme } from './preferences.js';
 import { WINDOW_BACKGROUNDS, updateWindowTheme } from './theme.js';
 import { loadSecretKey } from './secret-key.js';
+import { serveMedia } from './media-protocol.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 app.setName('Frame Loom');
@@ -37,6 +38,10 @@ if (!hasLock) {
   app.quit();
 } else {
   protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'frame-media',
+      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
     {
       scheme: 'app',
       privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
@@ -67,6 +72,9 @@ async function start(): Promise<void> {
   try {
     const devUrl = !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined;
     const origin = devUrl ? new URL(devUrl).origin : APP_ORIGIN;
+    protocol.handle('frame-media', (request) =>
+      serveMedia(join(app.getPath('userData'), 'media'), request),
+    );
     protocol.handle('app', async (request) => {
       const file = rendererFile(join(directory, '../renderer'), request.url);
       if (request.method !== 'GET' || !file) return new Response(null, { status: 403 });

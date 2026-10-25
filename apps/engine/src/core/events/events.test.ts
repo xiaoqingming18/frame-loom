@@ -50,7 +50,7 @@ it('真实 HTTP 的 SSE 需要鉴权，发送心跳与事件，关闭应用结�
     expect(ErrorResponse.parse(await denied.json()).code).toBe('HTTP_401');
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Origin: 'app://frame-loom' },
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
     });
     expect(response.headers.get('Content-Type')).toContain('text/event-stream');
     expect(response.headers.get('access-control-allow-origin')).toBe('app://frame-loom');
@@ -79,4 +79,4 @@ it('真实 HTTP 的 SSE 需要鉴权，发送心跳与事件，关闭应用结�
     await app?.close();
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 15_000);

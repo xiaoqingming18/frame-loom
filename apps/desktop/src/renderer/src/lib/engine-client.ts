@@ -1,6 +1,6 @@
 import { EngineConnection, ErrorResponse } from '@frame-loom/contracts';
 
-type EngineRequestInit = Omit<RequestInit, 'body'> & { body?: unknown };
+type EngineRequestInit = Omit<RequestInit, 'body'> & { body?: unknown; timeoutMs?: number };
 
 export class EngineRequestError extends Error {
   constructor(
@@ -35,8 +35,11 @@ export function createEngineClient(getConnection: () => Promise<unknown>) {
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${token}`);
     if (init.body !== undefined) headers.set('Content-Type', 'application/json');
+    const requestInit = Object.fromEntries(
+      Object.entries(init).filter(([key]) => key !== 'timeoutMs'),
+    ) as RequestInit;
     const response = await fetch(url.href, {
-      ...init,
+      ...requestInit,
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       headers,
       signal,
@@ -82,7 +85,7 @@ export function createEngineClient(getConnection: () => Promise<unknown>) {
         // 冷启动由主进程的 ready 超时约束，五秒仅限制 HTTP 请求。
         signal = AbortSignal.any([
           ...(init.signal ? [init.signal] : []),
-          AbortSignal.timeout(5_000),
+          AbortSignal.timeout(init.timeoutMs ?? 5_000),
         ]);
         const response = await send(path, current, init, signal);
         try {

@@ -1,0 +1,4 @@
+{
+  "data": [{ "url": "https://cdn.example.test/image.png" }],
+  "usage": { "generated_images": 1 }
+}

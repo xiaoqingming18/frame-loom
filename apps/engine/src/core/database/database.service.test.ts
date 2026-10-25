@@ -30,7 +30,7 @@ it('迁移创建 app_meta、schema 版本和迁移日志，并启用 WAL 与外�
   expect(database.db.get(sql`PRAGMA journal_mode`)).toEqual({ journal_mode: 'wal' });
   expect(database.db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 });
   expect(database.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 1,
+    count: 3,
   });
 });
 
@@ -47,7 +47,7 @@ it('重复迁移不丢已有元数据且不重复执行，关闭后连接不可�
     value: '保留数据',
   });
   expect(reopened.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 1,
+    count: 3,
   });
 });
 

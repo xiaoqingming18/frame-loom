@@ -28,7 +28,7 @@ Status: proposed
 
 ### 当前实现边界
 
-01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。渠道、模型调用、生成任务、对象存储与模型测试界面尚未实现，本篇保持 proposed，整体验收后再转 implemented。
+01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型、四种文本协议的两步测试、设置中心的模型服务与模型测试页的文本对话。03 已实现图片档案与三种图片协议、持久化生成任务调度与恢复、sha256 媒体落盘、`frame-media://` 和图片测试页；视频、对象存储、TTS 及真实供应商整体验收仍属于 04～05。本篇保持 proposed，整体验收后再转 implemented。
 
 ### 调研依据
 
@@ -75,16 +75,26 @@ Status: proposed
 
 SQLite 表，由 Drizzle 生成迁移，各领域模块拥有自己的 `*.schema.ts`：
 
-- `channels`：`id, name, preset, base_url, api_key_cipher, headers_json, enabled, last_check_json, created_at, updated_at`。
+- `channels`：`id, name, preset, base_url, api_key_cipher, key_hint, headers_cipher, header_names, enabled, last_check_json, created_at, updated_at`。密钥与请求头值加密保存，公开接口仅返回 `hasKey`、密钥尾号和请求头名称。
 - `channel_models`：
-  - 字段：`id, channel_id → channels(on delete cascade), upstream_model_id, display_name, kind(chat|image|video|tts), protocol, profile_id, overrides_json, enabled`。
-  - 唯一约束：`(channel_id, upstream_model_id, protocol)`。
+  - 字段：`id, channel_id → channels(on delete cascade), upstream_model_id, display_name, kind(chat|image|video|tts), protocol, profile_id, overrides_json, enabled, last_check_json`。
+  - 唯一约束：`(channel_id, upstream_model_id, protocol)`；未选协议在库内用空字符串表示、接口仍返回 null，避免 SQLite 的 NULL 绕过唯一约束。
 - `model_defaults`：`kind 主键, channel_model_id → channel_models(on delete set null)`。
 - `generation_jobs`、`media_files`、`object_uploads`、`object_storage_config`：见后文。
 
 渠道预设 `preset` 只决定表单默认值（Base URL、可选协议、是否支持拉取模型列表），不决定调用方式。首批预设：`openai`、`anthropic`、`gemini`、`ark`（火山方舟）、`minimax`、`openrouter`、`openai-compatible`（通用中转站，含 new-api）。
 
 ### 文本模型
+
+02 的实现精确锁定 pi-ai 1.4.0，按渠道创建 provider、按模型协议分派。附加请求头与 API Key 一样加密，读接口只返回请求头名称；空密钥表示清除，未传表示保留。未知模型使用保守元数据并标记需确认；覆盖项经过运行时校验。拉取列表采用预设对应路径和鉴权，不按名称猜类别，也不覆盖已有模型配置。连通测试与文本流均限制时长，错误只返回本地分类，不透传上游正文或凭据。媒体档案及其协议在 03～05 接入；02 只保留档案 ID 和覆盖项的数据位置。
+
+pi 的完整内置目录会加载供应商 SDK，因此运行时和目录在首次使用文本模型时动态导入并复用同一个 Promise，避免无模型配置的引擎启动与健康接口承担这部分开销；代价是首次配置或调用文本模型稍慢。
+
+四种协议均关闭自动重试并禁止携带凭据跟随重定向。Gemini SDK 不接受自定义 fetch，因此 `modules/llm/google-transport.ts` 为每次调用临时监听 `127.0.0.1:0`，用随机路径仅接受该次 SDK 的 POST，将请求转发到固定 Base URL 并设置 `redirect: 'error'`；结束或取消时关闭连接与监听。这样保留 SDK 的原生流解码，代价是单次调用多一跳本地 HTTP 和临时端口。Gemini 预设 Base URL 包含 `/v1beta`，其他协议沿用各自的路径约定。四协议模拟服务已覆盖文本、工具、用量、HTTP 错误分类和重定向拦截；真实供应商验证留到 05。
+
+renderer 的文本对话只保存在当前页面；切换模型时清空并取消旧流，失败或取消的轮次不进入后续上下文。每次最多 25 轮、每条输入最多 32,000 字符，清空后可继续；这里只做文本和可展开的推理内容，用量展示 token 原始数量，不换算金额。
+
+pi-ai 的 `@google/genai` 与 `protobufjs` 间接依赖包含安装脚本；沿用仓库显式 `allowBuilds` 策略禁用，运行时使用包内已发布的 JavaScript，并通过协议测试验证。接口依据为 [pi-ai 1.4.0 npm 包](https://www.npmjs.com/package/@earendil-works/pi-ai/v/1.4.0)内的 README 和类型声明；版本信息基于本次在线查询，后续可能变化。
 
 - 协议枚举直接用 pi 的取值：`openai-responses | openai-completions | anthropic-messages | google-generative-ai`。不另做一层映射。
 - 新建 `modules/llm`，它是唯一 import `@earendil-works/pi-ai` 的模块。`modules/agent` 是唯一 import `@earendil-works/pi-agent-core` 的模块。
@@ -135,6 +145,8 @@ interface GenerationAdapter {
 - 厂商特有、档案未建模的参数，只能通过档案声明的透传白名单传入，不接受任意字段。不提供用户自定义调用脚本。
 
 ### 生成任务
+
+03 实施采用现有 Nest 模块、Drizzle 迁移与 EventBus；调度状态和重试时刻以 SQLite 为准，进程内只保留正在执行的 AbortController。图片尺寸使用精确锁定的 `image-size`，避免为读取元数据引入原生图像运行时。三个同步图片协议复用统一提交、分类与下载流程；请求参考图先验证真实格式和尺寸并以 sha256 保存，数据库不写入 Base64。同步提交中断一律保守处理，只有明确未受理的连接错误和 429 自动退避。媒体协议自行处理单区间 Range，避免依赖 Electron 对 file URL 的隐含行为。档案和参数白名单由 engine 发布，renderer 复用 contracts 预检。
 
 所有图片、视频、TTS 调用都写入 `generation_jobs`，包括同步模型。字段：
 
@@ -272,7 +284,7 @@ created_at, updated_at, finished_at
 - [应用骨架](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)：部分重叠。表中"AI 接入"一行的后续边界由本篇细化；媒体 SHA-256 存储、ffprobe 的引入时机由本篇确定。进程模型和鉴权边界不变，已互链。
 - [基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)：部分重叠。延后的 `modules/jobs` 由本篇的 `modules/generation` 承接；01 已引入 `core/events`、SSE 与 client 写请求／事件流，按原约定放开 CORS 并补预检测试，已原地同步并互链。
 - [engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)：部分重叠。01 已新增 `FRAME_LOOM_SECRET_KEY`、AES-GCM 字段加密与日志屏蔽项，原地同步当前实现；鉴权与启动边界不变。
-- [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)：部分重叠。侧栏新增入口、设置中心新增页签、CSP 增加 `frame-media:`，落地时原地同步。
+- [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)：部分重叠。02 已原地同步侧栏模型测试入口与模型服务页签；`frame-media:` 仍由 03 落地后同步。
 - 其他流程类笔记无关。
 
 ## Alternatives considered

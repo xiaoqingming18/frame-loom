@@ -95,7 +95,7 @@ Status: implemented
 - `app/shell/` 组合标题栏、侧栏、主画布和设置中心弹窗。它属于 app 层，可以同时引用多个 feature。
 - 侧栏宽 260px，背景透明（显示 `background`）。从上到下：
   - 品牌区：20px 圆角 logo 加衬线体「Frame Loom」；右侧有折叠和搜索两个按钮。折叠用组件内状态实现，不持久化；搜索按钮暂时禁用。
-  - 导航：「开始创作」（`/`）和「项目库」（`/projects`）。当前路由对应的项用 `accent-active` 高亮。
+  - 导航：「开始创作」（`/`）、「项目库」（`/projects`）和临时「模型测试」（`/model-lab`）。当前路由对应的项用 `accent-active` 高亮。模型测试目前提供文本与图片页签：文本页签支持已启用模型的流式多轮对话、停止和清空，并显示用量与错误类别；图片页签可提交生成任务、查看实时状态并通过 `frame-media://` 预览产物。视频、配音页签和删除条件见[模型管理](../../proposed/architecture/2026-10-24-model-management.md)。
   - 「项目」分组标题：右侧的新建按钮暂时禁用。
   - 底部的「设置中心」按钮。
 - 主画布背景为 `canvas` 加 24px 的 `dot` 点阵。左上角 16px 圆角，上边和左边有 `border` 描边，主内容区单独滚动。
@@ -112,11 +112,12 @@ Status: implemented
 
 设置入口与窗口布局由[设置快捷面板与分栏模态窗口](2026-10-24-settings-quick-panel.md)承接；本篇保留原始交互选择及主题、窗口机制的依据。
 
-- 使用 shadcn `Dialog` 加竖向 `Tabs`，共三个页签：
+- 使用 shadcn `Dialog` 加竖向 `Tabs`，共四个页签：
   - **外观**：用 `ToggleGroup` 选择跟随系统、明亮、暗黑，切换后立即生效。
   - **本地引擎**：显示连接状态、engine 版本、schema 版本、启动时间和「重新检查」按钮，内容来自 `features/engine-status`。
+  - **模型服务**：渠道与模型管理、拉取列表、两步连通测试、默认模型选择，内容来自 `features/model-services`；读响应不含明文密钥和附加请求头值。
   - **关于**：显示 logo、应用名和版本号。版本号由 Vite `define` 在构建时从 `apps/desktop/package.json` 注入。
-- 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'about'`，由 zod 校验。engine 退出时主进程会重载页面，弹窗在重载后仍然打开，停在同一个页签上显示错误。
+- 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'models' | 'about'`，由 zod 校验。engine 退出时主进程会重载页面，弹窗在重载后仍然打开，停在同一个页签上显示错误。
 - 非法 search 值回退为关闭；打开、切页和关闭保留当前路径。Dialog 关闭后焦点恢复到侧栏设置入口。外观读写使用 Query 与 mutation，读取失败可重试，写入失败保留原选择并显示中文错误；保存期间禁用切换，避免并发覆盖。
 
 ### logo 资源
@@ -129,7 +130,7 @@ Status: implemented
 
 ### CSP
 
-- 生产 CSP 的 `style-src` 改为 `'self' 'unsafe-inline'`，其余指令不变，`script-src` 仍是 `'self'`。
+- 生产 CSP 的 `style-src` 改为 `'self' 'unsafe-inline'`，`img-src` 与 `media-src` 加入 `frame-media:`，其余指令不变，`script-src` 仍是 `'self'`。
 - 原因：Radix Dialog 的滚动锁依赖 `react-remove-scroll`，它通过 `react-style-singleton` 动态插入 `<style>`，`style-src 'self'` 会拦截它。用 nonce 的话，需要在协议处理函数里改写 `index.html` 注入 nonce，并在 renderer 调用 `get-nonce` 的 `setNonce`，改动落在安全相关代码里。
 - 内联样式只能改变外观，不能执行脚本；React 会转义文本，页面中也没有拼接 HTML 的地方。
 

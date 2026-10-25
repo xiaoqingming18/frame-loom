@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Folder, PanelLeft, Plus, Search, SquarePen } from 'lucide-react';
+import { FlaskConical, Folder, PanelLeft, Plus, Search, SquarePen } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,7 @@ export function Sidebar({ hasError, onSettings }: { hasError: boolean; onSetting
           [
             { to: '/', label: '开始创作', Icon: SquarePen },
             { to: '/projects', label: '项目库', Icon: Folder },
+            { to: '/model-lab', label: '模型测试', Icon: FlaskConical },
           ] as const
         ).map(({ to, label, Icon }) => (
           <Link
