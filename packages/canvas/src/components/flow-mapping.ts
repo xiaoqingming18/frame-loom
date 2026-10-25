@@ -1,7 +1,10 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { CanvasDocument, CanvasEdgeDisplay, CanvasNode } from '@frame-loom/contracts';
 
-export type FlowNode = Node<{ node: CanvasNode }>;
+export type FlowNode = Node<{
+  node: CanvasNode;
+  upload?: { error: string | null; retry(): void; cancel(): void };
+}>;
 
 /** 把文档节点转换为 xyflow 节点；同一文档节点复用缓存对象，避免整图重渲染。 */
 export function createNodeMapper() {

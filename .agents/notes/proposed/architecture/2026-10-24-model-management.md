@@ -256,6 +256,7 @@ created_at, updated_at, finished_at
   - 只接受 64 位十六进制 sha256，只从 `<userData>/media/` 读取；
   - 视频播放需要支持 Range 请求；
   - CSP 的 `img-src` / `media-src` 加入该协议。
+  - 无限画布 03 已为视频抽帧启用协议 CORS，成功响应仅允许当前可信 renderer origin（生产为应用源，开发为实际服务器源），不反射外部 Origin；CSP 不变。
   - Electron 45 下 `protocol.handle` 加 `net.fetch(file://…)` 是否处理 Range 请求，实施时验证；不支持时改为自行实现 Range。
 
 ### 界面

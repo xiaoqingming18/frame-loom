@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { Sha256 } from './generation.js';
 
 export const CANVAS_LIMITS = { nodes: 2000, edges: 4000, bytes: 8 * 1024 * 1024 } as const;
+export const canvasDocumentBytes = (document: unknown): number =>
+  new TextEncoder().encode(JSON.stringify(document)).byteLength;
 const Id = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 export const CanvasId = z.string().regex(/^[a-z0-9-]{1,64}$/);
 const Finite = z.number().finite();
@@ -90,6 +92,8 @@ export const CanvasDocument = z
     edges: z.array(CanvasEdge).max(CANVAS_LIMITS.edges),
   })
   .superRefine((document, context) => {
+    if (canvasDocumentBytes(document) > CANVAS_LIMITS.bytes)
+      context.addIssue({ code: 'custom', message: '画布文档不能超过 8 MiB' });
     const seen = new Map<string, CanvasNode>();
     document.nodes.forEach((node, index) => {
       const path = ['nodes', index];
@@ -97,7 +101,7 @@ export const CanvasDocument = z
       if (node.parentId) {
         const parent = seen.get(node.parentId);
         // xyflow 要求父节点排在子节点之前；首期只支持一层分组。
-        if (!parent || parent.type !== 'group' || parent.parentId)
+        if (!parent || parent.type !== 'group' || parent.parentId || node.type === 'group')
           context.addIssue({ code: 'custom', path, message: '父节点必须是排在前面的顶层分组' });
       }
       const schema = CANVAS_BUILTIN_DATA[node.type];

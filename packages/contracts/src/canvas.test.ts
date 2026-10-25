@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CANVAS_LIMITS, CanvasDocument, CanvasView } from './canvas.js';
+import { CANVAS_LIMITS, canvasDocumentBytes, CanvasDocument, CanvasView } from './canvas.js';
 
 const sha = 'a'.repeat(64);
 const media = (extra = {}) => ({
@@ -80,6 +80,31 @@ describe('CanvasDocument', () => {
   it('限制节点数量', () => {
     const nodes = Array.from({ length: CANVAS_LIMITS.nodes + 1 }, (_, i) => node(`n${i}`, 'x'));
     expect(CanvasDocument.safeParse(doc(nodes)).success).toBe(false);
+    expect(CanvasDocument.safeParse(doc(nodes.slice(0, CANVAS_LIMITS.nodes))).success).toBe(true);
+  });
+
+  it('限制连线数量、UTF-8 文档体积及分组层级', () => {
+    const nodes = [node('a'), node('b')];
+    const edges = Array.from({ length: CANVAS_LIMITS.edges + 1 }, (_, i) =>
+      edge(`e${i}`, 'a', 'b'),
+    );
+    expect(CanvasDocument.safeParse(doc(nodes, edges)).success).toBe(false);
+    expect(CanvasDocument.safeParse(doc(nodes, edges.slice(0, CANVAS_LIMITS.edges))).success).toBe(
+      true,
+    );
+    const value = doc([node('a', 'x', { data: { text: '' } })]);
+    const fill = CANVAS_LIMITS.bytes - canvasDocumentBytes(value);
+    const atLimit = doc([node('a', 'x', { data: { text: 'x'.repeat(fill) } })]);
+    expect(CanvasDocument.safeParse(atLimit).success).toBe(true);
+    expect(
+      CanvasDocument.safeParse(
+        doc([node('a', 'x', { data: { text: 'x'.repeat(fill - 1) + '画' } })]),
+      ).success,
+    ).toBe(false);
+    expect(
+      CanvasDocument.safeParse(doc([node('g', 'group'), node('h', 'group', { parentId: 'g' })]))
+        .success,
+    ).toBe(false);
   });
 });
 

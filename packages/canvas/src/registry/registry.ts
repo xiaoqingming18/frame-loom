@@ -35,6 +35,8 @@ export interface NodeTypeDefinition<Data = unknown> {
   keepAspect?: boolean;
   dataSchema: z.ZodType<Data>;
   createData(): Data;
+  /** 把旧版本数据迁移到当前版本；未来版本由占位视图保留。 */
+  migrate?(data: unknown, fromVersion: number): Data;
   inputs(data: Data): readonly InputPort[];
   outputs(data: Data): readonly OutputPort[];
   /** 节点当前可供下游引用的产物；没有产物时返回 null。 */
@@ -61,15 +63,34 @@ export class NodeRegistry {
     return [...this.types.values()];
   }
 
+  supports(node: CanvasNode): boolean {
+    const definition = this.get(node.type);
+    return (
+      !!definition &&
+      node.typeVersion === definition.version &&
+      definition.dataSchema.safeParse(node.data).success
+    );
+  }
+
   inputs(node: CanvasNode): readonly InputPort[] {
     const definition = this.get(node.type);
     const data = definition?.dataSchema.safeParse(node.data);
-    return definition && data?.success ? definition.inputs(data.data) : [];
+    return definition && node.typeVersion === definition.version && data?.success
+      ? definition.inputs(data.data)
+      : [];
   }
 
   outputs(node: CanvasNode): readonly OutputPort[] {
     const definition = this.get(node.type);
     const data = definition?.dataSchema.safeParse(node.data);
-    return definition && data?.success ? definition.outputs(data.data) : [];
+    return definition && node.typeVersion === definition.version && data?.success
+      ? definition.outputs(data.data)
+      : [];
   }
+}
+
+export function defineNodeType<Data>(
+  definition: NodeTypeDefinition<Data>,
+): NodeTypeDefinition<Data> {
+  return definition;
 }

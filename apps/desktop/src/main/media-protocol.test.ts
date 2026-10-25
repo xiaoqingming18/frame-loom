@@ -38,11 +38,24 @@ it('只读本地哈希文件，响应正确字节和状态', async () => {
     await writeFile(join(root, `${'a'.repeat(64)}.png`), '0123456789');
     const full = await serveMedia(root, new Request(url));
     expect(full.status).toBe(200);
+    expect(full.headers.get('access-control-allow-origin')).toBe('app://frame-loom');
     expect(await full.text()).toBe('0123456789');
     const range = await serveMedia(root, new Request(url, { headers: { Range: 'bytes=2-4' } }));
     expect(range.status).toBe(206);
     expect(range.headers.get('content-range')).toBe('bytes 2-4/10');
+    expect(range.headers.get('access-control-allow-origin')).toBe('app://frame-loom');
     expect(await range.text()).toBe('234');
+    const dev = await serveMedia(
+      root,
+      new Request(url, { method: 'HEAD' }),
+      'http://localhost:5173',
+    );
+    expect(dev.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    const foreign = await serveMedia(
+      root,
+      new Request(url, { method: 'HEAD', headers: { Origin: 'https://example.com' } }),
+    );
+    expect(foreign.headers.get('access-control-allow-origin')).toBe('app://frame-loom');
     expect(
       (await serveMedia(root, new Request(url, { method: 'HEAD' }))).headers.get('content-length'),
     ).toBe('10');

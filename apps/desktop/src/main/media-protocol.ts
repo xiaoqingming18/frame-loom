@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
+import { APP_ORIGIN } from './security.js';
 
 const extensions = {
   png: 'image/png',
@@ -37,7 +38,11 @@ export function mediaRange(
   return { start, end };
 }
 
-export async function serveMedia(root: string, request: Request): Promise<Response> {
+export async function serveMedia(
+  root: string,
+  request: Request,
+  origin = APP_ORIGIN,
+): Promise<Response> {
   const hash = mediaHash(request.url);
   if (!hash || !['GET', 'HEAD'].includes(request.method))
     return new Response(null, { status: 403 });
@@ -63,6 +68,7 @@ export async function serveMedia(root: string, request: Request): Promise<Respon
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Allow-Origin': origin,
     };
     if (range) headers['Content-Range'] = `bytes ${range.start}-${range.end}/${size}`;
     const body =

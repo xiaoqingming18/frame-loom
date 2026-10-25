@@ -25,26 +25,35 @@ export function toVersion(media: MediaFile, posterSha256?: string): CanvasMediaV
 
 /** 在浏览器中抽取视频首帧作为封面；失败时返回 null，节点仍可正常使用。 */
 export async function extractPoster(url: string, signal?: AbortSignal): Promise<Blob | null> {
+  if (signal?.aborted) return null;
   const video = document.createElement('video');
   video.muted = true;
   video.preload = 'auto';
-  video.src = url;
+  video.crossOrigin = 'anonymous';
+  let cleanup = () => {};
   try {
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timeout')), 15_000);
-      signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      video.addEventListener('loadeddata', () => {
+      const fail = () => reject(new Error('视频解码失败或已取消'));
+      const ready = () => resolve();
+      const loaded = () => {
         // 首帧常是黑场，略微向后取帧。
-        video.currentTime = Math.min(0.1, video.duration || 0);
-      });
-      video.addEventListener('seeked', () => {
+        const time = Math.min(0.1, video.duration / 2 || 0);
+        if (!time) resolve();
+        else video.currentTime = time;
+      };
+      const timer = setTimeout(fail, 15_000);
+      cleanup = () => {
         clearTimeout(timer);
-        resolve();
-      });
-      video.addEventListener('error', () => {
-        clearTimeout(timer);
-        reject(new Error('decode'));
-      });
+        signal?.removeEventListener('abort', fail);
+        video.removeEventListener('loadeddata', loaded);
+        video.removeEventListener('seeked', ready);
+        video.removeEventListener('error', fail);
+      };
+      signal?.addEventListener('abort', fail, { once: true });
+      video.addEventListener('loadeddata', loaded);
+      video.addEventListener('seeked', ready);
+      video.addEventListener('error', fail);
+      video.src = url;
     });
     const canvas = document.createElement('canvas');
     const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight, 1));
@@ -55,6 +64,7 @@ export async function extractPoster(url: string, signal?: AbortSignal): Promise<
   } catch {
     return null;
   } finally {
+    cleanup();
     video.removeAttribute('src');
     video.load();
   }

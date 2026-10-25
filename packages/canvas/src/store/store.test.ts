@@ -60,4 +60,19 @@ describe('canvas store 历史', () => {
     expect(store.getState().selectedNodes.size).toBe(0);
     expect(store.getState().past).toEqual([]);
   });
+
+  it('拒绝超过文档字节上限的提交且不污染历史', () => {
+    const store = createCanvasStore(doc([media('a')]));
+    expect(
+      store.getState().apply((document) =>
+        updateData<CanvasMediaData>(document, 'a', (data) => ({
+          ...data,
+          prompt: '画'.repeat(3_000_000),
+        })),
+      ),
+    ).toBe(false);
+    expect(store.getState().notice?.text).toContain('8 MiB');
+    expect(store.getState().document.nodes[0].data).toMatchObject({ prompt: '' });
+    expect(store.getState().past).toEqual([]);
+  });
 });

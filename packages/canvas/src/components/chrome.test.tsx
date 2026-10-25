@@ -63,7 +63,9 @@ it('底部栏包含已确认的工具，工具切换与撤销状态跟随独立 
   expect(store.getState().tool).toBe('hand');
   const undo = screen.getByRole<HTMLButtonElement>('button', { name: '撤销' });
   expect(undo.disabled).toBe(true);
-  act(() => store.getState().apply(() => doc([media('a')])));
+  act(() => {
+    store.getState().apply(() => doc([media('a')]));
+  });
   expect(undo.disabled).toBe(false);
   fireEvent.click(undo);
   expect(callbacks.undo).toHaveBeenCalledOnce();

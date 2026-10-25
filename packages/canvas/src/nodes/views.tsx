@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Handle, NodeResizer, Position, useUpdateNodeInternals } from '@xyflow/react';
+import {
+  Handle,
+  NodeResizer,
+  Position,
+  useConnection,
+  useUpdateNodeInternals,
+} from '@xyflow/react';
 import { Film, ImageIcon, Loader2, Lock } from 'lucide-react';
 import type { CanvasGroupData, CanvasMediaData, CanvasVideoMode } from '@frame-loom/contracts';
 import { cn } from '@frame-loom/ui/lib/utils';
@@ -7,6 +13,7 @@ import { useCanvas, useCanvasState } from '../context';
 import { changeDataDroppingEdges, updateData, updateNode } from '../commands/commands';
 import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
 import { activeVersion, GROUP_COLORS, VIDEO_MODES } from './media';
+import { checkConnection } from '../registry/connections';
 
 const portClass: Record<string, string> = {
   image: 'canvas-port-image',
@@ -25,6 +32,17 @@ function Ports({
   outputs: readonly OutputPort[];
 }) {
   const update = useUpdateNodeInternals();
+  const { registry, store } = useCanvas();
+  const from = useConnection((connection) => connection.fromHandle);
+  const incompatible = (id: string, type: 'source' | 'target') => {
+    if (!from || from.type === type) return false;
+    return !checkConnection(registry, store.getState().document, {
+      source: type === 'source' ? nodeId : from.nodeId,
+      sourceHandle: type === 'source' ? id : from.id,
+      target: type === 'target' ? nodeId : from.nodeId,
+      targetHandle: type === 'target' ? id : from.id,
+    }).ok;
+  };
   const key = inputs.map((port) => port.id).join();
   // 端口随视频方式增减时，xyflow 需要重新测量端口位置。
   useEffect(() => update(nodeId), [key, nodeId, update]);
@@ -38,7 +56,11 @@ function Ports({
           position={Position.Left}
           title={`${port.label}（接受 ${port.accepts.map((kind) => kindName[kind]).join('、')}）`}
           aria-label={port.label}
-          className={cn('canvas-port', portClass[port.accepts[0]])}
+          className={cn(
+            'canvas-port',
+            portClass[port.accepts[0]],
+            incompatible(port.id, 'target') && 'canvas-port-incompatible',
+          )}
           style={{ top: `${((index + 1) / (inputs.length + 1)) * 100}%` }}
         >
           {inputs.length > 1 && <span className="canvas-port-label">{port.label}</span>}
@@ -52,7 +74,11 @@ function Ports({
           position={Position.Right}
           title={`输出${port.label}`}
           aria-label={`输出${port.label}`}
-          className={cn('canvas-port', portClass[port.dataType])}
+          className={cn(
+            'canvas-port',
+            portClass[port.dataType],
+            incompatible(port.id, 'source') && 'canvas-port-incompatible',
+          )}
         />
       ))}
     </>
@@ -198,6 +224,7 @@ function Empty({ kind, pending }: { kind: 'image' | 'video'; pending: boolean })
 export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
   const { host } = useCanvas();
   const version = activeVersion(props.node.data);
+  // shortcut: 直接展示原图，实测出现大量 4K 图片解码内存压力时由 engine 生成缩略图。
   return (
     <MediaFrame {...props} kind="image">
       {version ? (
@@ -219,15 +246,29 @@ export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
 export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
   const { host, store, registry } = useCanvas();
   const version = activeVersion(props.node.data);
-  const hovered = useCanvasState((state) => state.hoveredNode === props.node.id);
-  // 只为悬停或选中的节点挂载播放器，避免超出 Chromium 的媒体播放器上限。
-  const play = !!version && (hovered || props.selected);
+  const active = useCanvasState((state) => {
+    const playable = (id: string) =>
+      state.document.nodes.some(
+        (node) =>
+          node.id === id &&
+          node.type === 'video' &&
+          registry.supports(node) &&
+          !!activeVersion(node.data as CanvasMediaData),
+      );
+    const id =
+      state.hoveredNode && playable(state.hoveredNode)
+        ? state.hoveredNode
+        : [...state.selectedNodes].find(playable);
+    return id === props.node.id;
+  });
+  // 悬停优先，其次选中的第一个视频；整张画布最多挂载一个预览播放器。
+  const play = !!version && active;
   const mode = props.node.data.mode ?? 'text';
   const setMode = (next: CanvasVideoMode) => {
     if (next === mode) return;
     const state = store.getState();
     let dropped = 0;
-    state.apply((document) => {
+    const changed = state.apply((document) => {
       const result = changeDataDroppingEdges<CanvasMediaData>(
         registry,
         document,
@@ -240,7 +281,7 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
       dropped = result.dropped;
       return result.document;
     });
-    if (dropped)
+    if (changed && dropped)
       state.notify(
         `已切换为${VIDEO_MODES.find((item) => item.id === next)!.label}，断开 ${dropped} 条不兼容的连线`,
       );

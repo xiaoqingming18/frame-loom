@@ -1,6 +1,14 @@
 import { z } from 'zod';
-import { CanvasEdge, CanvasNode, type CanvasDocument } from '@frame-loom/contracts';
-import { absolutePosition, boundsOf, newId, type Point } from '../commands/commands';
+import { CanvasDocument, CanvasEdge, CanvasNode } from '@frame-loom/contracts';
+import {
+  absolutePosition,
+  boundsOf,
+  CanvasCommandError,
+  newId,
+  type Point,
+} from '../commands/commands';
+import { checkConnection } from '../registry/connections';
+import type { NodeRegistry } from '../registry/registry';
 
 export const CLIPBOARD_MIME = 'application/x-frame-loom-canvas';
 export const CLIPBOARD_PREFIX = 'frame-loom-canvas/v1:';
@@ -36,21 +44,48 @@ export function copySelection(
 }
 
 export function serialize(payload: ClipboardPayload): string {
-  return CLIPBOARD_PREFIX + JSON.stringify(payload);
+  const text = CLIPBOARD_PREFIX + JSON.stringify(payload);
+  if (new TextEncoder().encode(text).byteLength > CLIPBOARD_MAX_BYTES)
+    throw new CanvasCommandError('复制内容不能超过 4 MiB');
+  if (payload.nodes.length > 500 || payload.edges.length > 1000)
+    throw new CanvasCommandError('一次最多复制 500 个节点、1000 条连线');
+  return text;
 }
 
 /** 剪贴板内容不可信：限制大小并严格校验结构。 */
-export function deserialize(text: string): ClipboardPayload | null {
-  if (!text.startsWith(CLIPBOARD_PREFIX) || text.length > CLIPBOARD_MAX_BYTES) return null;
+export function deserialize(text: string, registry?: NodeRegistry): ClipboardPayload | null {
+  if (
+    !text.startsWith(CLIPBOARD_PREFIX) ||
+    new TextEncoder().encode(text).byteLength > CLIPBOARD_MAX_BYTES
+  )
+    return null;
   try {
     const parsed = Payload.safeParse(JSON.parse(text.slice(CLIPBOARD_PREFIX.length)));
     if (!parsed.success) return null;
     const ids = new Set(parsed.data.nodes.map((node) => node.id));
-    if (ids.size !== parsed.data.nodes.length) return null;
-    return {
+    const payload = {
       nodes: parsed.data.nodes,
       edges: parsed.data.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
     };
+    if (!CanvasDocument.safeParse({ schemaVersion: 1, ...payload }).success) return null;
+    if (registry) {
+      for (const node of payload.nodes) {
+        const definition = registry.get(node.type);
+        if (
+          definition &&
+          (node.typeVersion !== definition.version ||
+            !definition.dataSchema.safeParse(node.data).success)
+        )
+          return null;
+      }
+      const accepted: CanvasEdge[] = [];
+      for (const edge of payload.edges) {
+        if (!checkConnection(registry, { nodes: payload.nodes, edges: accepted }, edge).ok)
+          return null;
+        accepted.push(edge);
+      }
+    }
+    return payload;
   } catch {
     return null;
   }

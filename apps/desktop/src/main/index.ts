@@ -41,7 +41,13 @@ if (!hasLock) {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'frame-media',
-      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        stream: true,
+        corsEnabled: true,
+      },
     },
     {
       scheme: 'app',
@@ -74,7 +80,7 @@ async function start(): Promise<void> {
     const devUrl = !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined;
     const origin = devUrl ? new URL(devUrl).origin : APP_ORIGIN;
     protocol.handle('frame-media', (request) =>
-      serveMedia(join(app.getPath('userData'), 'media'), request),
+      serveMedia(join(app.getPath('userData'), 'media'), request, origin),
     );
     protocol.handle('app', async (request) => {
       const file = rendererFile(join(directory, '../renderer'), request.url);

@@ -10,6 +10,7 @@ import {
   serialize,
 } from './clipboard';
 import { shortcutFor, shouldIgnore } from './keys';
+import { createBuiltinRegistry } from '../nodes/builtin';
 
 const key = (
   key: string,
@@ -104,5 +105,54 @@ describe('剪贴板', () => {
       deserialize(serialize({ nodes: [payload.nodes[0], payload.nodes[0]], edges: [] })),
     ).toBeNull();
     expect(deserialize(CLIPBOARD_PREFIX + ' '.repeat(CLIPBOARD_MAX_BYTES))).toBeNull();
+    expect(
+      deserialize(
+        serialize({ nodes: [{ ...payload.nodes[0], title: '画'.repeat(500_000) }], edges: [] }),
+      ),
+    ).toBeNull();
+  });
+
+  it('按 UTF-8 大小限制复制，校验内置 data、父子顺序与重复边', () => {
+    const payload = copySelection(source, new Set(['b']))!;
+    expect(() =>
+      serialize({ nodes: [{ ...payload.nodes[0], title: '画'.repeat(1_500_000) }], edges: [] }),
+    ).toThrow('4 MiB');
+    const groupPayload = { nodes: [media('a', 'image', { parentId: 'g' }), group('g')], edges: [] };
+    expect(deserialize(serialize(groupPayload))).toBeNull();
+    expect(
+      deserialize(serialize({ nodes: [{ ...payload.nodes[0], data: {} }], edges: [] })),
+    ).toBeNull();
+    expect(
+      deserialize(
+        serialize({
+          nodes: [payload.nodes[0], media('c')],
+          edges: [edge('e', 'b', 'c'), edge('e', 'b', 'c')],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('按注册表拒绝伪造端口和循环，重写 inputOrder', () => {
+    const registry = createBuiltinRegistry();
+    const nodes = [
+      media('a'),
+      media('b', 'image', {
+        data: { versions: [], activeVersion: 0, prompt: '', inputOrder: ['e1', 'external'] },
+      }),
+    ];
+    const payload = { nodes, edges: [edge('e1', 'a', 'b')] };
+    const parsed = deserialize(serialize(payload), registry)!;
+    expect(parsed).not.toBeNull();
+    const result = instantiate(parsed, { x: 10, y: 10 });
+    expect(result.nodes[1].data).toMatchObject({ inputOrder: [result.edges[0].id] });
+    expect(
+      deserialize(serialize({ nodes, edges: [edge('e1', 'a', 'b', 'missing')] }), registry),
+    ).toBeNull();
+    expect(
+      deserialize(
+        serialize({ nodes, edges: [edge('e1', 'a', 'b'), edge('e2', 'b', 'a')] }),
+        registry,
+      ),
+    ).toBeNull();
   });
 });

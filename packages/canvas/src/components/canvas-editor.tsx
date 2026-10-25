@@ -56,6 +56,7 @@ import { CLIPBOARD_MIME, CLIPBOARD_PREFIX } from '../interaction/clipboard';
 import { createNodeMapper, toFlowEdges, type FlowNode } from './flow-mapping';
 import { AddNodeItems, BottomDock, EmptyHint, HelpDialog, Notice, TopRightBar } from './chrome';
 import { PointMenu } from './point-menu';
+import { UploadNode } from './upload-node';
 import { useCanvasActions, ZOOM_LIMITS, type PendingConnection } from './use-actions';
 
 const COMPACT_WIDTH = 640;
@@ -138,6 +139,8 @@ function Editor({ className }: { className?: string }) {
   const root = useRef<HTMLDivElement>(null);
   const pointer = useRef<Point | null>(null);
   const connecting = useRef<PendingConnection | null>(null);
+  const reconnecting = useRef<string | undefined>(undefined);
+  const [connectingNode, setConnectingNode] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -154,21 +157,44 @@ function Editor({ className }: { className?: string }) {
   }, [registry]);
   const [mapNodes] = useState(createNodeMapper);
   const nodes = useMemo(
-    () =>
-      mapNodes(document, selectedNodes, hand).map((node) =>
-        nodeTypes[node.type!] ? node : { ...node, type: 'unknown' },
+    () => [
+      ...mapNodes(document, selectedNodes, hand).map((node) =>
+        registry.supports(node.data.node) ? node : { ...node, type: 'unknown', connectable: false },
       ),
-    [document, selectedNodes, hand, mapNodes, nodeTypes],
+      ...actions.uploads.map(({ node, error }): FlowNode => ({
+        id: node.id,
+        type: 'upload',
+        position: node.position,
+        width: node.size.width,
+        height: node.size.height,
+        selectable: false,
+        draggable: false,
+        connectable: false,
+        data: {
+          node,
+          upload: {
+            error,
+            retry: () => actions.retryImport(node.id),
+            cancel: () => actions.cancelImport(node.id),
+          },
+        },
+      })),
+    ],
+    [document, selectedNodes, hand, mapNodes, registry, actions],
   );
-  const allNodeTypes = useMemo(() => ({ ...nodeTypes, unknown: UnknownFlowNode }), [nodeTypes]);
+  const allNodeTypes = useMemo(
+    () => ({ ...nodeTypes, unknown: UnknownFlowNode, upload: UploadNode }),
+    [nodeTypes],
+  );
   const edges = useMemo(() => {
     const kinds = new Map(
       document.nodes.map((node) => [node.id, registry.outputs(node)[0]?.dataType ?? 'image']),
     );
     const focus = new Set(view.edgeDisplay === 'related' ? [...selectedNodes] : []);
     if (hovered) focus.add(hovered);
+    if (connectingNode) focus.add(connectingNode);
     return toFlowEdges(document, selectedEdges, view.edgeDisplay, focus, kinds);
-  }, [document, registry, selectedEdges, selectedNodes, hovered, view.edgeDisplay]);
+  }, [document, registry, selectedEdges, selectedNodes, hovered, connectingNode, view.edgeDisplay]);
 
   useEffect(() => {
     const element = root.current;
@@ -228,7 +254,7 @@ function Editor({ className }: { className?: string }) {
 
   const isValidConnection = useCallback(
     (connection: Connection | Edge) =>
-      checkConnection(registry, store.getState().document, connection).ok,
+      checkConnection(registry, store.getState().document, connection, reconnecting.current).ok,
     [registry, store],
   );
 
@@ -246,6 +272,7 @@ function Editor({ className }: { className?: string }) {
   );
 
   const onConnectStart = useCallback((_event: unknown, params: OnConnectStartParams) => {
+    setConnectingNode(params.nodeId);
     connecting.current =
       params.nodeId && params.handleId && params.handleType
         ? { nodeId: params.nodeId, handleId: params.handleId, handleType: params.handleType }
@@ -255,6 +282,7 @@ function Editor({ className }: { className?: string }) {
   const onConnectEnd = useCallback(
     (event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
       const pending = connecting.current;
+      setConnectingNode(null);
       connecting.current = null;
       if (!pending) return;
       if (state.toHandle && state.isValid === false) {
@@ -398,11 +426,12 @@ function Editor({ className }: { className?: string }) {
     };
     const copy = (event: ClipboardEvent) => {
       if (!inCanvas(event) || shouldIgnoreTarget(event.target)) return;
-      const text = actions.copy(event.type === 'cut');
+      const text = actions.copy();
       if (!text || !event.clipboardData) return;
       event.preventDefault();
       event.clipboardData.setData(CLIPBOARD_MIME, text);
       event.clipboardData.setData('text/plain', text);
+      if (event.type === 'cut') actions.deleteSelection();
     };
     const paste = (event: ClipboardEvent) => {
       if (!inCanvas(event) || shouldIgnoreTarget(event.target) || !event.clipboardData) return;
@@ -450,7 +479,7 @@ function Editor({ className }: { className?: string }) {
   };
 
   const selectionTool = tool === 'select' && !spaceHeld;
-  const empty = document.nodes.length === 0;
+  const empty = document.nodes.length === 0 && actions.uploads.length === 0;
   const selectedCount = selectedNodes.size;
   const locked = [...selectedNodes].some(
     (id) => document.nodes.find((node) => node.id === id)?.locked,
@@ -465,6 +494,7 @@ function Editor({ className }: { className?: string }) {
       onPointerDownCapture={(event) => {
         const target = event.target as HTMLElement;
         if (
+          event.currentTarget.contains(target) &&
           !target.closest(
             'button, a[href], input, textarea, select, [contenteditable], [role="radio"]',
           )
@@ -504,6 +534,14 @@ function Editor({ className }: { className?: string }) {
         onConnectStart={onConnectStart}
         onConnectEnd={onConnectEnd}
         onReconnect={onReconnect}
+        onReconnectStart={(_event, edge) => {
+          reconnecting.current = edge.id;
+          setConnectingNode(edge.source);
+        }}
+        onReconnectEnd={() => {
+          reconnecting.current = undefined;
+          setConnectingNode(null);
+        }}
         isValidConnection={isValidConnection}
         onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}

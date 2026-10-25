@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useViewport } from '@xyflow/react';
 import {
   Cable,
@@ -14,6 +14,7 @@ import {
   Shapes,
   SquareDashedMousePointer,
   Undo2,
+  Upload,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -40,6 +41,7 @@ import type { CanvasTool } from '../store/store';
 import { ToolbarButton, ToolbarDivider } from './toolbar-button';
 import type { CanvasActionsApi, PendingConnection } from './use-actions';
 import type { Point } from '../commands/commands';
+import { IMAGE_MIME, VIDEO_MIME } from '../interaction/media-import';
 
 /** 添加节点菜单的条目由注册表生成，不显示未实现的类型。 */
 export function AddNodeItems({
@@ -87,6 +89,7 @@ export function BottomDock({
   onHelp: () => void;
 }) {
   const { store } = useCanvas();
+  const input = useRef<HTMLInputElement>(null);
   const tool = useCanvasState((state) => state.tool);
   const canUndo = useCanvasState((state) => state.past.length > 0);
   const canRedo = useCanvasState((state) => state.future.length > 0);
@@ -96,6 +99,19 @@ export function BottomDock({
       aria-label="画布工具"
       className="canvas-float absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-popover p-1.5 shadow-canvas-dock"
     >
+      <input
+        ref={input}
+        type="file"
+        multiple
+        accept={[...IMAGE_MIME, ...VIDEO_MIME].join(',')}
+        aria-label="上传图片或视频"
+        className="hidden"
+        onChange={(event) => {
+          const files = [...(event.target.files ?? [])];
+          if (files.length) void actions.importFiles(files);
+          event.target.value = '';
+        }}
+      />
       <DropdownMenu open={addOpen} onOpenChange={onAddOpenChange}>
         <DropdownMenuTrigger asChild>
           <ToolbarButton label="添加节点" shortcut="N" primary>
@@ -105,6 +121,11 @@ export function BottomDock({
         <DropdownMenuContent side="top" align="start" sideOffset={10}>
           <DropdownMenuLabel>添加节点</DropdownMenuLabel>
           <AddNodeItems actions={actions} />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => input.current?.click()}>
+            <Upload aria-hidden="true" />
+            上传图片或视频
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       {tools.map((item) => (

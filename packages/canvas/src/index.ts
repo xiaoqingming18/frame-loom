@@ -1,7 +1,7 @@
 export { CanvasEditor, type CanvasEditorProps } from './components/canvas-editor';
 export type { CanvasHost, CanvasGenerationHost } from './host';
 export { createCanvasStore, DEFAULT_VIEW, type CanvasStore, type CanvasTool } from './store/store';
-export { NodeRegistry } from './registry/registry';
+export { defineNodeType, NodeRegistry } from './registry/registry';
 export type {
   InputPort,
   NodeTypeDefinition,

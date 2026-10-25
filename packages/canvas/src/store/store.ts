@@ -1,10 +1,23 @@
 import { createStore } from 'zustand/vanilla';
 import {
   emptyCanvasDocument,
+  canvasDocumentBytes,
+  CANVAS_LIMITS,
   type CanvasDocument,
   type CanvasEdgeDisplay,
   type CanvasView,
 } from '@frame-loom/contracts';
+import { CanvasCommandError } from '../commands/commands';
+
+function withinLimits(document: CanvasDocument): CanvasDocument {
+  if (
+    document.nodes.length > CANVAS_LIMITS.nodes ||
+    document.edges.length > CANVAS_LIMITS.edges ||
+    canvasDocumentBytes(document) > CANVAS_LIMITS.bytes
+  )
+    throw new CanvasCommandError('画布最多 2000 个节点、4000 条连线，文档不能超过 8 MiB');
+  return document;
+}
 
 export type CanvasTool = 'pointer' | 'select' | 'hand';
 export const HISTORY_LIMIT = 100;
@@ -31,8 +44,11 @@ export interface CanvasState {
 }
 
 export interface CanvasActions {
-  /** 用纯函数修改文档；默认记一步历史，返回值与原文档相同则不记录。 */
-  apply(change: (document: CanvasDocument) => CanvasDocument, options?: { record?: boolean }): void;
+  /** 用纯函数修改文档；非法编辑提示并返回 false，未变化不记录历史。 */
+  apply(
+    change: (document: CanvasDocument) => CanvasDocument,
+    options?: { record?: boolean },
+  ): boolean;
   begin(): void;
   commit(): void;
   /** 生成任务回写等系统修改：同步改写当前文档与全部历史快照，不形成撤销步骤。 */
@@ -60,7 +76,7 @@ export function createCanvasStore(
   view: CanvasView | null = null,
 ) {
   return createStore<CanvasState & CanvasActions>()((set, get) => ({
-    document,
+    document: withinLimits(document),
     past: [],
     future: [],
     transaction: null,
@@ -74,11 +90,20 @@ export function createCanvasStore(
     notice: null,
     apply(change, { record = true } = {}) {
       const { document: current, past, transaction } = get();
-      const next = change(current);
-      if (next === current) return;
+      let next: CanvasDocument;
+      try {
+        next = change(current);
+        if (next === current) return true;
+        withinLimits(next);
+      } catch (error) {
+        if (!(error instanceof CanvasCommandError)) throw error;
+        get().notify(error.message);
+        return false;
+      }
       if (!record || transaction) set({ document: next });
       else set({ document: next, past: [...past, current].slice(-HISTORY_LIMIT), future: [] });
       pruneSelection(set, get);
+      return true;
     },
     begin() {
       if (!get().transaction) set({ transaction: get().document });
@@ -97,16 +122,16 @@ export function createCanvasStore(
     applySystem(change) {
       const { document: current, past, future, transaction } = get();
       set({
-        document: change(current),
-        past: past.map(change),
-        future: future.map(change),
-        transaction: transaction && change(transaction),
+        document: withinLimits(change(current)),
+        past: past.map((snapshot) => withinLimits(change(snapshot))),
+        future: future.map((snapshot) => withinLimits(change(snapshot))),
+        transaction: transaction && withinLimits(change(transaction)),
       });
       pruneSelection(set, get);
     },
     reset(next, nextView) {
       set({
-        document: next,
+        document: withinLimits(next),
         past: [],
         future: [],
         transaction: null,

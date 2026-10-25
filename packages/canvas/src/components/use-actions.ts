@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import type { CanvasDocument, CanvasMediaData, CanvasNode } from '@frame-loom/contracts';
+import type { CanvasDocument } from '@frame-loom/contracts';
 import { useCanvas } from '../context';
 import {
   addNodes,
@@ -23,8 +23,8 @@ import {
   serialize,
   CLIPBOARD_MIME,
 } from '../interaction/clipboard';
-import { importMedia, mediaKind } from '../interaction/media-import';
-import { fitMediaSize } from '../nodes/media';
+import { checkConnection } from '../registry/connections';
+import { useMediaImports } from './use-media-imports';
 
 export const ZOOM_LIMITS = { min: 0.1, max: 4 };
 const PASTE_OFFSET = 24;
@@ -37,21 +37,14 @@ export type PendingConnection = {
 
 /** 画布编辑动作集合：底部栏、右上工具组、快捷键与右键菜单共用。 */
 export function useCanvasActions() {
-  const { store, registry, host } = useCanvas();
+  const { store, registry } = useCanvas();
   const flow = useReactFlow();
+  const imports = useMediaImports();
+  const paste = useRef({ count: 0, at: null as Point | null });
 
   return useMemo(() => {
     const state = () => store.getState();
-    const run = (change: (document: CanvasDocument) => CanvasDocument) => {
-      try {
-        state().apply(change);
-        return true;
-      } catch (error) {
-        if (error instanceof CanvasCommandError) state().notify(error.message);
-        else throw error;
-        return false;
-      }
-    };
+    const run = (change: (document: CanvasDocument) => CanvasDocument) => state().apply(change);
     const viewportCenter = (): Point => {
       const pane = document.querySelector('.react-flow');
       const rect = pane?.getBoundingClientRect();
@@ -61,25 +54,28 @@ export function useCanvasActions() {
       });
     };
     // 连续粘贴的偏移计数只在事件处理中读写，不参与渲染。
-    const pasteState = { count: 0, at: null as Point | null };
+    const pasteState = paste.current;
 
     const actions = {
       addNode(type: string, at: Point = viewportCenter(), pending?: PendingConnection) {
         const node = createNode(registry, type, at);
-        let ok = run((document) => addNodes(document, [node]));
-        if (ok && pending) {
+        const ok = run((document) => {
+          const next = addNodes(document, [node]);
+          if (!pending) return next;
           const source = pending.handleType === 'source';
-          const port = source ? registry.inputs(node)[0] : registry.outputs(node)[0];
-          if (port)
-            ok = run((document) =>
-              connect(registry, document, {
-                source: source ? pending.nodeId : node.id,
-                sourceHandle: source ? pending.handleId : port.id,
-                target: source ? node.id : pending.nodeId,
-                targetHandle: source ? port.id : pending.handleId,
-              }),
-            );
-        }
+          const ports = source ? registry.inputs(node) : registry.outputs(node);
+          for (const port of ports) {
+            const attempt = {
+              source: source ? pending.nodeId : node.id,
+              sourceHandle: source ? pending.handleId : port.id,
+              target: source ? node.id : pending.nodeId,
+              targetHandle: source ? port.id : pending.handleId,
+            };
+            if (checkConnection(registry, next, attempt).ok)
+              return connect(registry, next, attempt);
+          }
+          throw new CanvasCommandError('没有可连接的端口');
+        });
         if (ok) state().select([node.id]);
         return node.id;
       },
@@ -91,16 +87,21 @@ export function useCanvasActions() {
       selectAll() {
         state().select(state().document.nodes.map((node) => node.id));
       },
-      copy(cut = false): string | null {
+      copy(): string | null {
         const { document, selectedNodes } = state();
         const payload = copySelection(document, selectedNodes);
         if (!payload) return null;
-        if (cut) run((current) => deleteElements(current, selectedNodes));
         pasteState.count = 0;
-        return serialize(payload);
+        try {
+          return serialize(payload);
+        } catch (error) {
+          if (error instanceof CanvasCommandError) state().notify(error.message);
+          else throw error;
+          return null;
+        }
       },
       paste(text: string, at?: Point) {
-        const payload = deserialize(text);
+        const payload = deserialize(text, registry);
         if (!payload) return false;
         // 连续粘贴到同一位置时依次错开，避免完全重叠。
         const base = at ?? viewportCenter();
@@ -112,9 +113,9 @@ export function useCanvasActions() {
           x: base.x + pasteState.count * PASTE_OFFSET,
           y: base.y + pasteState.count * PASTE_OFFSET,
         });
-        if (run((document) => addNodes(document, nodes, edges)))
-          state().select(nodes.filter((node) => !node.parentId).map((node) => node.id));
-        return true;
+        const ok = run((document) => addNodes(document, nodes, edges));
+        if (ok) state().select(nodes.filter((node) => !node.parentId).map((node) => node.id));
+        return ok;
       },
       duplicate() {
         const text = actions.copy();
@@ -168,41 +169,16 @@ export function useCanvasActions() {
       fitView: () => void flow.fitView({ duration: 200, padding: 0.15, maxZoom: 1 }),
       undo: () => state().undo(),
       redo: () => state().redo(),
-      /** 上传文件并在指定位置建节点；多个文件依次向右排开。 */
-      async importFiles(files: Blob[], at: Point = viewportCenter()) {
-        const supported = files.filter((file) => mediaKind(file));
-        if (supported.length < files.length)
-          state().notify('已忽略不支持的文件，只支持 PNG、JPEG、WebP 图片和 MP4、MOV 视频');
-        let x = at.x;
-        const created: string[] = [];
-        for (const file of supported) {
-          const kind = mediaKind(file)!;
-          const definition = registry.get(kind)!;
-          const node: CanvasNode = createNode(registry, kind, { x, y: at.y });
-          node.title =
-            file instanceof File && file.name ? file.name.slice(0, 200) : definition.label;
-          x += node.size.width + 40;
-          try {
-            const { version } = await importMedia(host, file);
-            const size = fitMediaSize(version.width, version.height, definition.defaultSize);
-            node.size = size;
-            node.position = { x: node.position.x, y: Math.round(at.y - size.height / 2) };
-            node.data = {
-              ...(node.data as CanvasMediaData),
-              versions: [version],
-              activeVersion: 0,
-            };
-            if (run((document) => addNodes(document, [node]))) created.push(node.id);
-          } catch (error) {
-            state().notify(error instanceof Error ? `导入失败：${error.message}` : '导入失败');
-          }
-        }
-        if (created.length) state().select(created);
+      importFiles(files: Blob[], at: Point = viewportCenter()) {
+        imports.start(files, at);
       },
+      uploads: imports.tasks,
+      retryImport: imports.retry,
+      cancelImport: imports.cancel,
       clipboardMime: CLIPBOARD_MIME,
     };
     return actions;
-  }, [flow, host, registry, store]);
+  }, [flow, registry, store, imports]);
 }
 
 export type CanvasActionsApi = ReturnType<typeof useCanvasActions>;

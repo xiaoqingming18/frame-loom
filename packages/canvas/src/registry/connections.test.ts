@@ -41,6 +41,19 @@ describe('checkConnection', () => {
     group('g'),
   ];
 
+  it('未知、未来版本和非法数据节点保留数据但不暴露端口', () => {
+    for (const node of [
+      media('future', 'image', { typeVersion: 2 }),
+      media('invalid', 'image', { data: {} }),
+      media('unknown', 'image', { type: 'plugin:new' }),
+    ]) {
+      expect(registry.supports(node)).toBe(false);
+      expect(registry.inputs(node)).toEqual([]);
+      expect(registry.outputs(node)).toEqual([]);
+    }
+    expect(registry.supports(media('current'))).toBe(true);
+  });
+
   it('图片可作为图片参考、首帧、尾帧和全模态参考', () => {
     const document = doc(nodes);
     expect(checkConnection(registry, document, attempt('img', 'img2')).ok).toBe(true);

@@ -89,8 +89,10 @@
   .frame-loom-canvas .canvas-port-text {
     background: var(--canvas-type-text);
   }
+  .frame-loom-canvas .canvas-port-incompatible,
   .frame-loom-canvas .react-flow__handle.connectingto:not(.valid) {
-    background: var(--destructive);
+    background: var(--muted-foreground);
+    opacity: 0.35;
   }
   .frame-loom-canvas .react-flow__handle.valid {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 35%, transparent);

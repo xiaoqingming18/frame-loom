@@ -1,6 +1,6 @@
 import { Film, Group, ImageIcon } from 'lucide-react';
 import { CanvasGroupData, CanvasMediaData } from '@frame-loom/contracts';
-import { NodeRegistry, type NodeTypeDefinition } from '../registry/registry';
+import { defineNodeType, NodeRegistry } from '../registry/registry';
 import {
   activeVersion,
   emptyMedia,
@@ -11,7 +11,7 @@ import {
 } from './media';
 import { GroupNodeView, ImageNodeView, VideoNodeView } from './views';
 
-export const imageNode: NodeTypeDefinition<CanvasMediaData> = {
+export const imageNode = defineNodeType({
   type: 'image',
   version: 1,
   label: '图片',
@@ -29,9 +29,9 @@ export const imageNode: NodeTypeDefinition<CanvasMediaData> = {
     return version ? { kind: 'image', sha256: version.sha256 } : null;
   },
   View: ImageNodeView,
-};
+});
 
-export const videoNode: NodeTypeDefinition<CanvasMediaData> = {
+export const videoNode = defineNodeType({
   type: 'video',
   version: 1,
   label: '视频',
@@ -49,9 +49,9 @@ export const videoNode: NodeTypeDefinition<CanvasMediaData> = {
     return version ? { kind: 'video', sha256: version.sha256 } : null;
   },
   View: VideoNodeView,
-};
+});
 
-export const groupNode: NodeTypeDefinition<CanvasGroupData> = {
+export const groupNode = defineNodeType<CanvasGroupData>({
   type: 'group',
   version: 1,
   label: '分组',
@@ -64,7 +64,7 @@ export const groupNode: NodeTypeDefinition<CanvasGroupData> = {
   outputs: () => [],
   connectable: false,
   View: GroupNodeView,
-};
+});
 
 export function createBuiltinRegistry(): NodeRegistry {
   return new NodeRegistry().register(imageNode).register(videoNode).register(groupNode);

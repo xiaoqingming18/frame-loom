@@ -77,9 +77,7 @@ test('界面添加图片渠道并测试，生成、内联参考图、明暗预�
       .poll(() =>
         preview
           .first()
-          .evaluate(
-            (img: { complete: boolean; naturalWidth: number }) => img.complete && img.naturalWidth,
-          ),
+          .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
       )
       .toBe(1);
     expect(requests).toHaveLength(1);
@@ -133,9 +131,7 @@ test('界面添加图片渠道并测试，生成、内联参考图、明暗预�
         page
           .getByRole('img', { name: '生成图片 1' })
           .first()
-          .evaluate(
-            (img: { complete: boolean; naturalWidth: number }) => img.complete && img.naturalWidth,
-          ),
+          .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
       )
       .toBe(1);
     expect(requests).toHaveLength(2);

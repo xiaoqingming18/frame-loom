@@ -129,6 +129,10 @@ type CanvasView = { viewport: { x: number; y: number; zoom: number }; minimap: b
 
 ### 节点注册表与连线校验
 
+03 的实现边界：`defineNodeType` 保留数据类型推导，`NodeRegistry` 集中声明与查询端口；未注册、版本不匹配或 data 无效的节点显示占位并禁连线。`migrate` 当前只定义演进接口，尚无旧版本数据迁移。所有编辑提交在 store 检查节点数、边数和 UTF-8 文档体积；命令错误提示并返回 false，保留原文档和历史。剪贴板先校验内置 data、父子顺序与边 id，再按注册表校验内部连线；建节点并自动连线合并为一步撤销。
+
+上传任务及取消／重试状态只存在内存，占位节点不进入文档或撤销栈；媒体上传成功才提交一次建节点操作。视频封面通过已上传媒体抽帧，`frame-media` 启用 CORS 并仅返回当前可信 renderer origin，不反射外部 Origin，不放宽生产 CSP。代价是每次编辑需要序列化文档做体积检查，大规模拖拽性能待总体验收；抽帧失败仍可导入无封面的视频节点。
+
 ```ts
 defineNodeType({
   type: 'video', version: 1, label: '视频', icon: Film, category: 'media',

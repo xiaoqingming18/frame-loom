@@ -112,15 +112,15 @@ export function updateData<Data>(
 
 export function moveNodes(document: CanvasDocument, positions: Map<string, Point>): CanvasDocument {
   if (!positions.size) return document;
-  return {
-    ...document,
-    nodes: document.nodes.map((node) => {
-      const position = positions.get(node.id);
-      return position && (position.x !== node.position.x || position.y !== node.position.y)
-        ? { ...node, position }
-        : node;
-    }),
-  };
+  let changed = false;
+  const nodes = document.nodes.map((node) => {
+    const position = positions.get(node.id);
+    if (!position || (position.x === node.position.x && position.y === node.position.y))
+      return node;
+    changed = true;
+    return { ...node, position };
+  });
+  return changed ? { ...document, nodes } : document;
 }
 
 export function nudge(document: CanvasDocument, ids: ReadonlySet<string>, delta: Point) {
