@@ -28,7 +28,7 @@ Status: proposed
 
 ### 当前实现边界
 
-01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型、四种文本协议的两步测试、设置中心的模型服务与模型测试页的文本对话。03 已实现图片档案与三种图片协议、持久化生成任务调度与恢复、sha256 媒体落盘、`frame-media://` 和图片测试页。04 已实现 ffprobe 预检、S3 兼容对象存储、三种视频协议、对象存储设置页和视频测试页；Windows x64 新版 NSIS 安装后 ffprobe 实测通过。TTS 与真实供应商整体验收仍属于 05。本篇保持 proposed，整体验收后再转 implemented。
+01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型、四种文本协议的两步测试、设置中心的模型服务与模型测试页的文本对话。03 已实现图片档案与三种图片协议、持久化生成任务调度与恢复、sha256 媒体落盘、`frame-media://` 和图片测试页。04 已实现 ffprobe 预检、S3 兼容对象存储、三种视频协议、对象存储设置页和视频测试页；Windows x64 新版 NSIS 安装后 ffprobe 实测通过。05 已实现 OpenAI Speech 与 MiniMax T2A 适配器、音频媒体落盘和配音测试页；真实供应商冒烟、时间戳能力核对及 NSIS 人工验收仍待具备外部账号的环境执行。本篇保持 proposed，整体验收后再转 implemented。
 
 ### 调研依据
 

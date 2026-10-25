@@ -16,7 +16,11 @@ export class ChannelsService {
   constructor(readonly repository: ChannelsRepository) {}
 
   validateModel(input: ChannelModelWrite) {
-    if ((input.kind === 'image' || input.kind === 'video') && input.protocol) mediaProfile(input);
+    if (
+      (input.kind === 'image' || input.kind === 'video' || input.kind === 'tts') &&
+      input.protocol
+    )
+      mediaProfile(input);
     if (input.enabled && (!input.kind || !input.protocol))
       throw new DomainError('MODEL_UNCLASSIFIED', 422, '请选择类别和协议后再启用模型');
     if (input.kind === 'chat' && input.protocol && !LlmProtocol.safeParse(input.protocol).success)

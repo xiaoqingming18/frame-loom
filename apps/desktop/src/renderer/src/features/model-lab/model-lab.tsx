@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { EngineClient } from '@/lib/engine-client';
 import { channelsQuery, modelsQuery, defaultsQuery } from '@/lib/model-queries';
 import { ImageLab } from './image-lab';
+import { AudioLab } from './tts-lab';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -24,6 +25,7 @@ export function ModelLab({ engineClient: client }: { engineClient: EngineClient 
         <TabsTrigger value="text">文本</TabsTrigger>
         <TabsTrigger value="image">图片</TabsTrigger>
         <TabsTrigger value="video">视频</TabsTrigger>
+        <TabsTrigger value="tts">配音</TabsTrigger>
       </TabsList>
       <TabsContent value="text">
         <TextModelLab client={client} />
@@ -33,6 +35,9 @@ export function ModelLab({ engineClient: client }: { engineClient: EngineClient 
       </TabsContent>
       <TabsContent value="video">
         <ImageLab client={client} kind="video" />
+      </TabsContent>
+      <TabsContent value="tts">
+        <AudioLab client={client} />
       </TabsContent>
     </Tabs>
   );

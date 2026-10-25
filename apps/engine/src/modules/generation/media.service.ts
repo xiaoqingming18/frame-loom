@@ -16,6 +16,9 @@ const formats: Record<string, { mime: string; ext: string }> = {
   png: { mime: 'image/png', ext: 'png' },
   jpg: { mime: 'image/jpeg', ext: 'jpg' },
   webp: { mime: 'image/webp', ext: 'webp' },
+  mp3: { mime: 'audio/mpeg', ext: 'mp3' },
+  wav: { mime: 'audio/wav', ext: 'wav' },
+  ogg: { mime: 'audio/ogg', ext: 'ogg' },
 };
 const maxBytes = 256 * 1024 * 1024;
 
@@ -77,12 +80,13 @@ export class MediaService {
         );
       chunks = response.body;
     }
-    return this.saveStream(chunks, signal, output.mime.split('/')[0]);
+    return this.saveStream(chunks, signal, output.mime.split('/')[0], output.mime);
   }
   async saveStream(
     chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>,
     signal?: AbortSignal,
     expectedKind?: string,
+    expectedMime?: string,
   ): Promise<StoredMedia> {
     const temporary = join(this.config.dataDir, 'media', `.partial-${randomUUID()}`);
     const hash = createHash('sha256');
@@ -128,6 +132,32 @@ export class MediaService {
           fps: null,
           codec: null,
           audioCodec: null,
+        };
+      } else if (
+        expectedMime === 'audio/mpeg' ||
+        expectedMime === 'audio/wav' ||
+        expectedMime === 'audio/ogg'
+      ) {
+        const ext =
+          expectedMime === 'audio/mpeg' ? 'mp3' : expectedMime === 'audio/wav' ? 'wav' : 'ogg';
+        const valid =
+          ext === 'mp3'
+            ? header[0] === 0xff && (header[1] & 0xe0) === 0xe0
+            : ext === 'wav'
+              ? header.toString('ascii', 0, 4) === 'RIFF' &&
+                header.toString('ascii', 8, 12) === 'WAVE'
+              : header.toString('ascii', 0, 4) === 'OggS';
+        if (!valid)
+          throw new GenerationFailure('invalid_params', 'INVALID_AUDIO', '语音产物格式无效');
+        metadata = {
+          mime: expectedMime,
+          ext,
+          width: null,
+          height: null,
+          durationMs: null,
+          fps: null,
+          codec: null,
+          audioCodec: ext,
         };
       } else {
         metadata = await probeMedia(temporary);

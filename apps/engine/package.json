@@ -12,7 +12,8 @@
     "start": "node dist/main.js",
     "test": "pnpm --filter @frame-loom/engine... build && vitest run",
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "smoke:providers": "node scripts/smoke-providers.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.4.0",

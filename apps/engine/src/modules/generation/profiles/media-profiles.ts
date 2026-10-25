@@ -2,8 +2,9 @@ import type { ChannelModelWrite, ModelProfile } from '@frame-loom/contracts';
 import { DomainError } from '../../../core/http/domain-error.js';
 import { imageProfiles } from './image-profiles.js';
 import { videoProfiles } from './video-profiles.js';
+import { ttsProfiles } from './tts-profiles.js';
 
-export const mediaProfiles = [...imageProfiles, ...videoProfiles];
+export const mediaProfiles = [...imageProfiles, ...videoProfiles, ...ttsProfiles];
 export function mediaProfile(
   model: Pick<ChannelModelWrite, 'kind' | 'protocol' | 'profileId' | 'upstreamModelId'>,
 ): ModelProfile {

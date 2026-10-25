@@ -23,6 +23,7 @@ import { arkVideoTasks, minimaxVideoV2, openaiVideos } from './adapters/video-ta
 import { openaiImages } from './adapters/openai-images.js';
 import { arkImages } from './adapters/ark-images.js';
 import { geminiImage } from './adapters/gemini-image.js';
+import { minimaxT2a, openaiSpeech } from './adapters/tts.js';
 import {
   GenerationFailure,
   type AdapterContext,
@@ -35,9 +36,16 @@ const activeStates: GenerationStatus[] = ['submitting', 'running', 'downloading'
 @Injectable()
 export class GenerationAdapters {
   readonly adapters = new Map<string, GenerationAdapter>(
-    [openaiImages, geminiImage, arkImages, arkVideoTasks, minimaxVideoV2, openaiVideos].map(
-      (adapter) => [adapter.protocol, adapter],
-    ),
+    [
+      openaiImages,
+      geminiImage,
+      arkImages,
+      arkVideoTasks,
+      minimaxVideoV2,
+      openaiVideos,
+      openaiSpeech,
+      minimaxT2a,
+    ].map((adapter) => [adapter.protocol, adapter]),
   );
   get(protocol: string): GenerationAdapter {
     const adapter = this.adapters.get(protocol);
