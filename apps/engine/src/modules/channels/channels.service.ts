@@ -3,8 +3,10 @@ import { z } from 'zod';
 import {
   type ChannelModelWrite,
   ConnectionCheck,
-  LlmProtocol,
+  type LlmProtocol,
+  type ModelProbeRequest,
   ProviderErrorCode,
+  protocolsByKind,
 } from '@frame-loom/contracts';
 import { DomainError } from '../../core/http/domain-error.js';
 import { ChannelsRepository } from './channels.repository.js';
@@ -16,15 +18,11 @@ export class ChannelsService {
   constructor(readonly repository: ChannelsRepository) {}
 
   validateModel(input: ChannelModelWrite) {
-    if (
-      (input.kind === 'image' || input.kind === 'video' || input.kind === 'tts') &&
-      input.protocol
-    )
-      mediaProfile(input);
+    if (input.protocol && (!input.kind || !protocolsByKind[input.kind].includes(input.protocol)))
+      throw new DomainError('INVALID_PROTOCOL', 422, '调用协议与模型类别不匹配');
+    if (input.kind && input.kind !== 'chat' && input.protocol) mediaProfile(input);
     if (input.enabled && (!input.kind || !input.protocol))
       throw new DomainError('MODEL_UNCLASSIFIED', 422, '请选择类别和协议后再启用模型');
-    if (input.kind === 'chat' && input.protocol && !LlmProtocol.safeParse(input.protocol).success)
-      throw new DomainError('INVALID_PROTOCOL', 422, '文本模型协议无效');
     if (
       input.overrides.maxTokens &&
       input.overrides.contextWindow &&
@@ -37,13 +35,37 @@ export class ChannelsService {
   async remoteModels(id: string, parentSignal?: AbortSignal) {
     const { channel, apiKey, headers } = this.repository.credentials(id);
     if (!channel.enabled) throw new DomainError('CHANNEL_DISABLED', 422, '渠道已禁用');
+    return this.listUpstream({ ...channel, apiKey, headers }, parentSignal);
+  }
+
+  /** 用表单草稿拉取上游模型 ID，不写库；未填的密钥和请求头沿用已保存渠道。 */
+  probe(input: ModelProbeRequest) {
+    const saved = input.channelId ? this.repository.credentials(input.channelId) : undefined;
+    return this.listUpstream({
+      apiFormat: input.apiFormat,
+      baseUrl: input.baseUrl,
+      apiKey: input.apiKey ?? saved?.apiKey ?? '',
+      headers: input.headers ?? saved?.headers ?? {},
+    });
+  }
+
+  private async listUpstream(
+    channel: {
+      apiFormat: LlmProtocol;
+      baseUrl: string;
+      apiKey: string;
+      headers: Record<string, string>;
+    },
+    parentSignal?: AbortSignal,
+  ) {
+    const { apiKey, headers } = channel;
     const signal = AbortSignal.any([
       AbortSignal.timeout(15_000),
       ...(parentSignal ? [parentSignal] : []),
     ]);
     const baseUrl = channel.baseUrl.replace(/\/+$/, '');
-    const gemini = channel.preset === 'gemini';
-    const anthropic = ['anthropic', 'minimax'].includes(channel.preset);
+    const gemini = channel.apiFormat === 'google-generative-ai';
+    const anthropic = channel.apiFormat === 'anthropic-messages';
     const path = anthropic ? '/v1/models' : '/models';
     try {
       const response = await fetch(baseUrl + path, {
@@ -79,24 +101,6 @@ export class ChannelsService {
     } catch (error) {
       throw connectionError(error, signal);
     }
-  }
-
-  async fetchModels(id: string) {
-    const ids = await this.remoteModels(id);
-    const existing = new Set(this.repository.listModels(id).map((model) => model.upstreamModelId));
-    for (const upstreamModelId of ids) {
-      if (!existing.has(upstreamModelId))
-        this.repository.saveModel(id, {
-          upstreamModelId,
-          displayName: upstreamModelId,
-          kind: null,
-          protocol: null,
-          profileId: null,
-          overrides: {},
-          enabled: false,
-        });
-    }
-    return this.repository.listModels(id);
   }
 
   async test(id: string): Promise<ConnectionCheck> {

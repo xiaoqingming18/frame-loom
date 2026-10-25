@@ -86,26 +86,28 @@ test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对�
     await page.getByRole('tab', { name: '模型服务' }).click();
     await page.getByRole('button', { name: '添加渠道' }).click();
     await page.getByLabel('渠道名称').fill('本地模拟渠道');
-    await page.getByLabel('渠道预设').selectOption('openai-compatible');
-    await page.getByLabel('Base URL').fill(remote);
+    await page.getByLabel('API 格式').selectOption('openai-completions');
+    await page.getByLabel('接口地址').fill(remote);
     await page.getByLabel('API 密钥').fill('sk-e2e-private-1234');
-    await page.getByRole('button', { name: '保存渠道' }).click();
-    await expect(page.getByRole('heading', { name: '本地模拟渠道' })).toBeVisible();
+    await page.getByRole('button', { name: '拉取模型' }).click();
+    await page.getByLabel(/local-chat/).check();
+    await page.getByRole('button', { name: '添加所选（1）' }).click();
+    const card = page.getByRole('group', { name: 'local-chat' });
+    await card.getByLabel('模型类别').selectOption('chat');
+    await expect(card.getByLabel('调用协议')).toHaveValue('openai-completions');
+    await card.getByLabel('显示名称').fill('本地文本模型');
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByRole('button', { name: '编辑 本地模拟渠道' }).click();
     await page.getByRole('button', { name: '测试渠道' }).click();
     await expect(page.getByText(/地址与鉴权通过/)).toBeVisible();
-    await page.getByRole('button', { name: '拉取模型' }).click();
-    await expect(page.getByText(/未分类 · 未选协议/)).toBeVisible();
-    await page.getByRole('button', { name: '配置 local-chat' }).click();
-    await page.getByLabel('模型类别').selectOption('chat');
-    await page.getByLabel('调用协议').selectOption('openai-completions');
-    await page.getByLabel('显示名称').fill('本地文本模型');
-    await page.getByLabel('启用模型（先选择类别和协议）').check();
-    await page.getByRole('button', { name: '保存模型' }).click();
     await page.getByRole('button', { name: '测试模型' }).click();
     await expect(page.getByText(/两步测试通过/)).toBeVisible();
+    await page.getByRole('button', { name: '返回渠道列表' }).click();
+    await page.getByRole('tab', { name: '默认模型' }).click();
     await page
       .getByRole('combobox', { name: '文本', exact: true })
       .selectOption({ label: '本地模拟渠道 / 本地文本模型' });
+    await page.getByRole('tab', { name: '模型服务' }).click();
     for (const source of ['light', 'dark']) {
       await page.evaluate(`window.frameLoom.theme.set('${source}')`);
       await page.reload();
@@ -113,8 +115,12 @@ test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对�
         'background-color',
         source === 'dark' ? 'rgb(13, 13, 15)' : 'rgb(246, 247, 249)',
       );
-      await expect(page.getByText(/两步测试通过/)).toBeVisible();
+      await expect(page.getByText(/1 个模型/)).toBeVisible();
       await page.screenshot({ path: info.outputPath(`model-services-${source}.png`) });
+      await page.getByRole('button', { name: '编辑 本地模拟渠道' }).click();
+      await expect(page.getByText(/两步测试通过/)).toBeVisible();
+      await page.screenshot({ path: info.outputPath(`channel-editor-${source}.png`) });
+      await page.getByRole('button', { name: '返回渠道列表' }).click();
       const panel = page.getByRole('tabpanel', { name: '模型服务' });
       expect(
         await panel.evaluate(
@@ -164,8 +170,10 @@ test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对�
     await page.getByRole('button', { name: '设置', exact: true }).click();
     await page.getByRole('tab', { name: '模型服务' }).click();
     await expect(page.getByText(/密钥：••••1234/)).toBeVisible();
+    await page.getByRole('button', { name: '编辑 本地模拟渠道' }).click();
+    await expect(page.getByRole('group', { name: '本地文本模型' })).toBeVisible();
+    await page.getByRole('tab', { name: '默认模型' }).click();
     await expect(page.getByRole('combobox', { name: '文本', exact: true })).toHaveValue(/\S+/);
-    await expect(page.getByRole('button', { name: '配置 本地文本模型' })).toBeVisible();
   } finally {
     await app?.close();
     upstream.closeAllConnections();

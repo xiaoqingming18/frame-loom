@@ -98,7 +98,7 @@ async function setup() {
   const channels = app!.get(ChannelsRepository);
   const channel = channels.saveChannel({
     name: '测试',
-    preset: 'openai-compatible',
+    apiFormat: 'openai-completions',
     baseUrl: remote,
     apiKey: secret,
     enabled: true,

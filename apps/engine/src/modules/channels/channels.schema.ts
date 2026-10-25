@@ -1,7 +1,7 @@
 import { blob, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
-  ChannelPreset,
   ConnectionCheck,
+  LlmProtocol,
   ModelKind,
   ModelOverrides,
 } from '@frame-loom/contracts';
@@ -9,7 +9,7 @@ import type {
 export const channels = sqliteTable('channels', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  preset: text('preset').$type<ChannelPreset>().notNull(),
+  apiFormat: text('api_format').$type<LlmProtocol>().notNull(),
   baseUrl: text('base_url').notNull(),
   apiKeyCipher: blob('api_key_cipher', { mode: 'buffer' }),
   keyHint: text('key_hint'),

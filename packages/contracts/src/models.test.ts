@@ -3,7 +3,7 @@ import { Channel, ChannelWrite, ChannelModelWrite, TestChatRequest } from './mod
 
 const channel = {
   name: '测试',
-  preset: 'openai',
+  apiFormat: 'openai-responses',
   baseUrl: 'https://example.com/v1',
   enabled: true,
 };
@@ -33,6 +33,7 @@ it('读取 schema 严格拒绝任何明文凭据字段', () => {
     updatedAt: new Date().toISOString(),
   };
   expect(Channel.parse(read)).toEqual(read);
+  expect(Channel.safeParse({ ...read, apiFormat: 'openai' }).success).toBe(false);
   expect(Channel.safeParse({ ...read, apiKey: 'secret' }).success).toBe(false);
   expect(Channel.safeParse({ ...read, headers: { 'X-Secret': 'secret' } }).success).toBe(false);
 });

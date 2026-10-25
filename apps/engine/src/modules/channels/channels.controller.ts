@@ -5,6 +5,7 @@ import {
   ChannelModelWrite,
   ChannelModelPatch,
   ModelDefaultsPatch,
+  ModelProbeRequest,
   TestChatRequest,
   type ModelDefaults,
 } from '@frame-loom/contracts';
@@ -28,25 +29,32 @@ export class ChannelsController {
   @Get('channels/:id') channel(@Param('id') id: string) {
     return this.repository.getChannel(id);
   }
-  @Post('channels') createChannel(@Body(new ZodValidationPipe(ChannelWrite)) input: ChannelWrite) {
+  @Post('channels') async createChannel(
+    @Body(new ZodValidationPipe(ChannelWrite)) input: ChannelWrite,
+  ) {
+    await this.validateModels(input.models);
     return this.repository.saveChannel(input);
   }
-  @Patch('channels/:id') updateChannel(
+  @Patch('channels/:id') async updateChannel(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(ChannelPatch)) input: Partial<ChannelWrite>,
   ) {
+    await this.validateModels(input.models);
     return this.repository.saveChannel(input, id);
+  }
+  private async validateModels(models: ChannelWrite['models']) {
+    for (const model of models ?? []) await this.llm.metadata(this.channels.validateModel(model));
+  }
+  @Post('channels/probe-models') probeModels(
+    @Body(new ZodValidationPipe(ModelProbeRequest)) input: ModelProbeRequest,
+  ) {
+    return this.channels.probe(input);
   }
   @Delete('channels/:id') deleteChannel(@Param('id') id: string) {
     return this.repository.deleteChannel(id);
   }
   @Post('channels/:id/test') testChannel(@Param('id') id: string) {
     return this.channels.test(id);
-  }
-  @Post('channels/:id/fetch-models') async fetchModels(@Param('id') id: string) {
-    return Promise.all(
-      (await this.channels.fetchModels(id)).map((model) => this.llm.publicModel(model)),
-    );
   }
   @Get('channel-models') allModels() {
     return Promise.all(this.repository.listModels().map((model) => this.llm.publicModel(model)));

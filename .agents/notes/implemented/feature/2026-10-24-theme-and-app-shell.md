@@ -115,9 +115,10 @@ Status: implemented
 - 使用 shadcn `Dialog` 加竖向 `Tabs`，共四个页签：
   - **外观**：用 `ToggleGroup` 选择跟随系统、明亮、暗黑，切换后立即生效。
   - **本地引擎**：显示连接状态、engine 版本、schema 版本、启动时间和「重新检查」按钮，内容来自 `features/engine-status`。
-  - **模型服务**：渠道与模型管理、拉取列表、两步连通测试、默认模型选择，内容来自 `features/model-services`；读响应不含明文密钥和附加请求头值。
+  - **模型服务**：渠道列表与渠道编辑页（拉取后勾选模型、两步连通测试、渠道与模型一次保存），内容来自 `features/model-services`；读响应不含明文密钥和附加请求头值。见[以渠道为中心的模型设置](2026-10-25-channel-centric-model-settings.md)。
+  - **默认模型**：每个类别选择一个已启用模型，内容来自 `features/model-services/model-defaults.tsx`。
   - **关于**：显示 logo、应用名和版本号。版本号由 Vite `define` 在构建时从 `apps/desktop/package.json` 注入。
-- 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'models' | 'about'`，由 zod 校验。engine 退出时主进程会重载页面，弹窗在重载后仍然打开，停在同一个页签上显示错误。
+- 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'models' | 'defaults' | 'storage' | 'about'`，由 zod 校验。engine 退出时主进程会重载页面，弹窗在重载后仍然打开，停在同一个页签上显示错误。
 - 非法 search 值回退为关闭；打开、切页和关闭保留当前路径。Dialog 关闭后焦点恢复到侧栏设置入口。外观读写使用 Query 与 mutation，读取失败可重试，写入失败保留原选择并显示中文错误；保存期间禁用切换，避免并发覆盖。
 
 ### logo 资源

@@ -108,7 +108,7 @@ function setup(initial: GenerationJob[] = []) {
         value = [
           {
             ...(value as object[])[0],
-            preset: 'openai-compatible',
+            apiFormat: 'openai-completions',
             baseUrl: 'http://127.0.0.1:9000',
             hasKey: true,
             keyHint: '••••1234',

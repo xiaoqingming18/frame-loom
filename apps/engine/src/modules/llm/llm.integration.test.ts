@@ -29,6 +29,7 @@ let truncated = false;
 let requests = 0;
 let redirect = false;
 let redirectedRequests = 0;
+let lastProbe: { authorization?: string; goog?: string; custom?: string } = {};
 const received: {
   url: string;
   authorization?: string;
@@ -203,6 +204,11 @@ beforeAll(async () => {
       return;
     }
     if (request.method === 'GET') {
+      lastProbe = {
+        authorization: request.headers.authorization,
+        goog: request.headers['x-goog-api-key'] as string | undefined,
+        custom: request.headers['x-custom'] as string | undefined,
+      };
       response.setHeader('Content-Type', 'application/json');
       response.end(
         JSON.stringify({
@@ -258,12 +264,12 @@ async function call(path: string, method = 'GET', body?: unknown) {
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
-async function channel(preset = 'openai-compatible') {
+async function channel(apiFormat: LlmProtocol = 'openai-completions') {
   return Channel.parse(
     await (
       await call('/channels', 'POST', {
         name: '测试渠道',
-        preset,
+        apiFormat,
         baseUrl: remote,
         apiKey: secret,
         headers: { 'X-Custom': 'encrypted-header-secret' },
@@ -336,31 +342,66 @@ it('唯一约束、类别校验、默认模型验证、禁用清理与级联删�
   expect((await call(`/channel-models/${saved.id}`)).status).toBe(404);
   expect(ModelDefaults.parse(await (await call('/model-defaults')).json()).chat).toBeNull();
 });
-it('拉取去重，新增模型未分类禁用，不覆盖已有配置', async () => {
-  const created = await channel();
-  const saved = await model(created.id);
-  const response = await call(`/channels/${created.id}/fetch-models`, 'POST');
-  const list = (await response.json()) as ChannelModel[];
-  expect(list).toHaveLength(2);
-  expect(list.find((item) => item.id === saved.id)).toMatchObject({ enabled: true, kind: 'chat' });
-  expect(list.find((item) => item.upstreamModelId === 'gpt-4o')).toMatchObject({
-    enabled: false,
-    kind: null,
-    protocol: null,
+it('草稿拉取去重且不写库，编辑时复用已存密钥', async () => {
+  const draft = await call('/channels/probe-models', 'POST', {
+    apiFormat: 'openai-completions',
+    baseUrl: remote,
+    apiKey: secret,
   });
-  const unclassified = list.find((item) => item.kind === null)!;
-  expect(
-    (await call(`/channel-models/${unclassified.id}`, 'PATCH', { enabled: true })).status,
-  ).toBe(422);
+  expect(await draft.json()).toEqual(['unknown', 'gpt-4o']);
+  expect(lastProbe.authorization).toBe(`Bearer ${secret}`);
+  const created = await channel();
+  const before = (await (await call('/channel-models')).json()) as unknown[];
+  const reused = await call('/channels/probe-models', 'POST', {
+    apiFormat: 'google-generative-ai',
+    baseUrl: remote,
+    channelId: created.id,
+  });
+  expect(await reused.json()).toEqual(['unknown']);
+  expect(lastProbe).toMatchObject({ goog: secret, custom: 'encrypted-header-secret' });
+  expect(((await (await call('/channel-models')).json()) as unknown[]).length).toBe(before.length);
+});
+it('渠道与模型一次保存：增改删同事务，失败整体回滚，协议须匹配类别', async () => {
+  const created = await channel();
+  const first = await model(created.id);
+  const chat = {
+    upstreamModelId: 'gpt-4o',
+    displayName: 'GPT',
+    kind: 'chat',
+    protocol: 'openai-responses',
+    profileId: null,
+    overrides: {},
+    enabled: true,
+  };
+  const saved = await call(`/channels/${created.id}`, 'PATCH', {
+    name: '已改名',
+    models: [chat],
+  });
+  expect(saved.status).toBe(200);
+  let list = ChannelModel.array().parse(
+    await (await call(`/channels/${created.id}/models`)).json(),
+  );
+  expect(list.map((item) => item.upstreamModelId)).toEqual(['gpt-4o']);
+  expect((await call(`/channel-models/${first.id}`)).status).toBe(404);
+  const mismatch = await call(`/channels/${created.id}`, 'PATCH', {
+    name: '不应保存',
+    models: [
+      { ...chat, id: list[0].id },
+      { ...chat, protocol: 'openai-images' },
+    ],
+  });
+  expect(mismatch.status).toBe(422);
+  const duplicate = await call(`/channels/${created.id}`, 'PATCH', {
+    name: '不应保存',
+    models: [chat, chat],
+  });
+  expect(duplicate.status).toBe(409);
+  expect(Channel.parse(await (await call(`/channels/${created.id}`)).json()).name).toBe('已改名');
+  list = ChannelModel.array().parse(await (await call(`/channels/${created.id}/models`)).json());
+  expect(list).toHaveLength(1);
 });
 it.each(LlmProtocol.options)('%s 经真实 SDK 通过两步测试、文本流与用量解析', async (protocol) => {
-  const created = await channel(
-    protocol === 'anthropic-messages'
-      ? 'anthropic'
-      : protocol === 'google-generative-ai'
-        ? 'gemini'
-        : 'openai-compatible',
-  );
+  const created = await channel(protocol);
   const saved = await model(created.id, protocol);
   expect(saved.metadata).toMatchObject({ needsConfirmation: true, contextWindow: 8192 });
   const check = ConnectionCheck.parse(

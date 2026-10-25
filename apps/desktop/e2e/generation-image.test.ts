@@ -46,19 +46,23 @@ test('界面添加图片渠道并测试，生成、内联参考图、明暗预�
     await page.getByRole('tab', { name: '模型服务' }).click();
     await page.getByRole('button', { name: '添加渠道' }).click();
     await page.getByLabel('渠道名称').fill('图片模拟渠道');
-    await page.getByLabel('渠道预设').selectOption('openai-compatible');
-    await page.getByLabel('Base URL').fill(remote);
+    await page.getByLabel('API 格式').selectOption('openai-completions');
+    await page.getByLabel('接口地址').fill(remote);
     await page.getByLabel('API 密钥').fill('sk-image-e2e-private');
-    await page.getByRole('button', { name: '保存渠道' }).click();
+    await page.getByRole('button', { name: '拉取模型' }).click();
+    await page.getByLabel(/gpt-image-1/).check();
+    await page.getByRole('button', { name: '添加所选（1）' }).click();
+    const card = page.getByRole('group', { name: 'gpt-image-1' });
+    await card.getByLabel('模型类别').selectOption('image');
+    await card.getByLabel('调用协议').selectOption('openai-images');
+    await expect(card.getByLabel('启用模型')).toBeChecked();
+    await card.getByLabel('显示名称').fill('本地图片模型');
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByRole('button', { name: '编辑 图片模拟渠道' }).click();
     await page.getByRole('button', { name: '测试渠道' }).click();
     await expect(page.getByText(/地址与鉴权通过/)).toBeVisible();
-    await page.getByRole('button', { name: '拉取模型' }).click();
-    await page.getByRole('button', { name: '配置 gpt-image-1' }).click();
-    await page.getByLabel('模型类别').selectOption('image');
-    await page.getByLabel('调用协议').selectOption('openai-images');
-    await page.getByLabel('显示名称').fill('本地图片模型');
-    await page.getByLabel('启用模型（先选择类别和协议）').check();
-    await page.getByRole('button', { name: '保存模型' }).click();
+    await page.getByRole('button', { name: '返回渠道列表' }).click();
+    await page.getByRole('tab', { name: '默认模型' }).click();
     await page
       .getByRole('combobox', { name: '图片', exact: true })
       .selectOption({ label: '图片模拟渠道 / 本地图片模型' });

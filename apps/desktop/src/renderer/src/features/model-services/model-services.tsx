@@ -1,28 +1,49 @@
 import { useState, type ReactNode, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw, Settings2 } from 'lucide-react';
+import { ArrowLeft, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react';
 import {
   Channel,
   ChannelWrite,
-  ChannelModel,
-  ChannelModelWrite,
-  ChannelModelList,
   ConnectionCheck,
   DeleteResult,
-  ModelDefaults,
-  ModelKind,
   LlmProtocol,
-  ImageProtocol,
-  VideoProtocol,
-  channelPresets,
-  type ChannelPreset,
+  ModelKind,
+  ModelProbeResult,
+  ModelProfileList,
+  protocolsByKind,
+  type ChannelModel,
+  type ChannelModelSave,
+  type ModelProbeRequest,
+  type ModelProfile,
 } from '@frame-loom/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { NativeSelect } from '@/components/ui/native-select';
 import type { EngineClient } from '@/lib/engine-client';
-import { channelsQuery, modelsQuery, defaultsQuery } from '@/lib/model-queries';
+import { channelsQuery, modelsQuery } from '@/lib/model-queries';
+import { kindLabels } from './labels';
+
+const protocolLabels: Record<string, string> = {
+  'openai-responses': 'OpenAI Responses',
+  'openai-completions': 'OpenAI Chat Completions',
+  'anthropic-messages': 'Anthropic Messages',
+  'google-generative-ai': 'Gemini',
+  'openai-images': 'OpenAI Images',
+  'gemini-image': 'Gemini 图片',
+  'ark-images': '火山方舟图片',
+  'ark-video-tasks': '火山方舟视频任务',
+  'minimax-video-v2': 'MiniMax 视频 V2',
+  'openai-videos': 'OpenAI Videos（Sora 兼容）',
+  'openai-speech': 'OpenAI Speech',
+  'minimax-t2a': 'MiniMax T2A',
+};
+const urlExamples: Record<LlmProtocol, string> = {
+  'openai-responses': 'https://api.openai.com/v1',
+  'openai-completions': 'https://api.example.com/v1',
+  'anthropic-messages': 'https://api.anthropic.com',
+  'google-generative-ai': 'https://generativelanguage.googleapis.com/v1beta',
+};
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -32,11 +53,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     </label>
   );
 }
-function formText(data: FormData, key: string, fallback = '') {
-  const value = data.get(key);
-  return typeof value === 'string' ? value : fallback;
-}
-function CheckResult({ result }: { result: ConnectionCheck | null }) {
+function CheckResult({ result }: { result: ConnectionCheck | null | undefined }) {
   return (
     result && (
       <p className={result.ok ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
@@ -46,7 +63,15 @@ function CheckResult({ result }: { result: ConnectionCheck | null }) {
     )
   );
 }
-function DeleteButton({ onDelete, disabled }: { onDelete: () => void; disabled: boolean }) {
+function DeleteButton({
+  label,
+  onDelete,
+  disabled,
+}: {
+  label: string;
+  onDelete: () => void;
+  disabled: boolean;
+}) {
   const [confirm, setConfirm] = useState(false);
   return (
     <Button
@@ -57,7 +82,7 @@ function DeleteButton({ onDelete, disabled }: { onDelete: () => void; disabled: 
       onBlur={() => setConfirm(false)}
       onClick={() => (confirm ? onDelete() : setConfirm(true))}
     >
-      {confirm ? '确认删除' : '删除'}
+      {confirm ? '确认删除' : label}
     </Button>
   );
 }
@@ -65,47 +90,37 @@ function DeleteButton({ onDelete, disabled }: { onDelete: () => void; disabled: 
 export function ModelServices({ engineClient: client }: { engineClient: EngineClient }) {
   const channels = useQuery(channelsQuery(client));
   const models = useQuery(modelsQuery(client));
-  const defaults = useQuery(defaultsQuery(client));
   const queryClient = useQueryClient();
-  const [selected, setSelected] = useState<string>();
-  const [channelEdit, setChannelEdit] = useState<Channel | 'new' | null>(null);
-  const [modelEdit, setModelEdit] = useState<ChannelModel | 'new' | null>(null);
-  const [message, setMessage] = useState('');
-  const action = useMutation({
-    mutationFn: (work: () => Promise<unknown>) => work(),
-    onSuccess: async () => {
-      setMessage('操作完成');
-      await queryClient.invalidateQueries({ queryKey: ['models'] });
-    },
-    onError: (error) => setMessage(error.message),
-  });
-  const perform = (work: () => Promise<unknown>) => {
-    setMessage('');
-    action.mutate(work);
-  };
-  const channel = channels.data?.find((item) => item.id === selected) ?? channels.data?.[0];
-  const error = channels.error ?? models.error ?? defaults.error;
+  const [editing, setEditing] = useState<Channel | 'new' | null>(null);
+  const error = channels.error ?? models.error;
+  if (editing)
+    return (
+      <ChannelEditor
+        key={editing === 'new' ? 'new' : editing.id}
+        client={client}
+        channel={editing === 'new' ? undefined : editing}
+        models={
+          editing === 'new'
+            ? []
+            : (models.data?.filter((model) => model.channelId === editing.id) ?? [])
+        }
+        onClose={() => setEditing(null)}
+      />
+    );
   return (
     <section aria-labelledby="models-heading" className="space-y-6">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h2 id="models-heading" className="text-xl font-semibold">
-            模型服务
-          </h2>
-          <p className="mt-2 text-xs text-muted-foreground">
-            连接模型供应商，为工作台选择合适的能力。
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={action.isPending}
-          onClick={() => setChannelEdit('new')}
-        >
-          <Plus aria-hidden="true" />
-          添加渠道
-        </Button>
+      <header>
+        <h2 id="models-heading" className="text-xl font-semibold">
+          模型服务
+        </h2>
+        <p className="mt-2 text-xs text-muted-foreground">
+          添加渠道后在渠道内选择模型。密钥加密保存在此设备，请求由本机直接发送给供应商。
+        </p>
       </header>
+      <Button size="sm" variant="outline" onClick={() => setEditing('new')}>
+        <Plus aria-hidden="true" />
+        添加渠道
+      </Button>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error.message}
@@ -118,35 +133,6 @@ export function ModelServices({ engineClient: client }: { engineClient: EngineCl
         </p>
       )}
       {channels.isPending && <p role="status">正在加载渠道…</p>}
-      {message && (
-        <p
-          role={action.isError ? 'alert' : 'status'}
-          className={action.isError ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
-        >
-          {message}
-        </p>
-      )}
-      {channelEdit && (
-        <ChannelForm
-          key={typeof channelEdit === 'string' ? channelEdit : channelEdit.id}
-          channel={channelEdit === 'new' ? undefined : channelEdit}
-          busy={action.isPending}
-          onCancel={() => setChannelEdit(null)}
-          onSave={(body) =>
-            perform(async () => {
-              const existing = channelEdit !== 'new' ? channelEdit : undefined;
-              const saved = await client.request(
-                existing ? `/channels/${existing.id}` : '/channels',
-                Channel,
-                { method: existing ? 'PATCH' : 'POST', body },
-              );
-              setSelected(saved.id);
-              setChannelEdit(null);
-              setModelEdit(null);
-            })
-          }
-        />
-      )}
       {!channels.isPending && !channels.data?.length && !error && (
         <div className="rounded-xl border border-dashed p-8 text-center">
           <Settings2 aria-hidden="true" className="mx-auto mb-3 size-6 text-muted-foreground" />
@@ -156,469 +142,741 @@ export function ModelServices({ engineClient: client }: { engineClient: EngineCl
           </p>
         </div>
       )}
-      {channel && (
-        <>
-          <Field label="当前渠道">
-            <NativeSelect
-              value={channel.id}
-              onChange={(event) => {
-                setSelected(event.target.value);
-                setModelEdit(null);
-                setChannelEdit(null);
-              }}
+      <ul aria-label="渠道列表" className="space-y-3">
+        {channels.data?.map((channel) => {
+          const count = models.data?.filter((model) => model.channelId === channel.id).length ?? 0;
+          return (
+            <li
+              key={channel.id}
+              className="flex items-center justify-between gap-3 rounded-xl border p-4"
             >
-              {channels.data?.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                  {!item.enabled && '（已禁用）'}
+              <div className="min-w-0 space-y-1">
+                <h3 className="text-sm font-medium">
+                  {channel.name}
+                  {!channel.enabled && (
+                    <span className="ml-2 font-normal text-muted-foreground">已禁用</span>
+                  )}
+                </h3>
+                <p className="text-xs break-all text-muted-foreground">{channel.baseUrl}</p>
+                <p className="text-xs text-muted-foreground">
+                  {count} 个模型 · 密钥：{channel.keyHint ?? '未配置'}
+                </p>
+                <CheckResult result={channel.lastCheck} />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={`编辑 ${channel.name}`}
+                // 编辑页以当前模型列表为保存基准，未加载完成时打开会在保存时误删已有模型。
+                disabled={!models.data}
+                onClick={() => setEditing(channel)}
+              >
+                编辑
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+type Draft = ChannelModelSave & {
+  key: string;
+  metadata?: ChannelModel['metadata'];
+  lastCheck?: ChannelModel['lastCheck'];
+};
+type HeaderRow = { key: string; name: string; value: string };
+const draftFrom = (model: ChannelModel): Draft => ({
+  key: model.id,
+  id: model.id,
+  upstreamModelId: model.upstreamModelId,
+  displayName: model.displayName,
+  kind: model.kind,
+  protocol: model.protocol,
+  profileId: model.profileId,
+  overrides: model.overrides,
+  enabled: model.enabled,
+  metadata: model.metadata,
+  lastCheck: model.lastCheck,
+});
+const newDraft = (upstreamModelId = ''): Draft => ({
+  key: crypto.randomUUID(),
+  upstreamModelId,
+  displayName: upstreamModelId,
+  kind: null,
+  protocol: null,
+  profileId: null,
+  overrides: {},
+  enabled: false,
+});
+
+function ChannelEditor({
+  client,
+  channel,
+  models,
+  onClose,
+}: {
+  client: EngineClient;
+  channel?: Channel;
+  models: ChannelModel[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(channel?.name ?? '');
+  const [apiFormat, setApiFormat] = useState<LlmProtocol>(
+    channel?.apiFormat ?? 'openai-completions',
+  );
+  const [baseUrl, setBaseUrl] = useState(channel?.baseUrl ?? '');
+  const [apiKey, setApiKey] = useState('');
+  const [clearKey, setClearKey] = useState(false);
+  const [enabled, setEnabled] = useState(channel?.enabled ?? true);
+  // 已保存的请求头值不可读取；只有用户选择重新设置时才提交并整体替换。
+  const [headers, setHeaders] = useState<HeaderRow[] | null>(
+    channel?.headerNames.length ? null : [],
+  );
+  const [drafts, setDrafts] = useState<Draft[]>(() => models.map(draftFrom));
+  const [candidates, setCandidates] = useState<string[] | null>(null);
+  const [checks, setChecks] = useState<Record<string, ConnectionCheck>>({});
+  const [error, setError] = useState('');
+  const profiles = useQuery({
+    queryKey: ['generation', 'profiles'],
+    queryFn: ({ signal }) => client.request('/model-profiles', ModelProfileList, { signal }),
+  });
+  const action = useMutation({
+    mutationFn: (work: () => Promise<unknown>) => work(),
+    onError: (failure) => setError(failure.message),
+  });
+  const busy = action.isPending;
+  const perform = (work: () => Promise<unknown>) => {
+    setError('');
+    action.mutate(work);
+  };
+  const credentials = () => ({
+    ...(apiKey ? { apiKey } : clearKey ? { apiKey: '' } : {}),
+    ...(headers
+      ? {
+          headers: Object.fromEntries(
+            headers.filter((row) => row.name.trim()).map((row) => [row.name.trim(), row.value]),
+          ),
+        }
+      : {}),
+  });
+  const update = (key: string, patch: Partial<Draft>) =>
+    setDrafts((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  const setHeader = (key: string, patch: Partial<HeaderRow>) =>
+    setHeaders((rows) => rows && rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+
+  function probe() {
+    const body: ModelProbeRequest = {
+      apiFormat,
+      baseUrl,
+      ...credentials(),
+      ...(channel ? { channelId: channel.id } : {}),
+    };
+    perform(async () => {
+      setCandidates(
+        await client.request('/channels/probe-models', ModelProbeResult, {
+          method: 'POST',
+          body,
+          timeoutMs: 20_000,
+        }),
+      );
+    });
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (drafts.some((draft) => draft.enabled && (!draft.kind || !draft.protocol))) {
+      setError('启用的模型需要先选择类别和调用协议。');
+      return;
+    }
+    const parsed = ChannelWrite.safeParse({
+      name,
+      apiFormat,
+      baseUrl,
+      enabled,
+      ...credentials(),
+      models: drafts.map((draft) => ({
+        id: draft.id,
+        upstreamModelId: draft.upstreamModelId,
+        displayName: draft.displayName.trim() || draft.upstreamModelId,
+        kind: draft.kind,
+        protocol: draft.protocol,
+        profileId: draft.profileId,
+        overrides: draft.overrides,
+        enabled: draft.enabled,
+      })),
+    });
+    if (!parsed.success) {
+      setError('请检查渠道名称、HTTP(S) 接口地址、请求头名称与模型 ID。');
+      return;
+    }
+    perform(async () => {
+      await client.request(channel ? `/channels/${channel.id}` : '/channels', Channel, {
+        method: channel ? 'PATCH' : 'POST',
+        body: parsed.data,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['models'] });
+      onClose();
+    });
+  }
+  const added = new Set(drafts.map((draft) => draft.upstreamModelId));
+  return (
+    <section aria-labelledby="channel-heading" className="space-y-6">
+      <header className="flex items-center gap-2">
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          aria-label="返回渠道列表"
+          onClick={onClose}
+        >
+          <ArrowLeft aria-hidden="true" />
+        </Button>
+        <h2 id="channel-heading" className="text-xl font-semibold">
+          {channel ? `编辑渠道 · ${channel.name}` : '添加渠道'}
+        </h2>
+      </header>
+      <form onSubmit={submit} className="space-y-6">
+        <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
+          <Field label="渠道名称">
+            <Input
+              required
+              maxLength={100}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
+          <Field label="API 格式">
+            <NativeSelect
+              value={apiFormat}
+              onChange={(event) => setApiFormat(LlmProtocol.parse(event.target.value))}
+            >
+              {LlmProtocol.options.map((protocol) => (
+                <option key={protocol} value={protocol}>
+                  {protocolLabels[protocol]}
                 </option>
               ))}
             </NativeSelect>
           </Field>
-          <div className="space-y-3 rounded-xl border p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="font-medium">{channel.name}</h3>
-                <p className="mt-1 text-xs break-all text-muted-foreground">{channel.baseUrl}</p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  密钥：{channel.keyHint ?? '未配置'}
-                  {channel.headerNames.length > 0 && ` · 附加头：${channel.headerNames.join('、')}`}
-                </p>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Field label="接口地址">
+              <Input
+                required
+                type="url"
+                placeholder={urlExamples[apiFormat]}
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.target.value)}
+              />
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              API 格式决定拉取模型列表的方式，也是新文本模型的默认协议；每个模型可单独改用其他协议。
+            </p>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Field label="API 密钥">
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder={channel?.hasKey ? `留空保留已保存的密钥（${channel.keyHint}）` : ''}
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+              />
+            </Field>
+            {channel?.hasKey && (
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={clearKey}
+                  onChange={(event) => setClearKey(event.target.checked)}
+                />
+                清除已存密钥
+              </label>
+            )}
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <p className="text-xs text-muted-foreground">附加请求头</p>
+            {headers === null ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                已保存：{channel?.headerNames.join('、')}
+                <Button type="button" size="xs" variant="outline" onClick={() => setHeaders([])}>
+                  重新设置请求头
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={action.isPending}
-                onClick={() => setChannelEdit(channel)}
-              >
-                编辑渠道
-              </Button>
-            </div>
+            ) : (
+              <>
+                {headers.map((row, index) => (
+                  <div key={row.key} className="flex gap-2">
+                    <Input
+                      aria-label={`请求头 ${index + 1} 名称`}
+                      placeholder="X-Custom-Header"
+                      value={row.name}
+                      onChange={(event) => setHeader(row.key, { name: event.target.value })}
+                    />
+                    <Input
+                      aria-label={`请求头 ${index + 1} 值`}
+                      type="password"
+                      autoComplete="off"
+                      value={row.value}
+                      onChange={(event) => setHeader(row.key, { value: event.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`删除请求头 ${index + 1}`}
+                      onClick={() => setHeaders(headers.filter((item) => item.key !== row.key))}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setHeaders([...headers, { key: crypto.randomUUID(), name: '', value: '' }])
+                  }
+                >
+                  <Plus aria-hidden="true" />
+                  添加请求头
+                </Button>
+              </>
+            )}
+          </div>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(event) => setEnabled(event.target.checked)}
+            />
+            启用渠道
+          </label>
+        </fieldset>
+        {channel && (
+          <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               <Button
+                type="button"
                 size="sm"
                 variant="outline"
-                disabled={action.isPending || !channel.enabled}
+                disabled={busy || !channel.enabled}
                 onClick={() =>
-                  perform(() =>
-                    client.request(`/channels/${channel.id}/test`, ConnectionCheck, {
-                      method: 'POST',
-                      timeoutMs: 75_000,
-                    }),
-                  )
+                  perform(async () => {
+                    const result = await client.request(
+                      `/channels/${channel.id}/test`,
+                      ConnectionCheck,
+                      { method: 'POST', timeoutMs: 75_000 },
+                    );
+                    setChecks((items) => ({ ...items, [channel.id]: result }));
+                  })
                 }
               >
                 测试渠道
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={action.isPending || !channel.enabled}
-                onClick={() =>
-                  perform(() =>
-                    client.request(`/channels/${channel.id}/fetch-models`, ChannelModelList, {
-                      method: 'POST',
-                      timeoutMs: 20_000,
-                    }),
-                  )
-                }
-              >
-                <RefreshCw aria-hidden="true" />
-                拉取模型
-              </Button>
               <DeleteButton
-                disabled={action.isPending}
+                label="删除渠道"
+                disabled={busy}
                 onDelete={() =>
                   perform(async () => {
                     await client.request(`/channels/${channel.id}`, DeleteResult, {
                       method: 'DELETE',
                     });
-                    setSelected(undefined);
-                    setModelEdit(null);
-                    setChannelEdit(null);
+                    await queryClient.invalidateQueries({ queryKey: ['models'] });
+                    onClose();
                   })
                 }
               />
             </div>
-            <CheckResult result={channel.lastCheck} />
+            <CheckResult result={checks[channel.id] ?? channel.lastCheck} />
           </div>
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">渠道模型</h3>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={action.isPending}
-              onClick={() => setModelEdit('new')}
-            >
-              <Plus aria-hidden="true" />
-              添加模型
-            </Button>
+        )}
+        <div className="space-y-4 border-t pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">模型</h3>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy || !baseUrl}
+                onClick={probe}
+              >
+                <RefreshCw aria-hidden="true" />
+                拉取模型
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setDrafts([...drafts, newDraft()])}
+              >
+                <Plus aria-hidden="true" />
+                添加模型
+              </Button>
+            </div>
           </div>
-          {modelEdit && (
-            <ModelForm
-              key={typeof modelEdit === 'string' ? `${channel.id}-new` : modelEdit.id}
-              model={modelEdit === 'new' ? undefined : modelEdit}
-              preset={channel.preset}
-              busy={action.isPending}
-              onCancel={() => setModelEdit(null)}
-              onSave={(body) =>
-                perform(async () => {
-                  const existing = modelEdit !== 'new' ? modelEdit : undefined;
-                  await client.request(
-                    existing ? `/channel-models/${existing.id}` : `/channels/${channel.id}/models`,
-                    ChannelModel,
-                    { method: existing ? 'PATCH' : 'POST', body },
-                  );
-                  setModelEdit(null);
-                })
-              }
+          {candidates && (
+            <ModelPicker
+              candidates={candidates}
+              added={added}
+              onCancel={() => setCandidates(null)}
+              onAdd={(ids) => {
+                setDrafts([...drafts, ...ids.map((id) => newDraft(id))]);
+                setCandidates(null);
+              }}
             />
           )}
-          <ul className="divide-y rounded-xl border px-4">
-            {models.data
-              ?.filter((item) => item.channelId === channel.id)
-              .map((model) => (
-                <li key={model.id} className="space-y-3 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">
-                        {model.displayName}{' '}
-                        <span className="font-normal text-muted-foreground">
-                          {model.enabled ? '已启用' : '已禁用'}
-                        </span>
-                      </p>
-                      <p className="mt-1 text-xs break-all text-muted-foreground">
-                        {model.upstreamModelId} · {model.kind ?? '未分类'} ·{' '}
-                        {model.protocol ?? '未选协议'}
-                      </p>
-                      {model.metadata && (
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          {model.metadata.needsConfirmation && '元数据需确认 · '}上下文{' '}
-                          {model.metadata.contextWindow} / 输出 {model.metadata.maxTokens}
-                          {model.metadata.reasoning && ' · 推理'}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={action.isPending}
-                      onClick={() => setModelEdit(model)}
-                    >
-                      配置 {model.displayName}
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={
-                        action.isPending ||
-                        !channel.enabled ||
-                        !model.enabled ||
-                        model.kind !== 'chat'
-                      }
-                      onClick={() =>
-                        perform(() =>
-                          client.request(`/channel-models/${model.id}/test`, ConnectionCheck, {
-                            method: 'POST',
-                            timeoutMs: 75_000,
-                          }),
-                        )
-                      }
-                    >
-                      测试模型
-                    </Button>
-                    <DeleteButton
-                      disabled={action.isPending}
-                      onDelete={() =>
-                        perform(() =>
-                          client.request(`/channel-models/${model.id}`, DeleteResult, {
-                            method: 'DELETE',
-                          }),
-                        )
-                      }
-                    />
-                  </div>
-                  <CheckResult result={model.lastCheck} />
-                </li>
-              ))}
-          </ul>
-          {!models.data?.some((item) => item.channelId === channel.id) && (
+          {!drafts.length && (
             <p className="text-xs text-muted-foreground">
-              尚无模型。可以拉取模型列表，也可以手动填写上游 ID。
+              尚无模型。可以从渠道拉取可用模型挑选，也可以手动填写模型 ID。
             </p>
           )}
-        </>
-      )}
-      {defaults.data && (
-        <div className="space-y-4 border-t pt-5">
-          <h3 className="text-sm font-medium">默认模型</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {ModelKind.options.map((kind) => (
-              <Field
-                key={kind}
-                label={{ chat: '文本', image: '图片', video: '视频', tts: '语音' }[kind]}
-              >
-                <NativeSelect
-                  disabled={action.isPending}
-                  value={defaults.data[kind] ?? ''}
-                  onChange={(event) => {
-                    const id = event.target.value;
-                    perform(() =>
-                      client.request('/model-defaults', ModelDefaults, {
-                        method: 'PUT',
-                        body: { [kind]: id || null },
-                      }),
-                    );
-                  }}
-                >
-                  <option value="">未设置</option>
-                  {models.data
-                    ?.filter(
-                      (model) =>
-                        model.kind === kind &&
-                        model.enabled &&
-                        channels.data?.some((item) => item.id === model.channelId && item.enabled),
-                    )
-                    .map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {channels.data?.find((item) => item.id === model.channelId)?.name} /{' '}
-                        {model.displayName}
-                      </option>
-                    ))}
-                </NativeSelect>
-              </Field>
-            ))}
-          </div>
+          {drafts.map((draft, index) => (
+            <ModelCard
+              key={draft.key}
+              index={index}
+              draft={draft}
+              apiFormat={apiFormat}
+              profiles={profiles.data ?? []}
+              busy={busy}
+              check={draft.id ? checks[draft.id] : undefined}
+              onChange={(patch) => update(draft.key, patch)}
+              onRemove={() => setDrafts(drafts.filter((item) => item.key !== draft.key))}
+              onTest={
+                draft.id && channel?.enabled
+                  ? () =>
+                      perform(async () => {
+                        const id = draft.id!;
+                        const result = await client.request(
+                          `/channel-models/${id}/test`,
+                          ConnectionCheck,
+                          { method: 'POST', timeoutMs: 75_000 },
+                        );
+                        setChecks((items) => ({ ...items, [id]: result }));
+                      })
+                  : undefined
+              }
+            />
+          ))}
         </div>
-      )}
+        {error && (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          渠道与模型一起保存；测试使用已保存的配置，新增模型需保存后才能测试。
+        </p>
+        <div className="flex gap-2">
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onClose}>
+            取消
+          </Button>
+          <Button type="submit" size="sm" disabled={busy}>
+            保存
+          </Button>
+        </div>
+      </form>
     </section>
   );
 }
 
-function ChannelForm({
-  channel,
-  busy,
+function ModelPicker({
+  candidates,
+  added,
+  onAdd,
   onCancel,
-  onSave,
 }: {
-  channel?: Channel;
-  busy: boolean;
+  candidates: string[];
+  added: Set<string>;
+  onAdd: (ids: string[]) => void;
   onCancel: () => void;
-  onSave: (input: ChannelWrite) => void;
 }) {
-  const [preset, setPreset] = useState<ChannelPreset>(channel?.preset ?? 'openai');
-  const [baseUrl, setBaseUrl] = useState(channel?.baseUrl ?? channelPresets.openai.baseUrl);
-  const [error, setError] = useState('');
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      const key = formText(form, 'apiKey');
-      const headers = formText(form, 'headers');
-      onSave(
-        ChannelWrite.parse({
-          name: form.get('name'),
-          preset,
-          baseUrl,
-          enabled: form.get('enabled') === 'on',
-          ...(key ? { apiKey: key } : form.get('clearKey') ? { apiKey: '' } : {}),
-          ...(headers ? { headers: JSON.parse(headers) as unknown } : {}),
-        }),
-      );
-    } catch {
-      setError('请检查渠道名称、HTTP(S) 地址与附加请求头 JSON。');
-    }
-  }
+  const [search, setSearch] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const visible = candidates.filter((id) => id.toLowerCase().includes(search.toLowerCase()));
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border bg-muted/30 p-4">
-      <h3 className="text-sm font-medium">{channel ? '编辑渠道' : '新渠道'}</h3>
-      <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
-        <Field label="渠道名称">
-          <Input name="name" required maxLength={100} defaultValue={channel?.name} />
-        </Field>
-        <Field label="渠道预设">
-          <NativeSelect
-            value={preset}
-            onChange={(event) => {
-              const value = event.target.value as ChannelPreset;
-              setPreset(value);
-              setBaseUrl(channelPresets[value].baseUrl);
-            }}
-          >
-            {Object.entries(channelPresets).map(([value, item]) => (
-              <option key={value} value={value}>
-                {item.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <div className="sm:col-span-2">
-          <Field label="Base URL">
-            <Input
-              required
-              type="url"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-          </Field>
-        </div>
-        <Field label={channel?.hasKey ? `重新填写密钥（留空保留 ${channel.keyHint}）` : 'API 密钥'}>
-          <Input name="apiKey" type="password" autoComplete="new-password" />
-        </Field>
-        <label className="flex items-center gap-2 text-xs">
-          <input name="clearKey" type="checkbox" />
-          清除已存密钥
-        </label>
-        <div className="sm:col-span-2">
-          <Field label="附加请求头 JSON（留空保留，{} 清除）">
-            <Textarea
-              name="headers"
-              placeholder={'{"X-Custom-Header":"value"}'}
-              className="font-mono text-xs"
-            />
-          </Field>
-        </div>
-        <label className="flex items-center gap-2 text-xs">
-          <input name="enabled" type="checkbox" defaultChecked={channel?.enabled ?? true} />
-          启用渠道
-        </label>
-      </fieldset>
-      {error && (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
+    <div
+      role="group"
+      aria-label="选择渠道模型"
+      className="space-y-3 rounded-xl border bg-muted/30 p-4"
+    >
+      <p className="text-xs text-muted-foreground">
+        渠道返回 {candidates.length} 个模型，勾选需要添加的模型。
+      </p>
+      <Input
+        aria-label="搜索模型"
+        placeholder="搜索模型 ID"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
+      <ul className="max-h-60 space-y-1 overflow-y-auto">
+        {visible.map((id) => (
+          <li key={id}>
+            <label className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
+              <input
+                type="checkbox"
+                disabled={added.has(id)}
+                checked={added.has(id) || picked.has(id)}
+                onChange={(event) => {
+                  const next = new Set(picked);
+                  if (event.target.checked) next.add(id);
+                  else next.delete(id);
+                  setPicked(next);
+                }}
+              />
+              <span className="min-w-0 break-all">{id}</span>
+              {added.has(id) && <span className="text-xs text-muted-foreground">已添加</span>}
+            </label>
+          </li>
+        ))}
+        {!visible.length && <li className="px-2 text-xs text-muted-foreground">没有匹配的模型</li>}
+      </ul>
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={busy}>
-          保存渠道
+        <Button type="button" size="sm" disabled={!picked.size} onClick={() => onAdd([...picked])}>
+          添加所选（{picked.size}）
         </Button>
-        <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
           取消
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
 
-function ModelForm({
-  model,
-  preset,
-  busy,
-  onCancel,
-  onSave,
+function BooleanOverride({
+  label,
+  value,
+  onChange,
 }: {
-  model?: ChannelModel;
-  preset: ChannelPreset;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (input: ChannelModelWrite) => void;
+  label: string;
+  value: boolean | undefined;
+  onChange: (value: boolean | undefined) => void;
 }) {
-  const [error, setError] = useState('');
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      onSave(
-        ChannelModelWrite.parse({
-          upstreamModelId: form.get('upstreamModelId'),
-          displayName: form.get('displayName'),
-          kind: form.get('kind') || null,
-          protocol: form.get('protocol') || null,
-          profileId: form.get('profileId') || null,
-          enabled: form.get('enabled') === 'on',
-          overrides: JSON.parse(formText(form, 'overrides', '{}')) as unknown,
-        }),
-      );
-    } catch {
-      setError(
-        '请检查模型 ID、名称和覆盖项 JSON（contextWindow、maxTokens、reasoning、imageInput、compat）。',
-      );
-    }
-  }
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border bg-muted/30 p-4">
-      <h3 className="text-sm font-medium">{model ? '配置模型' : '新模型'}</h3>
-      <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
-        <Field label="上游模型 ID">
+    <Field label={label}>
+      <NativeSelect
+        value={value === undefined ? '' : String(value)}
+        onChange={(event) =>
+          onChange(event.target.value ? event.target.value === 'true' : undefined)
+        }
+      >
+        <option value="">按内置目录</option>
+        <option value="true">支持</option>
+        <option value="false">不支持</option>
+      </NativeSelect>
+    </Field>
+  );
+}
+
+function ModelCard({
+  index,
+  draft,
+  apiFormat,
+  profiles,
+  busy,
+  check,
+  onChange,
+  onRemove,
+  onTest,
+}: {
+  index: number;
+  draft: Draft;
+  apiFormat: LlmProtocol;
+  profiles: ModelProfile[];
+  busy: boolean;
+  check?: ConnectionCheck;
+  onChange: (patch: Partial<Draft>) => void;
+  onRemove: () => void;
+  onTest?: () => void;
+}) {
+  const label = draft.displayName || draft.upstreamModelId || `模型 ${index + 1}`;
+  const [compat, setCompat] = useState(
+    draft.overrides.compat ? JSON.stringify(draft.overrides.compat, null, 2) : '',
+  );
+  const [compatError, setCompatError] = useState(false);
+  const protocols = draft.kind ? protocolsByKind[draft.kind] : [];
+  const matching = profiles.filter(
+    (profile) => profile.kind === draft.kind && profile.protocol === draft.protocol,
+  );
+  const overrides = (patch: Partial<Draft['overrides']>) =>
+    onChange({ overrides: { ...draft.overrides, ...patch } });
+  const number = (value: string) => (value ? Number(value) : undefined);
+  // 新模型在类别和协议齐全时默认启用；已保存的模型保持用户的选择，但缺协议时必须停用。
+  const enabledFor = (protocol: string | null) =>
+    draft.id ? draft.enabled && !!protocol : !!protocol;
+  return (
+    <fieldset disabled={busy} className="space-y-4 rounded-xl border p-4">
+      <legend className="sr-only">{label}</legend>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="min-w-0 text-sm font-medium break-all">{label}</h4>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!onTest || draft.kind !== 'chat' || !draft.enabled}
+            onClick={onTest}
+          >
+            测试模型
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`移除 ${label}`}
+            onClick={onRemove}
+          >
+            <Trash2 aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="模型 ID">
           <Input
-            name="upstreamModelId"
-            defaultValue={model?.upstreamModelId}
             required
             maxLength={300}
+            placeholder="服务商提供的模型 ID"
+            value={draft.upstreamModelId}
+            onChange={(event) => onChange({ upstreamModelId: event.target.value })}
           />
         </Field>
         <Field label="显示名称">
-          <Input name="displayName" defaultValue={model?.displayName} required maxLength={300} />
+          <Input
+            maxLength={300}
+            placeholder="留空使用模型 ID"
+            value={draft.displayName}
+            onChange={(event) => onChange({ displayName: event.target.value })}
+          />
         </Field>
         <Field label="模型类别">
-          <NativeSelect name="kind" defaultValue={model?.kind ?? ''}>
+          <NativeSelect
+            value={draft.kind ?? ''}
+            onChange={(event) => {
+              const kind = event.target.value ? ModelKind.parse(event.target.value) : null;
+              const options = kind ? protocolsByKind[kind] : [];
+              const protocol =
+                draft.protocol && options.includes(draft.protocol)
+                  ? draft.protocol
+                  : kind === 'chat'
+                    ? apiFormat
+                    : options.length === 1
+                      ? options[0]
+                      : null;
+              onChange({ kind, protocol, profileId: null, enabled: enabledFor(protocol) });
+            }}
+          >
             <option value="">未分类</option>
             {ModelKind.options.map((kind) => (
               <option key={kind} value={kind}>
-                {{ chat: '文本', image: '图片', video: '视频', tts: '语音' }[kind]}
+                {kindLabels[kind]}
               </option>
             ))}
           </NativeSelect>
         </Field>
         <Field label="调用协议">
           <NativeSelect
-            name="protocol"
-            defaultValue={model?.protocol ?? channelPresets[preset].protocol}
+            disabled={!draft.kind}
+            value={draft.protocol ?? ''}
+            onChange={(event) => {
+              const protocol = event.target.value || null;
+              onChange({ protocol, profileId: null, enabled: enabledFor(protocol) });
+            }}
           >
-            <option value="">未选择</option>
-            {[...LlmProtocol.options, ...ImageProtocol.options, ...VideoProtocol.options].map(
-              (protocol) => (
-                <option key={protocol} value={protocol}>
-                  {protocol}
-                </option>
-              ),
-            )}
+            <option value="">{draft.kind ? '选择协议' : '先选择类别'}</option>
+            {protocols.map((protocol) => (
+              <option key={protocol} value={protocol}>
+                {protocolLabels[protocol] ?? protocol}
+              </option>
+            ))}
           </NativeSelect>
         </Field>
-        <Field label="媒体档案 ID">
-          <Input
-            name="profileId"
-            defaultValue={model?.profileId ?? ''}
-            placeholder="留空按精确 ID 匹配，否则使用通用档案"
-          />
-        </Field>
-        <p className="text-xs text-muted-foreground sm:col-span-2">
-          MiniMax H3 视频请新建独立渠道，Base URL 使用 https://api.minimax.io（不含
-          /anthropic）；Sora 格式用于兼容渠道。内置档案可在模型测试页查看。
-        </p>
-        <label className="flex items-center gap-2 text-xs">
-          <input name="enabled" type="checkbox" defaultChecked={model?.enabled ?? false} />
-          启用模型（先选择类别和协议）
-        </label>
-        <div className="sm:col-span-2">
-          <Field label="元数据覆盖 JSON">
-            <Textarea
-              name="overrides"
-              className="min-h-28 font-mono text-xs"
-              defaultValue={JSON.stringify(model?.overrides ?? {}, null, 2)}
+        {draft.kind === 'chat' && (
+          <>
+            <Field label="上下文窗口">
+              <Input
+                type="number"
+                min={1}
+                placeholder={draft.metadata ? `默认 ${draft.metadata.contextWindow}` : '按内置目录'}
+                value={draft.overrides.contextWindow ?? ''}
+                onChange={(event) => overrides({ contextWindow: number(event.target.value) })}
+              />
+            </Field>
+            <Field label="最大输出 Token">
+              <Input
+                type="number"
+                min={1}
+                placeholder={draft.metadata ? `默认 ${draft.metadata.maxTokens}` : '按内置目录'}
+                value={draft.overrides.maxTokens ?? ''}
+                onChange={(event) => overrides({ maxTokens: number(event.target.value) })}
+              />
+            </Field>
+            <BooleanOverride
+              label="推理能力"
+              value={draft.overrides.reasoning}
+              onChange={(reasoning) => overrides({ reasoning })}
             />
+            <BooleanOverride
+              label="图片输入"
+              value={draft.overrides.imageInput}
+              onChange={(imageInput) => overrides({ imageInput })}
+            />
+            {draft.metadata?.needsConfirmation && (
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                元数据需确认：内置目录没有该模型，当前使用保守默认值，请按供应商文档填写上限。
+              </p>
+            )}
+            <details className="text-xs sm:col-span-2">
+              <summary className="cursor-pointer text-muted-foreground">高级：compat 开关</summary>
+              <Textarea
+                aria-label="compat JSON"
+                className="mt-2 min-h-24 font-mono text-xs"
+                placeholder="{}"
+                value={compat}
+                onChange={(event) => {
+                  setCompat(event.target.value);
+                  try {
+                    const value = event.target.value.trim()
+                      ? (JSON.parse(event.target.value) as Record<string, never>)
+                      : undefined;
+                    setCompatError(false);
+                    overrides({ compat: value });
+                  } catch {
+                    setCompatError(true);
+                  }
+                }}
+              />
+              {compatError && <p className="mt-1 text-destructive">JSON 格式无效，暂未应用。</p>}
+            </details>
+          </>
+        )}
+        {draft.kind && draft.kind !== 'chat' && draft.protocol && (
+          <Field label="能力档案">
+            <NativeSelect
+              value={draft.profileId ?? ''}
+              onChange={(event) => onChange({ profileId: event.target.value || null })}
+            >
+              <option value="">按模型 ID 自动匹配</option>
+              {matching.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </NativeSelect>
           </Field>
-          <p className="mt-2 text-xs text-muted-foreground">
-            可填写 contextWindow、maxTokens、reasoning、imageInput 和 compat。未知 ID
-            使用保守值，请按供应商文档确认。
-          </p>
-        </div>
-      </fieldset>
-      {error && (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={busy}>
-          保存模型
-        </Button>
-        <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
-          取消
-        </Button>
+        )}
       </div>
-    </form>
+      <label className="flex items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={draft.enabled}
+          onChange={(event) => onChange({ enabled: event.target.checked })}
+        />
+        启用模型
+      </label>
+      <CheckResult result={check ?? draft.lastCheck} />
+    </fieldset>
   );
 }

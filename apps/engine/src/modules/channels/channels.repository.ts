@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   Channel,
   type ChannelWrite,
+  type ChannelModelSave,
   type ChannelModelWrite,
   type ConnectionCheck,
   ModelDefaults,
@@ -29,7 +30,7 @@ export class ChannelsRepository {
     return Channel.parse({
       id: row.id,
       name: row.name,
-      preset: row.preset,
+      apiFormat: row.apiFormat,
       baseUrl: row.baseUrl,
       enabled: row.enabled,
       hasKey: row.apiKeyCipher !== null,
@@ -71,7 +72,7 @@ export class ChannelsRepository {
     if (existingId) this.channelRow(existingId);
     const id = existingId ?? randomUUID();
     const now = new Date().toISOString();
-    const { apiKey, headers, ...values } = input;
+    const { apiKey, headers, models, ...values } = input;
     const secrets = {
       ...(apiKey !== undefined
         ? {
@@ -88,42 +89,80 @@ export class ChannelsRepository {
           }
         : {}),
     };
-    if (existingId)
+    try {
+      // 渠道与模型同一事务提交，任何一项失败都不留下半保存状态。
       this.db.transaction((tx) => {
-        tx.update(channels)
-          .set({ ...values, ...secrets, lastCheck: null, updatedAt: now })
-          .where(eq(channels.id, id))
-          .run();
-        tx.update(channelModels)
-          .set({ lastCheck: null })
-          .where(eq(channelModels.channelId, id))
-          .run();
-        if (input.enabled === false)
-          tx.delete(modelDefaults)
-            .where(
-              inArray(
-                modelDefaults.channelModelId,
-                tx
-                  .select({ id: channelModels.id })
-                  .from(channelModels)
-                  .where(eq(channelModels.channelId, id)),
-              ),
-            )
+        if (existingId) {
+          tx.update(channels)
+            .set({ ...values, ...secrets, lastCheck: null, updatedAt: now })
+            .where(eq(channels.id, id))
             .run();
+          tx.update(channelModels)
+            .set({ lastCheck: null })
+            .where(eq(channelModels.channelId, id))
+            .run();
+          if (input.enabled === false)
+            tx.delete(modelDefaults)
+              .where(
+                inArray(
+                  modelDefaults.channelModelId,
+                  tx
+                    .select({ id: channelModels.id })
+                    .from(channelModels)
+                    .where(eq(channelModels.channelId, id)),
+                ),
+              )
+              .run();
+        } else
+          tx.insert(channels)
+            .values({
+              ...(values as Omit<ChannelWrite, 'apiKey' | 'headers' | 'models'>),
+              id,
+              ...secrets,
+              headerNames: Object.keys(headers ?? {}),
+              createdAt: now,
+              updatedAt: now,
+            })
+            .run();
+        if (models) this.syncModels(tx, id, models);
       });
-    else
-      this.db
-        .insert(channels)
-        .values({
-          ...(values as Omit<ChannelWrite, 'apiKey' | 'headers'>),
-          id,
-          ...secrets,
-          headerNames: Object.keys(headers ?? {}),
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
+    } catch (error) {
+      this.rethrowConstraint(error);
+    }
     return this.getChannel(id);
+  }
+  /** 以提交的列表为准：带 id 的更新、不带的新增、缺席的删除。 */
+  private syncModels(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    channelId: string,
+    models: ChannelModelSave[],
+  ) {
+    const previous = new Map(
+      tx
+        .select()
+        .from(channelModels)
+        .where(eq(channelModels.channelId, channelId))
+        .all()
+        .map((row) => [row.id, row]),
+    );
+    const kept = new Set(models.flatMap((model) => (model.id ? [model.id] : [])));
+    for (const model of models)
+      if (model.id && !previous.has(model.id))
+        throw new DomainError('MODEL_NOT_FOUND', 404, '模型不存在或不属于该渠道');
+    // 先删除再写入，避免改名或换协议时与即将删除的行冲突唯一约束。
+    const removed = [...previous.keys()].filter((id) => !kept.has(id));
+    if (removed.length) tx.delete(channelModels).where(inArray(channelModels.id, removed)).run();
+    for (const { id, ...model } of models) {
+      const values = { ...model, protocol: model.protocol ?? '', lastCheck: null };
+      if (id) {
+        tx.update(channelModels).set(values).where(eq(channelModels.id, id)).run();
+        if (!model.enabled || previous.get(id)?.kind !== model.kind)
+          tx.delete(modelDefaults).where(eq(modelDefaults.channelModelId, id)).run();
+      } else
+        tx.insert(channelModels)
+          .values({ ...values, id: randomUUID(), channelId })
+          .run();
+    }
   }
   deleteChannel(id: string) {
     this.channelRow(id);

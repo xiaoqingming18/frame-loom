@@ -68,29 +68,29 @@ Status: proposed
 
 | 概念 | 含义 |
 | --- | --- |
-| 渠道 `channel` | 一个平台账号：预设类型、Base URL、密钥、附加请求头 |
+| 渠道 `channel` | 一个平台账号：API 格式、Base URL、密钥、附加请求头 |
 | 渠道模型 `channel_model` | 渠道下一个可调用的模型：上游模型 ID、类别、协议、能力档案、用户覆盖项 |
 | 能力档案 `model_profile` | 随应用发布的模型说明：生成模式、参数取值与默认值、组合约束、输入限制、并发与轮询默认值 |
 | 默认模型 | 每个类别一个默认渠道模型，业务功能未指定时使用 |
 
 SQLite 表，由 Drizzle 生成迁移，各领域模块拥有自己的 `*.schema.ts`：
 
-- `channels`：`id, name, preset, base_url, api_key_cipher, key_hint, headers_cipher, header_names, enabled, last_check_json, created_at, updated_at`。密钥与请求头值加密保存，公开接口仅返回 `hasKey`、密钥尾号和请求头名称。
+- `channels`：`id, name, api_format, base_url, api_key_cipher, key_hint, headers_cipher, header_names, enabled, last_check_json, created_at, updated_at`。密钥与请求头值加密保存，公开接口仅返回 `hasKey`、密钥尾号和请求头名称。
 - `channel_models`：
   - 字段：`id, channel_id → channels(on delete cascade), upstream_model_id, display_name, kind(chat|image|video|tts), protocol, profile_id, overrides_json, enabled, last_check_json`。
   - 唯一约束：`(channel_id, upstream_model_id, protocol)`；未选协议在库内用空字符串表示、接口仍返回 null，避免 SQLite 的 NULL 绕过唯一约束。
 - `model_defaults`：`kind 主键, channel_model_id → channel_models(on delete set null)`。
 - `generation_jobs`、`media_files`、`object_uploads`、`object_storage_config`：见后文。
 
-渠道预设 `preset` 只决定表单默认值（Base URL、可选协议、是否支持拉取模型列表），不决定调用方式。首批预设：`openai`、`anthropic`、`gemini`、`ark`（火山方舟）、`minimax`、`openrouter`、`openai-compatible`（通用中转站，含 new-api）。
+渠道最初设计了预设 `preset`；它实际还决定拉取模型列表的鉴权，已由渠道级 API 格式 `api_format` 取代，见[以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)。API 格式只决定拉取方式和新文本模型的默认协议，调用仍按模型协议分派。
 
 ### 文本模型
 
-02 的实现精确锁定 pi-ai 1.4.0，按渠道创建 provider、按模型协议分派。附加请求头与 API Key 一样加密，读接口只返回请求头名称；空密钥表示清除，未传表示保留。未知模型使用保守元数据并标记需确认；覆盖项经过运行时校验。拉取列表采用预设对应路径和鉴权，不按名称猜类别，也不覆盖已有模型配置。连通测试与文本流均限制时长，错误只返回本地分类，不透传上游正文或凭据。媒体档案及其协议在 03～05 接入；02 只保留档案 ID 和覆盖项的数据位置。
+02 的实现精确锁定 pi-ai 1.4.0，按渠道创建 provider、按模型协议分派。附加请求头与 API Key 一样加密，读接口只返回请求头名称；空密钥表示清除，未传表示保留。未知模型使用保守元数据并标记需确认；覆盖项经过运行时校验。拉取列表采用 API 格式对应的路径和鉴权，只返回候选 ID 不写库，由用户勾选后随渠道一并保存；不按名称猜类别。连通测试与文本流均限制时长，错误只返回本地分类，不透传上游正文或凭据。媒体档案及其协议在 03～05 接入；02 只保留档案 ID 和覆盖项的数据位置。
 
 pi 的完整内置目录会加载供应商 SDK，因此运行时和目录在首次使用文本模型时动态导入并复用同一个 Promise，避免无模型配置的引擎启动与健康接口承担这部分开销；代价是首次配置或调用文本模型稍慢。
 
-四种协议均关闭自动重试并禁止携带凭据跟随重定向。Gemini SDK 不接受自定义 fetch，因此 `modules/llm/google-transport.ts` 为每次调用临时监听 `127.0.0.1:0`，用随机路径仅接受该次 SDK 的 POST，将请求转发到固定 Base URL 并设置 `redirect: 'error'`；结束或取消时关闭连接与监听。这样保留 SDK 的原生流解码，代价是单次调用多一跳本地 HTTP 和临时端口。Gemini 预设 Base URL 包含 `/v1beta`，其他协议沿用各自的路径约定。四协议模拟服务已覆盖文本、工具、用量、HTTP 错误分类和重定向拦截；真实供应商验证留到 05。
+四种协议均关闭自动重试并禁止携带凭据跟随重定向。Gemini SDK 不接受自定义 fetch，因此 `modules/llm/google-transport.ts` 为每次调用临时监听 `127.0.0.1:0`，用随机路径仅接受该次 SDK 的 POST，将请求转发到固定 Base URL 并设置 `redirect: 'error'`；结束或取消时关闭连接与监听。这样保留 SDK 的原生流解码，代价是单次调用多一跳本地 HTTP 和临时端口。Gemini 的 Base URL 包含 `/v1beta`（地址示例已提示），其他协议沿用各自的路径约定。四协议模拟服务已覆盖文本、工具、用量、HTTP 错误分类和重定向拦截；真实供应商验证留到 05。
 
 renderer 的文本对话只保存在当前页面；切换模型时清空并取消旧流，失败或取消的轮次不进入后续上下文。每次最多 25 轮、每条输入最多 32,000 字符，清空后可继续；这里只做文本和可展开的推理内容，用量展示 token 原始数量，不换算金额。
 
@@ -240,7 +240,7 @@ created_at, updated_at, finished_at
 
   | 资源 | 接口 |
   | --- | --- |
-  | 渠道 | `/channels`、`/channels/:id`、`/channels/:id/test`、`/channels/:id/fetch-models` |
+  | 渠道 | `/channels`、`/channels/:id`、`/channels/:id/test`、`/channels/probe-models`（草稿拉取，不写库） |
   | 渠道模型 | `/channels/:id/models`、`/channel-models/:id`、`/channel-models/:id/test` |
   | 档案与默认模型 | `/model-profiles`、`/model-defaults` |
   | 对象存储 | `/object-storage`、`/object-storage/test` |
@@ -261,7 +261,7 @@ created_at, updated_at, finished_at
 ### 界面
 
 - **设置中心新增两个页签**：
-  - "模型服务"：渠道列表；渠道详情，包括密钥打码显示、测试和拉取模型；渠道模型列表，包括类别、协议、档案、测试和覆盖项；每个类别的默认模型。
+  - "模型服务"：列表只显示渠道；渠道编辑页包含密钥打码显示、测试、拉取后勾选模型，以及模型的类别、协议、档案、测试和覆盖项，渠道与模型一次保存。"默认模型"为独立页签。细节见[以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)。
   - "对象存储"：配置表单、连接测试、生命周期规则建议和隐私说明。
   - 两个页签都扩展 `settings-search.ts` 的页签枚举。
 - **左栏新增临时页面"模型测试"**：

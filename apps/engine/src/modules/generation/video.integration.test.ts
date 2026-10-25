@@ -88,7 +88,7 @@ it('视频完整流程验证探测、参考限制、S3 去重与四步连接、�
     const channels = app.get(ChannelsRepository);
     const channel = channels.saveChannel({
       name: '视频模拟',
-      preset: 'openai-compatible',
+      apiFormat: 'openai-completions',
       baseUrl: origin,
       apiKey: 'private-provider-key',
       enabled: true,

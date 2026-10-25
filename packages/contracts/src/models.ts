@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ImageProtocol, VideoProtocol } from './generation.js';
 
 export const ModelKind = z.enum(['chat', 'image', 'video', 'tts']);
 export type ModelKind = z.infer<typeof ModelKind>;
@@ -9,47 +10,12 @@ export const LlmProtocol = z.enum([
   'google-generative-ai',
 ]);
 export type LlmProtocol = z.infer<typeof LlmProtocol>;
-export const ChannelPreset = z.enum([
-  'openai',
-  'anthropic',
-  'gemini',
-  'ark',
-  'minimax',
-  'openrouter',
-  'openai-compatible',
-]);
-export type ChannelPreset = z.infer<typeof ChannelPreset>;
-export const channelPresets: Record<
-  ChannelPreset,
-  { name: string; baseUrl: string; protocol: LlmProtocol }
-> = {
-  openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', protocol: 'openai-responses' },
-  anthropic: {
-    name: 'Anthropic',
-    baseUrl: 'https://api.anthropic.com',
-    protocol: 'anthropic-messages',
-  },
-  gemini: {
-    name: 'Gemini',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    protocol: 'google-generative-ai',
-  },
-  ark: {
-    name: '火山方舟',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-    protocol: 'openai-completions',
-  },
-  minimax: {
-    name: 'MiniMax',
-    baseUrl: 'https://api.minimaxi.com/anthropic',
-    protocol: 'anthropic-messages',
-  },
-  openrouter: {
-    name: 'OpenRouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    protocol: 'openai-completions',
-  },
-  'openai-compatible': { name: '通用中转站', baseUrl: '', protocol: 'openai-completions' },
+/** 每个类别可选的调用协议；renderer 用于过滤下拉，engine 用于保存前校验。 */
+export const protocolsByKind: Record<ModelKind, readonly string[]> = {
+  chat: LlmProtocol.options,
+  image: ImageProtocol.options,
+  video: VideoProtocol.options,
+  tts: ['openai-speech', 'minimax-t2a'],
 };
 
 export const ProviderErrorCode = z.enum([
@@ -118,29 +84,38 @@ const HeaderName = z
       ].includes(value.toLowerCase()),
     '鉴权头请使用密钥字段，不能覆盖传输头',
   );
-export const ChannelWrite = z.strictObject({
+const Headers = z
+  .record(
+    HeaderName,
+    z
+      .string()
+      .max(8192)
+      .regex(/^[^\r\n]*$/),
+  )
+  .refine((value) => Object.keys(value).length <= 32);
+const ChannelFields = {
   name: z.string().trim().min(1).max(100),
-  preset: ChannelPreset,
+  /** 渠道 API 格式：决定拉取模型列表的路径与鉴权，并作为新建文本模型的默认协议。 */
+  apiFormat: LlmProtocol,
   baseUrl: BaseUrl,
   apiKey: z.string().max(8192).optional(),
-  headers: z
-    .record(
-      HeaderName,
-      z
-        .string()
-        .max(8192)
-        .regex(/^[^\r\n]*$/),
-    )
-    .refine((value) => Object.keys(value).length <= 32)
-    .optional(),
+  headers: Headers.optional(),
   enabled: z.boolean(),
+};
+export const ModelProbeRequest = z.strictObject({
+  apiFormat: LlmProtocol,
+  baseUrl: BaseUrl,
+  apiKey: z.string().max(8192).optional(),
+  headers: Headers.optional(),
+  /** 编辑已有渠道时，未填写的密钥与请求头使用该渠道已保存的值。 */
+  channelId: z.string().uuid().optional(),
 });
-export type ChannelWrite = z.infer<typeof ChannelWrite>;
-export const ChannelPatch = ChannelWrite.partial();
+export type ModelProbeRequest = z.infer<typeof ModelProbeRequest>;
+export const ModelProbeResult = z.array(z.string());
 export const Channel = z.strictObject({
   id: z.string().uuid(),
   name: z.string(),
-  preset: ChannelPreset,
+  apiFormat: LlmProtocol,
   baseUrl: BaseUrl,
   enabled: z.boolean(),
   hasKey: z.boolean(),
@@ -181,6 +156,15 @@ export const ChannelModelWrite = z.strictObject({
 });
 export type ChannelModelWrite = z.infer<typeof ChannelModelWrite>;
 export const ChannelModelPatch = ChannelModelWrite.partial();
+/** 随渠道一并保存的模型；带 id 为更新，不带为新增，未出现的已有模型被删除。 */
+export const ChannelModelSave = ChannelModelWrite.extend({ id: z.string().uuid().optional() });
+export type ChannelModelSave = z.infer<typeof ChannelModelSave>;
+export const ChannelWrite = z.strictObject({
+  ...ChannelFields,
+  models: z.array(ChannelModelSave).max(500).optional(),
+});
+export type ChannelWrite = z.infer<typeof ChannelWrite>;
+export const ChannelPatch = ChannelWrite.partial();
 export const ChannelModel = z.strictObject({
   ...ChannelModelWrite.shape,
   id: z.string().uuid(),
