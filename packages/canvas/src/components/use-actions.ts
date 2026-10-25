@@ -18,7 +18,7 @@ import {
   type Point,
 } from '../commands/commands';
 import { arrange, type ArrangeMode, type ArrangeOrder } from '../layout/layout';
-import { parseDocument } from '../interaction/document-file';
+import { downloadCanvasDocument, parseDocument } from '../interaction/document-file';
 import {
   copySelection,
   deserialize,
@@ -194,14 +194,7 @@ export function useCanvasActions() {
       cancelImport: imports.cancel,
       clipboardMime: CLIPBOARD_MIME,
       exportDocument() {
-        const url = URL.createObjectURL(
-          new Blob([JSON.stringify(state().document)], { type: 'application/json' }),
-        );
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'frame-loom-canvas.json';
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadCanvasDocument(state().document);
       },
       async importDocument(file: File) {
         try {

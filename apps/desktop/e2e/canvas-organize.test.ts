@@ -201,7 +201,7 @@ test('分组与整理：菜单、锁定、层级、JSON 往返与一步撤销', 
       mimeType: 'application/json',
       buffer: Buffer.from('{'),
     });
-    await expect(page.getByRole('status')).toContainText('JSON 格式无效');
+    await expect(editor.getByRole('status')).toContainText('JSON 格式无效');
     await expect(page.locator('.react-flow__node-image')).toHaveCount(2);
     await input.setInputFiles({
       name: 'minimum.json',
@@ -212,7 +212,7 @@ test('分组与整理：菜单、锁定、层级、JSON 往返与一步撤销', 
     await editor.focus();
     await page.keyboard.press('Shift+1');
     await expect(page.locator('.react-flow__minimap')).toHaveCount(0);
-    await expect(page.getByRole('status')).toBeEmpty();
+    await expect(editor.getByRole('status')).toBeEmpty();
     await expect
       .poll(async () => {
         const frame = (await group.boundingBox())!;

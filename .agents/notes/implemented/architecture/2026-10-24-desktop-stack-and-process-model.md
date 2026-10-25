@@ -63,7 +63,7 @@ Electron 主进程 ──utilityProcess.fork──> engine（NestJS，Electron �
 - engine 实际接口校验 `Authorization: Bearer <token>`；`Host` 必须是 `127.0.0.1:<port>`，防止 DNS rebinding；携带 Origin 时必须匹配应用自己的完整源。任一校验不满足即拒绝，`/health` 同样鉴权。浏览器可信 OPTIONS 预检不带 Bearer，仅在 Host 和 Origin 都合法时放行，不扩展为匿名业务接口；允许源由主进程以 JSON 数组传入。
 - preload 通过 `contextBridge` 暴露 `frameLoom.getEngineConnection()`，返回 `{ baseUrl, token }`，以及 `onEngineExited`、`theme.get/set`、`window.command` 固定方法；所有 IPC 校验可信主框架，主题与窗口命令使用 contracts 枚举校验。不暴露 `ipcRenderer` 或 Node 能力，renderer 只经 `lib/desktop-bridge.ts` 访问。
 - 实时推送使用 SSE（Nest 的 `@Sse()`），`GET /events` 已提供鉴权事件流与 15 秒心跳。浏览器原生 `EventSource` 不能带请求头，因此使用 `fetch` 读流，token 始终放请求头，不放 URL；命令走普通 HTTP。断线不重放，调用方重连后补拉状态。
-- engine 退出时，主进程记录退出码并向可信页面发送 `engine:exited`，页面不重载；本地引擎面板显示中文错误，设置入口显示错误圆点，见[桌面壳](2026-10-24-desktop-shell.md)。当前不自动重启 engine；启动等待上限为 30 秒，退出先发 shutdown，最多等 5 秒后强杀。
+- engine 退出时，主进程记录退出码并向可信页面发送 `engine:exited`，页面不重载；本地引擎面板显示中文错误，设置入口显示错误圆点，见[桌面壳](2026-10-24-desktop-shell.md)。当前不自动重启 engine；启动等待上限为 30 秒，退出先让窗口完成画布保存或由用户明确放弃，窗口关闭后才发 shutdown，最多等 5 秒后强杀。
 - `app/shell/` 组合 42px 标题栏、260px 侧栏、点阵画布与设置弹窗；主题由主进程在窗口创建前读取并驱动 `prefers-color-scheme`，偏好损坏回退系统。主题 token 位于 `styles/theme.css`，设置开关与页签经根路由 zod 校验。生产 CSP 的 `style-src` 是 `'self' 'unsafe-inline'`，支持 Radix 的样式注入，`script-src` 仍为 `'self'`，详见[主题与外壳笔记](../feature/2026-10-24-theme-and-app-shell.md)。
 
 ### 数据位置

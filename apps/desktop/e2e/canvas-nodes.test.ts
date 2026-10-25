@@ -51,18 +51,18 @@ test('节点连线：类型、重复、环、端口限额、方式切换一步�
     await drag(page, out(images.nth(0)), first);
     await expect(page.locator('.react-flow__edge')).toHaveCount(1);
     await drag(page, out(images.nth(1)), first);
-    await expect(page.getByRole('status')).toContainText('最多 1 条连线');
+    await expect(editor.getByRole('status')).toContainText('最多 1 条连线');
     await drag(page, out(video), images.nth(0).locator('[data-handleid="reference"]'));
-    await expect(page.getByRole('status')).toContainText('不接受视频');
+    await expect(editor.getByRole('status')).toContainText('不接受视频');
     await drag(page, out(images.nth(0)), first);
-    await expect(page.getByRole('status')).toContainText('已经连接');
+    await expect(editor.getByRole('status')).toContainText('已经连接');
     await drag(page, out(images.nth(0)), images.nth(1).locator('[data-handleid="reference"]'));
     await expect(page.locator('.react-flow__edge')).toHaveCount(2);
     await drag(page, out(images.nth(1)), images.nth(0).locator('[data-handleid="reference"]'));
-    await expect(page.getByRole('status')).toContainText('循环依赖');
+    await expect(editor.getByRole('status')).toContainText('循环依赖');
     await page.getByRole('radio', { name: '文生视频', exact: true }).click();
     await expect(page.locator('.react-flow__edge')).toHaveCount(1);
-    await expect(page.getByRole('status')).toContainText('断开 1 条');
+    await expect(editor.getByRole('status')).toContainText('断开 1 条');
     await page.getByRole('button', { name: '撤销', exact: true }).click();
     await expect(page.locator('.react-flow__edge')).toHaveCount(2);
     await expect(page.getByRole('radio', { name: '首尾帧', exact: true })).toHaveAttribute(

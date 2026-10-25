@@ -104,7 +104,9 @@ export const CanvasDocument = z
         if (!parent || parent.type !== 'group' || parent.parentId || node.type === 'group')
           context.addIssue({ code: 'custom', path, message: '父节点必须是排在前面的顶层分组' });
       }
-      const schema = CANVAS_BUILTIN_DATA[node.type];
+      const schema = Object.hasOwn(CANVAS_BUILTIN_DATA, node.type)
+        ? CANVAS_BUILTIN_DATA[node.type]
+        : undefined;
       const result = schema?.safeParse(node.data);
       if (result && !result.success)
         for (const issue of result.error.issues)

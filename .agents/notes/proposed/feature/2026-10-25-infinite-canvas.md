@@ -78,7 +78,7 @@ apps/desktop/src/renderer/src/features/canvas-lab/   宿主实现与测试页
   }
   ```
 
-  `features/canvas-lab` 用 EngineClient 与 Query 实现宿主；项目管理落地后复用同一个包，只替换宿主实现。
+  `features/canvas-lab` 用 EngineClient 实现宿主；画布持久化会话独立持有 revision 与串行保存队列，避免 Query 的缓存刷新覆盖尚未保存的编辑；其他服务端查询继续使用 Query。项目管理落地后复用同一个包，只替换宿主实现。
 - **ESLint**：renderer 的 React Hooks、Fast Refresh、Tailwind correctness 与颜色限制规则扩展到 `packages/ui/**`、`packages/canvas/**`；新增导入边界，`packages/*` 不能导入 `apps/*`，`packages/ui` 不能导入 `packages/canvas`。
 - **新增依赖**精确锁定：`@xyflow/react` 12.12.0、`zustand` 5.0.16（画布包自用；xyflow 内部另带 zustand 4，打包后多一份约 3 KB）。id 用 `crypto.randomUUID()`，快捷键自写，不引入热键库。dagre 留到"按依赖分层"再评估。
 
@@ -219,6 +219,10 @@ defineNodeType({
   - `PUT /canvases/:id/view`：保存视图状态，不改 revision，后写覆盖。
 - id 为 `^[a-z0-9-]{1,64}$`，画布测试页固定使用 `lab`；项目管理落地后增加 `project_id` 关联。
 - renderer 修改后防抖 1 秒自动保存，切换路由和关闭窗口前立即保存，标题区显示「已保存／保存中／保存失败」。409 时提示其他窗口已修改，提供「重新加载」与「导出当前画布 JSON」，never 静默覆盖。
+- 保存请求串行执行，保存期间的新编辑保留为待保存状态，响应只能确认已提交的快照；文档保存成功后再保存视图。未创建的画布先用 revision 0 创建，再写视图；视图接口对不存在的画布返回 404。冲突后暂停自动写入，重新加载成功才清空历史并恢复；加载失败不挂载可编辑画布，避免空文档覆盖已有内容。
+- 离开路由或关闭窗口时等待待保存请求完成；失败则保留画布供重试或导出。主进程在窗口关闭后才停止 engine，避免退出流程截断最后一次保存。
+- `modules/canvas` 的 controller 使用 contracts 校验输入，repository 以单条条件 INSERT／UPDATE 完成创建或 revision 递增；未命中条件统一返回 409，不新增纯转发的 service。`GET` 显式发送 JSON null，避免 Nest 把空记录序列化为空响应。内置 `data` 映射只查自有属性，合法未知类型（如 `constructor`）原样保存。
+- 关闭前同步结束节点标题编辑，再经 Electron `beforeunload` 阻止关闭并等待保存；失败弹窗提供留在画布、导出、重试保存和明确放弃后离开。强制结束应用或断电不在离开保存保证范围内，未经过 1 秒防抖落盘的内容可能丢失。
 - 修改统一走命名命令，以后 Agent 写画布可以映射为带前值的命令与回执，不改文档模型。
 
 ### 撤销重做
@@ -252,6 +256,8 @@ defineNodeType({
 - 删除节点不删除 media 文件，孤儿媒体清理留给项目管理阶段。
 
 ### 实施阶段
+
+P0–P4 已落地；P5 的节点内生成、模型测试页删除与整体人工验收尚未完成，本篇保持 proposed，整体验收后再转 implemented。
 
 | 阶段 | 内容 |
 | --- | --- |
@@ -287,6 +293,7 @@ defineNodeType({
 - **每次生成新建一个节点** — 最强理由：所有结果平铺可见，便于对比。不选：用户确定写回本节点作为新版本，节点即生成位，下游连线始终引用当前版本而不必改线。
 - **zundo 中间件做撤销** — 最强理由：Dify 已验证，接入 zustand 只需几行。不选：仍需自定义合并拖拽、排除视图状态和系统事务回写，整份快照栈自写约百行即可覆盖，不增加依赖。
 - **视图状态存 localStorage（MiniMax 的做法）** — 最强理由：不需要后端接口，读写同步。不选：开发与生产的源不同，localStorage 是两份，[主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)已因同一原因放弃 localStorage；与文档同行保存还能随项目迁移。
+- **离开时仅发起异步保存，不等待完成** — 最强理由：不阻断导航与关闭，也不必处理退出确认。不选：窗口销毁或 engine shutdown 会截断请求；用户已经主动保存离开时，静默丢失最后一次修改不可接受，因此保存失败才增加保留、导出与明确放弃的选择。
 - **首期引入 dagre 做整理** — 最强理由：有连线的部分按依赖从左到右排更直观，MiniMax 已采用。不选：首期要求的按类型、宫格、水平、垂直用包围盒计算即可；按依赖分层另行评估。elkjs 为 EPL-2.0／GPL-3.0 双许可，不考虑。
 - **导入 JSON 时追加节点并重写 id** — 最强理由：保留当前画布，可以把多个文件拼在一起。不选：这里的整份 JSON 用于备份恢复和保存失败后的救援，替换能保留原 id、分组和层级；通过一步撤销恢复替换前的内容，跨画布追加继续使用已有复制粘贴。
 - **小地图首期用 Canvas 自绘（MiniMax 的做法）** — 最强理由：上万节点时仍流畅。不选：首期上限 2000 节点，xyflow 自带的 SVG `MiniMap` 已支持拖动、缩放和按类型着色；实测卡顿时再换。

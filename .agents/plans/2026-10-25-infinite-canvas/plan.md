@@ -26,7 +26,7 @@ Note: ../../notes/proposed/feature/2026-10-25-infinite-canvas.md
 | 02 | [画布骨架](02-canvas-shell.md) | done | 01 | `packages/canvas`、`/canvas-lab` 页面、视口、工具、操作栏、右上工具组、小地图、快捷键层 |
 | 03 | [节点与连线](03-nodes-edges.md) | done | 02 | 注册表、图片／视频节点、连线校验、复制粘贴、撤销重做、连线显示 |
 | 04 | [分组与整理](04-organize.md) | done | 03 | 分组解组、四种整理、右键菜单、锁定与层级、导出导入 |
-| 05 | [持久化](05-persistence.md) | draft | 03 | engine `modules/canvas`、自动保存、409 处理、视图状态 |
+| 05 | [持久化](05-persistence.md) | done | 03 | engine `modules/canvas`、自动保存、409 处理、视图状态 |
 | 06 | [节点内生成与验收](06-generation-acceptance.md) | draft | 04、05 | 节点内生成与版本写回、删除模型测试页、人工验收、笔记收尾 |
 
 ## 依赖与顺序
@@ -37,10 +37,11 @@ Note: ../../notes/proposed/feature/2026-10-25-infinite-canvas.md
 ## 验收
 
 - [ ] contracts、画布包、engine 集成与 desktop 单测通过，`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 通过 — 证据：各子计划验证
-- [ ] 桌面 e2e 覆盖建节点、合法与非法连线、切换方式断线与撤销、重启后保留 — 证据：03、05 验证
+- [x] 桌面 e2e 覆盖建节点、合法与非法连线、切换方式断线与撤销、重启后保留 — 证据：03、05 验证
 - [ ] 人工验收 7 项在开发环境与加固 exe 中通过，明暗模式均检查 — 证据：06 验证
 - [ ] 模型测试页已删除，笔记转入 `implemented/`，相关笔记原地同步，计划转为 `done` — 证据：06 收尾
 
 ## 发现与偏差
 
-- 03、04 已完成；节点／连线、媒体导入、分组整理、JSON 往返与外壳桌面回归共 4 项通过，05 尚未启动，重启保留和总体验收未完成。默认并发单测的 engine 启动超时及全仓 430 项串行通过结果见 [04 验证](04-organize.md)，此前记录见 [03 验证](03-nodes-edges.md)。
+- 01–05 已完成；全仓 445 项串行单测、最终构建的 12 项桌面 e2e 通过，含文档／视图重启保留、409 恢复与 engine 故障保护，见 [05 验证](05-persistence.md)。默认并发单测的 engine 启动超时记录仍见 [04 验证](04-organize.md)，本轮不扩大范围修改测试超时。
+- 06 的节点内生成、模型测试页删除、加固 exe 人工验收和总笔记收尾尚未执行，父计划保持 active。

@@ -63,6 +63,11 @@ if (!hasLock) {
   app.on('before-quit', (event) => {
     if (stopped) return;
     event.preventDefault();
+    // 窗口的 beforeunload 先完成画布保存；真正关闭后再停止 engine。
+    if (window && !window.isDestroyed()) {
+      window.close();
+      return;
+    }
     if (quitting) return;
     quitting = true;
     void (engine?.stop() ?? Promise.resolve()).finally(() => {

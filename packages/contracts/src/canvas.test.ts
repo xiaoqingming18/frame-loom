@@ -43,6 +43,7 @@ describe('CanvasDocument', () => {
         node('a', 'image', { parentId: 'g' }),
         node('b', 'video', { data: media({ mode: 'frames' }) }),
         node('x', 'plugin:note', { data: { anything: [1, 2] } }),
+        node('y', 'constructor', { data: { future: true } }),
       ],
       [edge('e', 'a', 'b')],
     );

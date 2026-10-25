@@ -10,4 +10,5 @@ export type {
   PortDataType,
 } from './registry/registry';
 export { checkConnection } from './registry/connections';
+export { downloadCanvasDocument } from './interaction/document-file';
 export { createBuiltinRegistry, groupNode, imageNode, videoNode } from './nodes/builtin';
