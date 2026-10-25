@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { doc, edge, media } from '../test-utils';
+import { doc, edge, group, media } from '../test-utils';
+import { reorder } from '../commands/commands';
 import { createNodeMapper, toFlowEdges } from './flow-mapping';
 
 it('三档连线显示只控制可见性，悬停、拖线焦点和选中边可临时显示', () => {
@@ -32,4 +33,24 @@ it('选择变化只重建相关节点映射，切换抓手禁用拖拽与选择'
   expect(
     map(document, new Set(['a']), true).every((node) => !node.draggable && !node.selectable),
   ).toBe(true);
+});
+
+it('调整层级更新缓存中的 zIndex；组框始终低于普通节点，组锁定覆盖成员', () => {
+  const map = createNodeMapper();
+  const document = doc([
+    group('g', { locked: true }),
+    media('a', 'image', { parentId: 'g' }),
+    media('b'),
+    media('c'),
+  ]);
+  const before = map(document, new Set(), false);
+  const after = map(reorder(document, new Set(['b']), 'front'), new Set(), false);
+  const z = (id: string) => after.find((node) => node.id === id)!.zIndex!;
+  expect(z('b')).toBeGreaterThan(z('c'));
+  expect(z('g')).toBeLessThan(z('a'));
+  expect(after.find((node) => node.id === 'b')).not.toBe(before.find((node) => node.id === 'b'));
+  expect(after.find((node) => node.id === 'a')).toMatchObject({
+    draggable: false,
+    connectable: false,
+  });
 });

@@ -1,5 +1,12 @@
 import type { CanvasDocument, CanvasNode } from '@frame-loom/contracts';
-import { absolutePosition, boundsOf, fitGroup, moveNodes, type Point } from '../commands/commands';
+import {
+  absolutePosition,
+  boundsOf,
+  fitGroup,
+  isNodeLocked,
+  moveNodes,
+  type Point,
+} from '../commands/commands';
 
 export type ArrangeMode = 'grid' | 'horizontal' | 'vertical' | 'type';
 export type ArrangeOrder = 'title' | 'created';
@@ -66,6 +73,7 @@ export function arrangeByType(boxes: (Box & { type: string })[], gap = ARRANGE_G
 }
 
 function sortNodes(nodes: CanvasNode[], order: ArrangeOrder, original: CanvasNode[]) {
+  // shortcut: 创建顺序复用文档顺序，需要在调整层级后保留原始时间顺序时再增加创建时间。
   if (order === 'created')
     return [...nodes].sort((a, b) => original.indexOf(a) - original.indexOf(b));
   return [...nodes].sort((a, b) => collator.compare(a.title ?? '', b.title ?? ''));
@@ -81,22 +89,31 @@ export function arrange(
   mode: ArrangeMode,
   order: ArrangeOrder = 'created',
 ): CanvasDocument {
-  const scope = selected.size
-    ? document.nodes.filter((node) => selected.has(node.id) && !node.locked)
-    : document.nodes.filter((node) => !node.parentId && !node.locked);
+  const scope = document.nodes.filter(
+    (node) =>
+      !isNodeLocked(document, node) &&
+      (!selected.size || selected.has(node.id) || (node.parentId && selected.has(node.parentId))),
+  );
   const byParent = new Map<string | undefined, CanvasNode[]>();
   for (const node of scope)
     byParent.set(node.parentId, [...(byParent.get(node.parentId) ?? []), node]);
   let next = document;
-  for (const [parentId, siblings] of byParent) {
+  // 先收紧组内布局，再用更新后的组框尺寸整理顶层，避免组框相互覆盖。
+  const entries = [...byParent].sort(([a], [b]) => Number(!!b) - Number(!!a));
+  for (const [parentId, siblings] of entries) {
     if (siblings.length < 2 && !parentId) continue;
-    const nodes = sortNodes(siblings, order, document.nodes);
+    const ids = new Set(siblings.map((node) => node.id));
+    const nodes = sortNodes(
+      next.nodes.filter((node) => ids.has(node.id)),
+      order,
+      document.nodes,
+    );
     const anchor = boundsOf(
-      nodes.map((node) => ({ ...absolutePosition(document, node), ...node.size })),
+      nodes.map((node) => ({ ...absolutePosition(next, node), ...node.size })),
     )!;
     const boxes = nodes.map((node) => ({ id: node.id, type: node.type, ...node.size }));
     const relative = mode === 'type' ? arrangeByType(boxes) : arrangeBoxes(boxes, mode);
-    const parent = parentId ? document.nodes.find((node) => node.id === parentId) : undefined;
+    const parent = parentId ? next.nodes.find((node) => node.id === parentId) : undefined;
     const offset = parent ? parent.position : { x: 0, y: 0 };
     const positions = new Map<string, Point>();
     for (const [id, point] of relative)

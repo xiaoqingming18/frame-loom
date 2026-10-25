@@ -9,8 +9,14 @@ import {
 import { Film, ImageIcon, Loader2, Lock } from 'lucide-react';
 import type { CanvasGroupData, CanvasMediaData, CanvasVideoMode } from '@frame-loom/contracts';
 import { cn } from '@frame-loom/ui/lib/utils';
+import { Button } from '@frame-loom/ui/components/button';
 import { useCanvas, useCanvasState } from '../context';
-import { changeDataDroppingEdges, updateData, updateNode } from '../commands/commands';
+import {
+  changeDataDroppingEdges,
+  isNodeLocked,
+  updateData,
+  updateNode,
+} from '../commands/commands';
 import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
 import { activeVersion, GROUP_COLORS, VIDEO_MODES } from './media';
 import { checkConnection } from '../registry/connections';
@@ -130,6 +136,10 @@ export function NodeTitle({
 }) {
   const { store } = useCanvas();
   const editing = useCanvasState((state) => state.editingTitle === nodeId);
+  const locked = useCanvasState((state) => {
+    const node = state.document.nodes.find((node) => node.id === nodeId);
+    return !!node && isNodeLocked(state.document, node);
+  });
   return (
     <div className="flex h-6 min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
       <span aria-hidden="true" className="shrink-0 [&_svg]:size-3.5">
@@ -142,7 +152,7 @@ export function NodeTitle({
           className="truncate"
           onDoubleClick={(event) => {
             event.stopPropagation();
-            store.getState().setEditingTitle(nodeId);
+            if (!locked) store.getState().setEditingTitle(nodeId);
           }}
         >
           {title}
@@ -165,6 +175,7 @@ function MediaFrame({
 }) {
   const { registry } = useCanvas();
   const definition = registry.get(node.type)!;
+  const locked = useCanvasState((state) => isNodeLocked(state.document, node));
   const inputCount = useCanvasState(
     (state) => state.document.edges.filter((edge) => edge.target === node.id).length,
   );
@@ -178,14 +189,14 @@ function MediaFrame({
           icon={kind === 'image' ? <ImageIcon /> : <Film />}
         />
         <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-          {node.locked && <Lock aria-label="已锁定" className="size-3" />}
+          {locked && <Lock aria-label="已锁定" className="size-3" />}
           {edgeDisplay !== 'all' && inputCount > 0 && (
             <span title="参考数量">{inputCount} 个参考</span>
           )}
         </div>
       </div>
       <NodeResizer
-        isVisible={selected && !node.locked}
+        isVisible={selected && !locked}
         minWidth={definition.minSize.width}
         minHeight={definition.minSize.height}
         keepAspectRatio={definition.keepAspect}
@@ -246,6 +257,7 @@ export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
 export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
   const { host, store, registry } = useCanvas();
   const version = activeVersion(props.node.data);
+  const locked = useCanvasState((state) => isNodeLocked(state.document, props.node));
   const active = useCanvasState((state) => {
     const playable = (id: string) =>
       state.document.nodes.some(
@@ -302,7 +314,7 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
               type="button"
               role="radio"
               aria-checked={mode === item.id}
-              disabled={props.node.locked}
+              disabled={locked}
               onClick={() => setMode(item.id)}
               className={cn(
                 'rounded-md px-2 py-1 text-xs whitespace-nowrap text-muted-foreground hover:bg-accent disabled:opacity-50',
@@ -368,16 +380,44 @@ export function GroupNodeView({ node, selected }: NodeViewProps<CanvasGroupData>
       />
       <div className="flex items-center justify-between gap-2 px-3 pt-2.5">
         <NodeTitle nodeId={node.id} title={node.title ?? definition.label} icon={null} />
+        {node.locked && <Lock aria-label="已锁定" className="size-3 text-muted-foreground" />}
         {selected && !node.locked && (
-          <div className="nodrag nopan flex gap-1" role="radiogroup" aria-label="分组颜色">
-            {GROUP_COLORS.map((color) => (
-              <button
+          <div
+            className="nodrag nopan flex max-w-36 flex-wrap justify-end gap-1"
+            role="radiogroup"
+            aria-label="分组颜色"
+          >
+            {GROUP_COLORS.map((color, index) => (
+              <Button
                 key={color.id}
                 type="button"
                 role="radio"
+                variant="ghost"
+                tabIndex={node.data.color === color.id ? 0 : -1}
                 aria-checked={node.data.color === color.id}
                 aria-label={color.label}
                 title={color.label}
+                onKeyDown={(event) => {
+                  const offset = ['ArrowRight', 'ArrowDown'].includes(event.key)
+                    ? 1
+                    : ['ArrowLeft', 'ArrowUp'].includes(event.key)
+                      ? -1
+                      : 0;
+                  if (!offset && event.key !== 'Home' && event.key !== 'End') return;
+                  event.preventDefault();
+                  const next =
+                    event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? GROUP_COLORS.length - 1
+                        : (index + offset + GROUP_COLORS.length) % GROUP_COLORS.length;
+                  const target =
+                    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                      '[role=radio]',
+                    )[next];
+                  target?.focus();
+                  target?.click();
+                }}
                 onClick={() =>
                   store
                     .getState()
@@ -386,7 +426,7 @@ export function GroupNodeView({ node, selected }: NodeViewProps<CanvasGroupData>
                     )
                 }
                 className={cn(
-                  'canvas-group-swatch size-3.5 rounded-full border',
+                  'canvas-group-swatch size-3.5 rounded-full border p-0',
                   `canvas-group-${color.id}`,
                   node.data.color === color.id && 'ring-2 ring-ring',
                 )}

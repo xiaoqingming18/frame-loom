@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { doc, group, media } from '../test-utils';
 import { arrange, arrangeBoxes, ARRANGE_GAP } from './layout';
+import { absolutePosition } from '../commands/commands';
+import { createCanvasStore } from '../store/store';
 
 const box = (id: string, width = 100, height = 100) => ({ id, width, height });
 
@@ -25,6 +27,38 @@ describe('arrangeBoxes', () => {
 });
 
 describe('arrange', () => {
+  it.each(['grid', 'horizontal', 'vertical', 'type'] as const)(
+    '选组或全图时整理组内成员，%s 整体只撤销一步',
+    (mode) => {
+      const document = doc([
+        group('g', { position: { x: 50, y: 20 }, size: { width: 2000, height: 2000 } }),
+        media('a', 'image', { parentId: 'g', position: { x: 80, y: 100 } }),
+        media('b', 'video', { parentId: 'g', position: { x: 500, y: 800 } }),
+        media('c', 'image', { locked: true, position: { x: 4000, y: 0 } }),
+      ]);
+      for (const selected of [new Set<string>(), new Set(['g', 'a', 'b'])]) {
+        const store = createCanvasStore(document);
+        store.getState().apply((current) => arrange(current, selected, mode));
+        const next = store.getState().document;
+        expect(absolutePosition(next, next.nodes[1])).toEqual({ x: 130, y: 120 });
+        expect(next.nodes[0].size.width).toBeLessThan(2000);
+        expect(next.nodes[0].size.height).toBeLessThan(2000);
+        expect(next.nodes[3]).toBe(document.nodes[3]);
+        expect(store.getState().past).toHaveLength(1);
+        store.getState().undo();
+        expect(store.getState().document).toBe(document);
+      }
+    },
+  );
+
+  it('锁定组的成员不参与整理', () => {
+    const document = doc([
+      group('g', { locked: true }),
+      media('a', 'image', { parentId: 'g' }),
+      media('b', 'image', { parentId: 'g' }),
+    ]);
+    expect(arrange(document, new Set(), 'horizontal')).toBe(document);
+  });
   it('锚点保持在原包围盒左上角，按类型每类一行', () => {
     const document = doc([
       media('v', 'video', { position: { x: 500, y: 40 } }),

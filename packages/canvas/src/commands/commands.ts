@@ -26,6 +26,10 @@ export function absoluteRect(document: CanvasDocument, node: CanvasNode): Rect {
   return { ...absolutePosition(document, node), ...node.size };
 }
 
+export function isNodeLocked(document: CanvasDocument, node: CanvasNode): boolean {
+  return !!(node.locked || document.nodes.find((item) => item.id === node.parentId)?.locked);
+}
+
 export function boundsOf(rects: Rect[]): Rect | null {
   if (!rects.length) return null;
   const x = Math.min(...rects.map((rect) => rect.x));
@@ -115,7 +119,11 @@ export function moveNodes(document: CanvasDocument, positions: Map<string, Point
   let changed = false;
   const nodes = document.nodes.map((node) => {
     const position = positions.get(node.id);
-    if (!position || (position.x === node.position.x && position.y === node.position.y))
+    if (
+      !position ||
+      isNodeLocked(document, node) ||
+      (position.x === node.position.x && position.y === node.position.y)
+    )
       return node;
     changed = true;
     return { ...node, position };
@@ -127,7 +135,11 @@ export function nudge(document: CanvasDocument, ids: ReadonlySet<string>, delta:
   // 选中分组时子节点随组移动，不重复位移。
   const positions = new Map<string, Point>();
   for (const node of document.nodes)
-    if (ids.has(node.id) && !node.locked && !(node.parentId && ids.has(node.parentId)))
+    if (
+      ids.has(node.id) &&
+      !isNodeLocked(document, node) &&
+      !(node.parentId && ids.has(node.parentId))
+    )
       positions.set(node.id, { x: node.position.x + delta.x, y: node.position.y + delta.y });
   return moveNodes(document, positions);
 }
@@ -138,7 +150,9 @@ export function deleteElements(
   edgeIds: ReadonlySet<string> = new Set(),
 ): CanvasDocument {
   const removed = new Set(
-    document.nodes.filter((node) => nodeIds.has(node.id) && !node.locked).map((node) => node.id),
+    document.nodes
+      .filter((node) => nodeIds.has(node.id) && !isNodeLocked(document, node))
+      .map((node) => node.id),
   );
   // 删除分组时保留子节点，换算为绝对坐标后脱离分组。
   const nodes = document.nodes
@@ -226,7 +240,8 @@ export function changeDataDroppingEdges<Data>(
   };
 }
 
-export const GROUP_PADDING = { x: 24, top: 48, bottom: 24 };
+// 顶部同时留出分组标题和媒体节点框外标题的空间。
+export const GROUP_PADDING = { x: 24, top: 72, bottom: 24 };
 
 export function groupNodes(
   registry: NodeRegistry,
@@ -236,9 +251,11 @@ export function groupNodes(
 ): { document: CanvasDocument; groupId: string } {
   // 选中分组时连同其子节点一起并入新分组，首期只支持一层。
   const members = document.nodes.filter(
-    (node) => ids.has(node.id) && node.type !== 'group' && !node.locked,
+    (node) => ids.has(node.id) && node.type !== 'group' && !isNodeLocked(document, node),
   );
-  const dissolved = document.nodes.filter((node) => ids.has(node.id) && node.type === 'group');
+  const dissolved = document.nodes.filter(
+    (node) => ids.has(node.id) && node.type === 'group' && !node.locked,
+  );
   const absorbed = document.nodes.filter(
     (node) => node.parentId && dissolved.some((group) => group.id === node.parentId),
   );
@@ -281,7 +298,7 @@ export function groupNodes(
 export function ungroup(document: CanvasDocument, ids: ReadonlySet<string>): CanvasDocument {
   const groups = new Set(
     document.nodes
-      .filter((node) => node.type === 'group' && (ids.has(node.id) || false))
+      .filter((node) => node.type === 'group' && ids.has(node.id))
       .map((node) => node.id),
   );
   // 选中子节点时解散其所在分组。
@@ -302,13 +319,21 @@ export function reparentAfterDrag(
   const groups = document.nodes.filter((node) => node.type === 'group');
   let changed = false;
   const nodes = document.nodes.map((node) => {
-    if (!ids.has(node.id) || node.type === 'group') return node;
+    if (
+      !ids.has(node.id) ||
+      node.type === 'group' ||
+      isNodeLocked(document, node) ||
+      (node.parentId && ids.has(node.parentId))
+    )
+      return node;
     const rect = absoluteRect(document, node);
     const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
     const target = [...groups]
       .reverse()
       .find(
         (group) =>
+          !group.locked &&
+          !ids.has(group.id) &&
           center.x >= group.position.x &&
           center.x <= group.position.x + group.size.width &&
           center.y >= group.position.y &&
@@ -331,7 +356,7 @@ export function reparentAfterDrag(
 export function fitGroup(document: CanvasDocument, groupId: string): CanvasDocument {
   const group = document.nodes.find((node) => node.id === groupId);
   const children = document.nodes.filter((node) => node.parentId === groupId);
-  if (!group || !children.length) return document;
+  if (!group || group.type !== 'group' || group.locked || !children.length) return document;
   const bounds = boundsOf(children.map((node) => absoluteRect(document, node)))!;
   const position = { x: bounds.x - GROUP_PADDING.x, y: bounds.y - GROUP_PADDING.top };
   const delta = { x: position.x - group.position.x, y: position.y - group.position.y };
@@ -359,9 +384,10 @@ export function fitGroup(document: CanvasDocument, groupId: string): CanvasDocum
 
 export function reorder(document: CanvasDocument, ids: ReadonlySet<string>, to: 'front' | 'back') {
   // 只在同一父级内调整顺序；渲染层按数组顺序叠放。
-  const picked = document.nodes.filter((node) => ids.has(node.id));
+  const picked = document.nodes.filter((node) => ids.has(node.id) && !isNodeLocked(document, node));
   if (!picked.length) return document;
-  const rest = document.nodes.filter((node) => !ids.has(node.id));
+  const pickedIds = new Set(picked.map((node) => node.id));
+  const rest = document.nodes.filter((node) => !pickedIds.has(node.id));
   return {
     ...document,
     nodes: orderParents(to === 'front' ? [...rest, ...picked] : [...picked, ...rest]),

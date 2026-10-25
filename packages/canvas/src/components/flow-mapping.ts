@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { CanvasDocument, CanvasEdgeDisplay, CanvasNode } from '@frame-loom/contracts';
+import { isNodeLocked } from '../commands/commands';
 
 export type FlowNode = Node<{
   node: CanvasNode;
@@ -11,11 +12,16 @@ export function createNodeMapper() {
   let cache = new Map<CanvasNode, { selected: boolean; flow: FlowNode }>();
   return (document: CanvasDocument, selected: ReadonlySet<string>, hand: boolean): FlowNode[] => {
     const next = new Map<CanvasNode, { selected: boolean; flow: FlowNode }>();
-    const nodes = document.nodes.map((node) => {
+    const nodes = document.nodes.map((node, index) => {
       const isSelected = selected.has(node.id);
+      const locked = isNodeLocked(document, node);
+      const zIndex = node.type === 'group' ? index - document.nodes.length : index + 1;
       const cached = cache.get(node);
       const flow =
-        cached && cached.selected === isSelected && cached.flow.draggable === !(node.locked || hand)
+        cached &&
+        cached.selected === isSelected &&
+        cached.flow.draggable === !(locked || hand) &&
+        cached.flow.zIndex === zIndex
           ? cached.flow
           : {
               id: node.id,
@@ -25,11 +31,11 @@ export function createNodeMapper() {
               height: node.size.height,
               ...(node.parentId ? { parentId: node.parentId } : {}),
               selected: isSelected,
-              draggable: !(node.locked || hand),
+              draggable: !(locked || hand),
               selectable: !hand,
-              connectable: !node.locked,
+              connectable: !locked,
               // 分组始终位于子节点和普通节点之下。
-              zIndex: node.type === 'group' ? -1 : 0,
+              zIndex,
               className: node.type === 'group' ? 'canvas-flow-group' : 'canvas-flow-node',
               data: { node },
             };

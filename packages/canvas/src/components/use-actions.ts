@@ -1,6 +1,6 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import type { CanvasDocument } from '@frame-loom/contracts';
+import { CANVAS_LIMITS, type CanvasDocument } from '@frame-loom/contracts';
 import { useCanvas } from '../context';
 import {
   addNodes,
@@ -9,13 +9,16 @@ import {
   createNode,
   deleteElements,
   groupNodes,
+  fitGroup,
+  isNodeLocked,
   nudge,
   reorder,
   setLocked,
   ungroup,
   type Point,
 } from '../commands/commands';
-import { arrange, type ArrangeMode } from '../layout/layout';
+import { arrange, type ArrangeMode, type ArrangeOrder } from '../layout/layout';
+import { parseDocument } from '../interaction/document-file';
 import {
   copySelection,
   deserialize,
@@ -41,6 +44,7 @@ export function useCanvasActions() {
   const flow = useReactFlow();
   const imports = useMediaImports();
   const paste = useRef({ count: 0, at: null as Point | null });
+  const [arrangeOrder, setArrangeOrder] = useState<ArrangeOrder>('created');
 
   return useMemo(() => {
     const state = () => store.getState();
@@ -146,8 +150,19 @@ export function useCanvasActions() {
       ungroup() {
         run((document) => ungroup(document, state().selectedNodes));
       },
+      fitGroups() {
+        run((document) => {
+          let next = document;
+          for (const node of document.nodes)
+            if (state().selectedNodes.has(node.id) && node.type === 'group')
+              next = fitGroup(next, node.id);
+          return next;
+        });
+      },
+      arrangeOrder,
+      setArrangeOrder,
       arrange(mode: ArrangeMode) {
-        run((document) => arrange(document, state().selectedNodes, mode));
+        run((document) => arrange(document, state().selectedNodes, mode, arrangeOrder));
         requestAnimationFrame(() => void flow.fitView({ duration: 200, padding: 0.15 }));
       },
       nudge(dx: number, dy: number) {
@@ -161,7 +176,9 @@ export function useCanvasActions() {
       },
       rename() {
         const [id] = state().selectedNodes;
-        if (id && state().selectedNodes.size === 1) state().setEditingTitle(id);
+        const node = state().document.nodes.find((node) => node.id === id);
+        if (node && state().selectedNodes.size === 1 && !isNodeLocked(state().document, node))
+          state().setEditingTitle(id);
       },
       zoomIn: () => void flow.zoomIn({ duration: 150 }),
       zoomOut: () => void flow.zoomOut({ duration: 150 }),
@@ -176,9 +193,35 @@ export function useCanvasActions() {
       retryImport: imports.retry,
       cancelImport: imports.cancel,
       clipboardMime: CLIPBOARD_MIME,
+      exportDocument() {
+        const url = URL.createObjectURL(
+          new Blob([JSON.stringify(state().document)], { type: 'application/json' }),
+        );
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'frame-loom-canvas.json';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      },
+      async importDocument(file: File) {
+        try {
+          if (file.size > CANVAS_LIMITS.bytes)
+            throw new CanvasCommandError('画布 JSON 不能超过 8 MiB');
+          const next = parseDocument(await file.text(), registry);
+          if (run(() => next)) {
+            state().select([]);
+            state().setEditingTitle(null);
+            state().notify('已导入画布，可撤销恢复原内容；媒体文件需在本机存在');
+          }
+        } catch (error) {
+          state().notify(
+            error instanceof CanvasCommandError ? error.message : '读取画布 JSON 失败',
+          );
+        }
+      },
     };
     return actions;
-  }, [flow, registry, store, imports]);
+  }, [flow, registry, store, imports, arrangeOrder]);
 }
 
 export type CanvasActionsApi = ReturnType<typeof useCanvasActions>;

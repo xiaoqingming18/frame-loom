@@ -9,6 +9,7 @@ import {
   groupNodes,
   nudge,
   reparentAfterDrag,
+  reorder,
   setLocked,
   ungroup,
 } from './commands';
@@ -87,6 +88,47 @@ describe('分组', () => {
     expect(g.position.x + a.position.x).toBe(200);
     expect(g.position.y + a.position.y).toBe(300);
     expect(g.size.width).toBe(100 + GROUP_PADDING.x * 2);
+  });
+
+  it('拖动整组不把子节点重新归属到重叠分组', () => {
+    const document = doc([
+      group('g'),
+      group('overlap'),
+      media('a', 'image', { parentId: 'g', position: { x: 30, y: 60 } }),
+    ]);
+    expect(reparentAfterDrag(document, new Set(['g', 'a']))).toBe(document);
+  });
+
+  it('锁定组阻止成员移动、删除、重新分组和拖入', () => {
+    const document = doc([
+      group('g', { locked: true }),
+      media('a', 'image', { parentId: 'g' }),
+      media('b', 'image', { position: { x: 30, y: 60 } }),
+    ]);
+    expect(nudge(document, new Set(['a']), { x: 10, y: 10 })).toBe(document);
+    expect(deleteElements(document, new Set(['a', 'g']))).toBe(document);
+    expect(ungroup(document, new Set(['a']))).toBe(document);
+    expect(fitGroup(document, 'g')).toBe(document);
+    expect(reparentAfterDrag(document, new Set(['b']))).toBe(document);
+    expect(() => groupNodes(registry, document, new Set(['a', 'g']))).toThrow('请选择');
+  });
+
+  it('置顶置底保持父节点顺序与子级归属，锁定节点不参与', () => {
+    const document = doc([
+      group('g'),
+      media('a', 'image', { parentId: 'g' }),
+      media('b', 'image', { parentId: 'g' }),
+      media('c'),
+    ]);
+    const next = reorder(document, new Set(['a']), 'front');
+    expect(next.nodes.map((node) => node.id)).toEqual(['g', 'b', 'a', 'c']);
+    expect(CanvasDocument.safeParse(next).success).toBe(true);
+    expect(reorder(next, new Set(['a']), 'back').nodes.map((node) => node.id)).toEqual([
+      'g',
+      'a',
+      'b',
+      'c',
+    ]);
   });
 });
 

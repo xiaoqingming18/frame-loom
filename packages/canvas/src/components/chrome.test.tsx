@@ -32,6 +32,8 @@ function fixture(children: (actions: CanvasActionsApi) => ReactNode) {
     zoomOut: vi.fn(),
     fitView: vi.fn(),
     arrange: vi.fn(),
+    arrangeOrder: 'created',
+    setArrangeOrder: vi.fn(),
     addNode: vi.fn(),
   };
   const actions = callbacks as unknown as CanvasActionsApi;
@@ -93,4 +95,30 @@ it('窄画布自动收起小地图但保留用户开关偏好', () => {
   expect(minimap.disabled).toBe(true);
   expect(minimap.getAttribute('aria-pressed')).toBe('false');
   expect(store.getState().view.minimap).toBe(true);
+});
+
+it('选中单个分组时整理选区，布局和排序入口调用同一动作集', () => {
+  const { store, callbacks } = fixture((actions) => (
+    <TopRightBar actions={actions} compact={false} />
+  ));
+  act(() => store.getState().select(['group']));
+  fireEvent.pointerDown(screen.getByRole('button', { name: '按布局整理选中节点' }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(screen.getByRole('menuitemradio', { name: '标题顺序' }));
+  expect(callbacks.setArrangeOrder).toHaveBeenCalledExactlyOnceWith('title');
+  for (const [label, mode] of [
+    ['宫格', 'grid'],
+    ['水平', 'horizontal'],
+    ['垂直', 'vertical'],
+    ['按类型', 'type'],
+  ]) {
+    fireEvent.pointerDown(screen.getByRole('button', { name: '按布局整理选中节点' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: label }));
+    expect(callbacks.arrange).toHaveBeenLastCalledWith(mode);
+  }
 });

@@ -31,6 +31,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@frame-loom/ui/components/dropdown-menu';
 import { TooltipProvider } from '@frame-loom/ui/components/tooltip';
 import { cn } from '@frame-loom/ui/lib/utils';
@@ -54,7 +57,15 @@ import { createCanvasStore, type CanvasStore } from '../store/store';
 import { shortcutFor, shouldIgnore } from '../interaction/keys';
 import { CLIPBOARD_MIME, CLIPBOARD_PREFIX } from '../interaction/clipboard';
 import { createNodeMapper, toFlowEdges, type FlowNode } from './flow-mapping';
-import { AddNodeItems, BottomDock, EmptyHint, HelpDialog, Notice, TopRightBar } from './chrome';
+import {
+  AddNodeItems,
+  ArrangeItems,
+  BottomDock,
+  EmptyHint,
+  HelpDialog,
+  Notice,
+  TopRightBar,
+} from './chrome';
 import { PointMenu } from './point-menu';
 import { UploadNode } from './upload-node';
 import { useCanvasActions, ZOOM_LIMITS, type PendingConnection } from './use-actions';
@@ -137,6 +148,7 @@ function Editor({ className }: { className?: string }) {
   const spaceHeld = useCanvasState((state) => state.spaceHeld);
   const view = useCanvasState((state) => state.view);
   const root = useRef<HTMLDivElement>(null);
+  const documentInput = useRef<HTMLInputElement>(null);
   const pointer = useRef<Point | null>(null);
   const connecting = useRef<PendingConnection | null>(null);
   const reconnecting = useRef<string | undefined>(undefined);
@@ -210,6 +222,7 @@ function Editor({ className }: { className?: string }) {
       const positions = new Map<string, Point>();
       let selection: Set<string> | null = null;
       const removed = new Set<string>();
+      if (changes.some((change) => change.type === 'dimensions' && change.resizing)) state.begin();
       for (const change of changes) {
         if (change.type === 'position' && change.position)
           positions.set(change.id, change.position);
@@ -221,16 +234,17 @@ function Editor({ className }: { className?: string }) {
         if (change.type === 'remove') removed.add(change.id);
         if (change.type === 'dimensions' && change.setAttributes && change.dimensions) {
           const { width, height } = change.dimensions;
-          if (change.resizing) state.begin();
           state.apply((current) =>
             updateNode(current, change.id, {
               size: { width: Math.round(width), height: Math.round(height) },
             }),
           );
-          if (change.resizing === false) state.commit();
         }
       }
       if (positions.size) state.apply((current) => moveNodes(current, positions));
+      // xyflow 的结束事件可能只有 resizing=false，没有尺寸；坐标也必须先写入再提交。
+      if (changes.some((change) => change.type === 'dimensions' && change.resizing === false))
+        state.commit();
       if (selection) state.select(selection, state.selectedEdges);
       if (removed.size) state.apply((current) => deleteElements(current, removed));
     },
@@ -352,6 +366,8 @@ function Editor({ className }: { className?: string }) {
       )
         return;
       const target = event.target instanceof HTMLElement ? event.target : null;
+      // 单选控件用方向键切换选项，不应触发画布的节点微移。
+      if (target?.closest('[role="radio"], [role="menuitemradio"]')) return;
       const state = store.getState();
       if (event.code === 'Space' && !event.ctrlKey && !event.metaKey && !event.altKey) {
         // 按钮上的空格保留原生点击语义；画布和节点上的空格临时平移。
@@ -637,6 +653,18 @@ function Editor({ className }: { className?: string }) {
       />
       <Notice />
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <input
+        ref={documentInput}
+        type="file"
+        accept=".json,application/json"
+        aria-label="导入画布 JSON"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void actions.importDocument(file);
+          event.target.value = '';
+        }}
+      />
       <PointMenu
         at={menu?.screen ?? null}
         onClose={() => setMenu(null)}
@@ -668,6 +696,17 @@ function Editor({ className }: { className?: string }) {
             <DropdownMenuItem onSelect={() => actions.fitView()}>
               适应视图<DropdownMenuShortcut>Shift+1</DropdownMenuShortcut>
             </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>整理</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <ArrangeItems actions={actions} />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => actions.exportDocument()}>导出 JSON</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => documentInput.current?.click()}>
+              导入 JSON（替换画布，可撤销）
+            </DropdownMenuItem>
           </>
         )}
         {menu?.kind === 'edge' && (
@@ -689,6 +728,22 @@ function Editor({ className }: { className?: string }) {
             <DropdownMenuItem onSelect={() => actions.ungroup()}>
               解组<DropdownMenuShortcut>Ctrl+Shift+G</DropdownMenuShortcut>
             </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={
+                !document.nodes.some(
+                  (node) => selectedNodes.has(node.id) && node.type === 'group' && !node.locked,
+                )
+              }
+              onSelect={() => actions.fitGroups()}
+            >
+              适应内容
+            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>整理</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <ArrangeItems actions={actions} />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => actions.reorder('front')}>置于顶层</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.reorder('back')}>置于底层</DropdownMenuItem>

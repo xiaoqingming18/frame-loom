@@ -166,12 +166,44 @@ const edgeOptions: { id: CanvasEdgeDisplay; label: string }[] = [
   { id: 'hidden', label: '隐藏' },
 ];
 
+export function ArrangeItems({ actions }: { actions: CanvasActionsApi }) {
+  return (
+    <>
+      <DropdownMenuItem onSelect={() => actions.arrange('grid')}>
+        <LayoutGrid aria-hidden="true" />
+        宫格
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => actions.arrange('horizontal')}>
+        <Rows3 aria-hidden="true" className="rotate-90" />
+        水平
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => actions.arrange('vertical')}>
+        <Rows3 aria-hidden="true" />
+        垂直
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => actions.arrange('type')}>
+        <Shapes aria-hidden="true" />
+        按类型
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>排序方式</DropdownMenuLabel>
+      <DropdownMenuRadioGroup
+        value={actions.arrangeOrder}
+        onValueChange={(value) => actions.setArrangeOrder(value as 'created' | 'title')}
+      >
+        <DropdownMenuRadioItem value="created">创建顺序</DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="title">标题顺序</DropdownMenuRadioItem>
+      </DropdownMenuRadioGroup>
+    </>
+  );
+}
+
 export function TopRightBar({ actions, compact }: { actions: CanvasActionsApi; compact: boolean }) {
   const { store } = useCanvas();
   const { zoom } = useViewport();
   const minimap = useCanvasState((state) => state.view.minimap);
   const edgeDisplay = useCanvasState((state) => state.view.edgeDisplay);
-  const hasSelection = useCanvasState((state) => state.selectedNodes.size > 1);
+  const hasSelection = useCanvasState((state) => state.selectedNodes.size > 0);
   const scope = hasSelection ? '选中节点' : '全部节点';
   return (
     <div
@@ -223,18 +255,7 @@ export function TopRightBar({ actions, compact }: { actions: CanvasActionsApi; c
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={8}>
           <DropdownMenuLabel>整理{scope}</DropdownMenuLabel>
-          <DropdownMenuItem onSelect={() => actions.arrange('grid')}>
-            <LayoutGrid aria-hidden="true" />
-            宫格
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => actions.arrange('horizontal')}>
-            <Rows3 aria-hidden="true" className="rotate-90" />
-            水平
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => actions.arrange('vertical')}>
-            <Rows3 aria-hidden="true" />
-            垂直
-          </DropdownMenuItem>
+          <ArrangeItems actions={actions} />
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
