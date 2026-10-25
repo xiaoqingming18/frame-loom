@@ -17,7 +17,9 @@ import { DomainError } from '../../core/http/domain-error.js';
 import { ChannelsRepository } from '../channels/channels.repository.js';
 import { generationJobs, type JobRow } from './generation.schema.js';
 import { MediaService } from './media.service.js';
-import { imageProfile } from './profiles/image-profiles.js';
+import { mediaProfile } from './profiles/media-profiles.js';
+import { ObjectStorageService } from '../object-storage/object-storage.service.js';
+import { arkVideoTasks, minimaxVideoV2, openaiVideos } from './adapters/video-tasks.js';
 import { openaiImages } from './adapters/openai-images.js';
 import { arkImages } from './adapters/ark-images.js';
 import { geminiImage } from './adapters/gemini-image.js';
@@ -33,7 +35,9 @@ const activeStates: GenerationStatus[] = ['submitting', 'running', 'downloading'
 @Injectable()
 export class GenerationAdapters {
   readonly adapters = new Map<string, GenerationAdapter>(
-    [openaiImages, geminiImage, arkImages].map((adapter) => [adapter.protocol, adapter]),
+    [openaiImages, geminiImage, arkImages, arkVideoTasks, minimaxVideoV2, openaiVideos].map(
+      (adapter) => [adapter.protocol, adapter],
+    ),
   );
   get(protocol: string): GenerationAdapter {
     const adapter = this.adapters.get(protocol);
@@ -56,6 +60,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     private readonly media: MediaService,
     private readonly registry: GenerationAdapters,
     private readonly events: EventBus,
+    private readonly storage: ObjectStorageService,
   ) {}
   private get db() {
     return this.database.db;
@@ -91,7 +96,9 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     const model = this.channels.getModel(request.modelId);
     if (!model.enabled || !this.channels.getChannel(model.channelId).enabled)
       throw new DomainError('MODEL_DISABLED', 422, '渠道或模型已禁用');
-    const profile = imageProfile(model);
+    const profile = mediaProfile(model);
+    if (profile.protocol === 'minimax-video-v2' && request.prompt.length > 7000)
+      throw new DomainError('INVALID_GENERATION_REQUEST', 422, 'H3 提示词不能超过 7000 字符');
     const issues = checkGenerationRequest(profile, request);
     if (issues.length)
       throw new DomainError(
@@ -102,17 +109,39 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     // 提交前验证凭据；不让密钥故障变成提交结果不明。
     this.channels.credentials(model.channelId);
     this.registry.get(profile.protocol);
+    if (
+      request.inputs.some(
+        (item) =>
+          item.kind !== 'image' ||
+          profile.inputs.find((limit) => limit.kind === item.kind)?.transport === 'url',
+      )
+    )
+      this.storage.require();
     request.params = Object.fromEntries(
       profile.params.map((param) => [param.key, request.params[param.key] ?? param.default]),
     );
     for (const item of request.inputs) {
       const stored = item.sha256
         ? this.media.get(item.sha256)
-        : await this.media.save({ data: item.dataUrl!.split(',')[1], mime: '' });
+        : await this.media.save({ data: item.dataUrl!.split(',')[1], mime: `${item.kind}/` });
       const limit = profile.inputs.find((entry) => entry.kind === item.kind)!;
       if (
+        !stored.mime.startsWith(item.kind + '/') ||
         !limit.mimeTypes.includes(stored.mime) ||
         stored.bytes > limit.maxBytes ||
+        (limit.minDurationMs !== undefined && (stored.durationMs ?? 0) < limit.minDurationMs) ||
+        (limit.maxDurationMs !== undefined &&
+          (stored.durationMs ?? Infinity) > limit.maxDurationMs) ||
+        (limit.minFps !== undefined && (stored.fps ?? 0) < limit.minFps) ||
+        (limit.maxFps !== undefined && (stored.fps ?? Infinity) > limit.maxFps) ||
+        (limit.codecs !== undefined && !limit.codecs.includes(stored.codec ?? '')) ||
+        (limit.audioCodecs !== undefined &&
+          !!stored.audioCodec &&
+          !limit.audioCodecs.includes(stored.audioCodec)) ||
+        (limit.minRatio !== undefined &&
+          (stored.width ?? 0) / (stored.height ?? 1) < limit.minRatio) ||
+        (limit.maxRatio !== undefined &&
+          (stored.width ?? Infinity) / (stored.height ?? 1) > limit.maxRatio) ||
         (stored.width !== null &&
           ((limit.minWidth !== undefined && stored.width < limit.minWidth) ||
             (limit.maxWidth !== undefined && stored.width > limit.maxWidth))) ||
@@ -120,9 +149,25 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           ((limit.minHeight !== undefined && stored.height < limit.minHeight) ||
             (limit.maxHeight !== undefined && stored.height > limit.maxHeight)))
       )
-        throw new DomainError('INVALID_REFERENCE', 422, '参考图格式、大小或尺寸不符合档案');
+        throw new DomainError(
+          'INVALID_REFERENCE',
+          422,
+          '参考素材格式、大小、尺寸、时长、帧率或编码不符合档案',
+        );
       item.sha256 = stored.sha256;
       delete item.dataUrl;
+    }
+    for (const limit of profile.inputs) {
+      const duration = request.inputs
+        .filter((item) => item.kind === limit.kind)
+        .reduce((sum, item) => sum + (this.media.get(item.sha256!).durationMs ?? 0), 0);
+      if (limit.maxTotalDurationMs !== undefined && duration > limit.maxTotalDurationMs)
+        throw new DomainError('INVALID_REFERENCE', 422, '参考素材总时长超过档案上限');
+    }
+    if (profile.protocol === 'openai-videos' && request.inputs.length && request.params.size) {
+      const first = this.media.get(request.inputs[0].sha256!);
+      if (`${first.width}x${first.height}` !== request.params.size)
+        throw new DomainError('INVALID_REFERENCE', 422, '首帧尺寸必须与输出尺寸一致');
     }
     const now = new Date().toISOString();
     const id = randomUUID();
@@ -266,8 +311,29 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         if (!row.rawResponse?.length)
           throw new GenerationFailure('upstream', 'MISSING_OUTPUT', '缺少下载记录');
         const outputs: string[] = [];
-        for (const output of row.rawResponse)
-          outputs.push((await this.media.save(output, signal)).sha256);
+        for (const output of row.rawResponse) {
+          if (output.providerContent) {
+            if (row.profile.protocol !== 'openai-videos')
+              throw new GenerationFailure(
+                'upstream',
+                'INVALID_CONTENT_ENDPOINT',
+                '内容下载协议不匹配',
+              );
+            const ctx = this.context(row, signal);
+            outputs.push(
+              (
+                await this.media.save(
+                  {
+                    ...output,
+                    url: `${ctx.baseUrl}/videos/${encodeURIComponent(output.providerContent)}/content`,
+                  },
+                  signal,
+                  { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },
+                )
+              ).sha256,
+            );
+          } else outputs.push((await this.media.save(output, signal)).sha256);
+        }
         if (signal.aborted || this.row(row.id).status === 'cancelled') return;
         this.update(row.id, {
           status: 'succeeded',
@@ -292,7 +358,26 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         result = await adapter.query(context, row.remoteTaskId);
       } else {
         const request: GenerationRequest = structuredClone(row.request);
-        for (const item of request.inputs) item.dataUrl = await this.media.inline(item.sha256!);
+        context.referenceUrls = {};
+        let inlineBytes = 0;
+        for (const item of request.inputs) {
+          const limit = row.profile.inputs.find((entry) => entry.kind === item.kind)!;
+          if (limit.transport === 'url' || item.kind !== 'image')
+            context.referenceUrls[item.sha256!] = await this.storage.reference(
+              this.media.get(item.sha256!),
+              context.signal,
+            );
+          else {
+            inlineBytes += Math.ceil(this.media.get(item.sha256!).bytes / 3) * 4;
+            if (inlineBytes > 63 * 1024 * 1024)
+              throw new GenerationFailure(
+                'invalid_params',
+                'INLINE_TOO_LARGE',
+                '内联素材合计过大，请减少参考图',
+              );
+            item.dataUrl = await this.media.inline(item.sha256!);
+          }
+        }
         // 到这一步之前失败能确认没有提交；此后异常一律按是否明确未受理分类。
         try {
           result = await adapter.submit(context, request);
@@ -346,6 +431,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       } else {
         this.update(row.id, {
           status: 'downloading',
+          remoteTaskId:
+            row.remoteTaskId ??
+            result.outputs.find((output) => output.providerContent)?.providerContent ??
+            null,
           rawResponse: result.outputs,
           usage: result.usage ?? null,
           attempts: 0,

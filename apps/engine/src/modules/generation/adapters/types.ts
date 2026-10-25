@@ -10,8 +10,9 @@ export type AdapterContext = {
   headers: Record<string, string>;
   model: string;
   signal: AbortSignal;
+  referenceUrls?: Record<string, string>;
 };
-export type AdapterOutput = { url?: string; data?: string; mime: string };
+export type AdapterOutput = { url?: string; data?: string; mime: string; providerContent?: string };
 export type AdapterResult =
   | { status: 'running'; remoteTaskId: string; remoteStatus: string }
   | { status: 'succeeded'; outputs: AdapterOutput[]; usage?: unknown }

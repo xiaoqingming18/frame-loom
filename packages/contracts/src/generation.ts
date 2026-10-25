@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 export const ImageProtocol = z.enum(['openai-images', 'gemini-image', 'ark-images']);
 export type ImageProtocol = z.infer<typeof ImageProtocol>;
+export const VideoProtocol = z.enum(['ark-video-tasks', 'minimax-video-v2', 'openai-videos']);
+export type VideoProtocol = z.infer<typeof VideoProtocol>;
 export const MediaProtocol = z.enum([
   ...ImageProtocol.options,
-  'ark-video-tasks',
-  'minimax-video-v2',
-  'openai-videos',
+  ...VideoProtocol.options,
   'openai-speech',
   'minimax-t2a',
 ]);
@@ -80,6 +80,14 @@ export const ModelProfile = z.strictObject({
       minHeight: z.number().positive().optional(),
       maxHeight: z.number().positive().optional(),
       maxDurationMs: z.number().positive().optional(),
+      minDurationMs: z.number().positive().optional(),
+      maxTotalDurationMs: z.number().positive().optional(),
+      minFps: z.number().positive().optional(),
+      maxFps: z.number().positive().optional(),
+      codecs: z.array(z.string()).optional(),
+      audioCodecs: z.array(z.string()).optional(),
+      minRatio: z.number().positive().optional(),
+      maxRatio: z.number().positive().optional(),
       transport: z.enum(['inline', 'url']),
     }),
   ),
@@ -138,7 +146,19 @@ export function checkGenerationRequest(
   }
   if (request.mode === 'text' && request.inputs.length) add('inputs', '文生模式不接受参考素材');
   if (request.mode === 'reference' && !request.inputs.length)
-    add('inputs', '参考模式至少需要一张参考图');
+    add('inputs', '参考模式至少需要一个参考素材');
+  if (profile.kind === 'video') {
+    const frames = request.inputs.filter((input) => input.role !== 'reference');
+    if (request.inputs.some((input) => input.kind !== 'image' && input.role !== 'reference'))
+      add('inputs', '首尾帧必须是图片');
+    if (request.mode === 'frames' && !frames.length) add('inputs', '首尾帧模式至少需要首帧或尾帧');
+    if (request.mode === 'frames' && request.inputs.some((input) => input.role === 'reference'))
+      add('inputs', '首尾帧与全模态参考互斥');
+    if (request.mode !== 'frames' && frames.length) add('inputs', '请切换到首尾帧模式');
+    for (const role of ['first_frame', 'last_frame'])
+      if (frames.filter((input) => input.role === role).length > 1)
+        add('inputs', '首帧与尾帧各限一张');
+  }
   for (const rule of profile.constraints) {
     const when = rule.when;
     if (when.mode && when.mode !== request.mode) continue;
@@ -196,6 +216,9 @@ export const MediaFile = z.object({
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
   durationMs: z.number().nonnegative().nullable(),
+  fps: z.number().positive().nullable().optional(),
+  codec: z.string().nullable().optional(),
+  audioCodec: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
 });
 export type MediaFile = z.infer<typeof MediaFile>;

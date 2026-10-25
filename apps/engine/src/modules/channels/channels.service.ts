@@ -9,14 +9,14 @@ import {
 import { DomainError } from '../../core/http/domain-error.js';
 import { ChannelsRepository } from './channels.repository.js';
 import { connectionError, providerError } from './provider-request.js';
-import { imageProfile } from '../generation/profiles/image-profiles.js';
+import { mediaProfile } from '../generation/profiles/media-profiles.js';
 
 @Injectable()
 export class ChannelsService {
   constructor(readonly repository: ChannelsRepository) {}
 
   validateModel(input: ChannelModelWrite) {
-    if (input.kind === 'image' && input.protocol) imageProfile(input);
+    if ((input.kind === 'image' || input.kind === 'video') && input.protocol) mediaProfile(input);
     if (input.enabled && (!input.kind || !input.protocol))
       throw new DomainError('MODEL_UNCLASSIFIED', 422, '请选择类别和协议后再启用模型');
     if (input.kind === 'chat' && input.protocol && !LlmProtocol.safeParse(input.protocol).success)

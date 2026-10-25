@@ -23,12 +23,16 @@ export function ModelLab({ engineClient: client }: { engineClient: EngineClient 
       <TabsList aria-label="模型测试类别" variant="line">
         <TabsTrigger value="text">文本</TabsTrigger>
         <TabsTrigger value="image">图片</TabsTrigger>
+        <TabsTrigger value="video">视频</TabsTrigger>
       </TabsList>
       <TabsContent value="text">
         <TextModelLab client={client} />
       </TabsContent>
       <TabsContent value="image">
         <ImageLab client={client} />
+      </TabsContent>
+      <TabsContent value="video">
+        <ImageLab client={client} kind="video" />
       </TabsContent>
     </Tabs>
   );

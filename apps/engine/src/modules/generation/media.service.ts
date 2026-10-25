@@ -10,13 +10,14 @@ import { DatabaseService } from '../../core/database/database.service.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { mediaFiles, type StoredMedia } from './generation.schema.js';
 import { GenerationFailure, type AdapterOutput } from './adapters/types.js';
+import { probeMedia } from './media-probe.js';
 
 const formats: Record<string, { mime: string; ext: string }> = {
   png: { mime: 'image/png', ext: 'png' },
   jpg: { mime: 'image/jpeg', ext: 'jpg' },
   webp: { mime: 'image/webp', ext: 'webp' },
 };
-const maxBytes = 64 * 1024 * 1024;
+const maxBytes = 256 * 1024 * 1024;
 
 @Injectable()
 export class MediaService {
@@ -36,75 +37,115 @@ export class MediaService {
   }
   async inline(sha256: string): Promise<string> {
     const media = this.get(sha256);
+    if (!media.mime.startsWith('image/'))
+      throw new DomainError('INVALID_REFERENCE', 422, '仅图片允许内联');
     const bytes = await readFile(join(this.config.dataDir, 'media', `${sha256}.${media.ext}`));
     return `data:${media.mime};base64,${bytes.toString('base64')}`;
   }
-  async save(output: AdapterOutput, signal?: AbortSignal): Promise<StoredMedia> {
+  async save(
+    output: AdapterOutput,
+    signal?: AbortSignal,
+    headers?: Record<string, string>,
+  ): Promise<StoredMedia> {
+    let chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
+    if (output.data) {
+      if (
+        output.data.length > Math.ceil((64 * 1024 * 1024 * 4) / 3) ||
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(output.data)
+      )
+        throw new GenerationFailure('upstream', 'INVALID_IMAGE', '图片数据无效或超过 64 MiB');
+      chunks = [Buffer.from(output.data, 'base64')];
+    } else {
+      const url = new URL(output.url ?? '');
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
+        throw new GenerationFailure(
+          'input_unreachable',
+          'INVALID_MEDIA_URL',
+          '结果地址必须为 HTTP(S)',
+        );
+      // 仅受控的厂商内容端点带鉴权，且拒绝重定向；公开 CDN 不携带渠道凭据。
+      const response = await fetch(url, {
+        signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
+        redirect: headers ? 'error' : 'follow',
+        headers,
+      });
+      if (!response.ok || !response.body)
+        throw new GenerationFailure(
+          'input_unreachable',
+          `DOWNLOAD_${response.status}`,
+          '产物下载失败',
+        );
+      chunks = response.body;
+    }
+    return this.saveStream(chunks, signal, output.mime.split('/')[0]);
+  }
+  async saveStream(
+    chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>,
+    signal?: AbortSignal,
+    expectedKind?: string,
+  ): Promise<StoredMedia> {
     const temporary = join(this.config.dataDir, 'media', `.partial-${randomUUID()}`);
     const hash = createHash('sha256');
     let bytes = 0;
     const file = await open(temporary, 'wx');
     try {
-      let chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
-      if (output.data) {
-        if (
-          output.data.length > Math.ceil((maxBytes * 4) / 3) ||
-          !/^[A-Za-z0-9+/]+={0,2}$/.test(output.data)
-        )
-          throw new GenerationFailure('upstream', 'INVALID_IMAGE', '图片数据无效或超过 64 MiB');
-        chunks = [Buffer.from(output.data, 'base64')];
-      } else {
-        const url = new URL(output.url ?? '');
-        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
-          throw new GenerationFailure(
-            'input_unreachable',
-            'INVALID_MEDIA_URL',
-            '结果地址必须为 HTTP(S)',
-          );
-        // 结果下载不携带渠道鉴权，防止凭据被转发到 CDN。
-        const response = await fetch(url, {
-          signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
-          redirect: 'follow',
-        });
-        if (!response.ok || !response.body)
-          throw new GenerationFailure(
-            'input_unreachable',
-            `DOWNLOAD_${response.status}`,
-            '产物下载失败',
-          );
-        chunks = response.body;
-      }
       for await (const chunk of chunks) {
         signal?.throwIfAborted();
         bytes += chunk.byteLength;
         if (bytes > maxBytes)
-          throw new GenerationFailure('upstream', 'MEDIA_TOO_LARGE', '产物超过 64 MiB');
+          throw new GenerationFailure('invalid_params', 'MEDIA_TOO_LARGE', '素材超过 256 MiB');
         hash.update(chunk);
         await file.writeFile(chunk);
       }
       await file.sync();
       await file.close();
-      const data = await readFile(temporary);
-      let size: ReturnType<typeof imageSize>;
+      let metadata: Omit<StoredMedia, 'sha256' | 'bytes' | 'createdAt'>;
+      const headerFile = await open(temporary, 'r');
+      const header = Buffer.alloc(12);
       try {
-        size = imageSize(data);
-      } catch {
-        throw new GenerationFailure('upstream', 'INVALID_IMAGE', '产物不是有效图片');
+        await headerFile.read(header, 0, header.length, 0);
+      } finally {
+        await headerFile.close();
       }
-      const format = size.type ? formats[size.type] : undefined;
-      if (!format || !size.width || !size.height)
-        throw new GenerationFailure('upstream', 'INVALID_IMAGE', '只接受 PNG、JPEG 和 WebP 图片');
+      const isImage =
+        header.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) ||
+        header.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex')) ||
+        (header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WEBP');
+      if (expectedKind === 'image' && !isImage)
+        throw new GenerationFailure('invalid_params', 'INVALID_IMAGE', '请提供有效图片');
+      if (isImage) {
+        if (bytes > 64 * 1024 * 1024)
+          throw new GenerationFailure('invalid_params', 'MEDIA_TOO_LARGE', '图片超过 64 MiB');
+        // 先辨认文件头，避免将整段音视频读入内存。
+        const size = imageSize(await readFile(temporary));
+        const format = size.type ? formats[size.type] : undefined;
+        if (!format || !size.width || !size.height) throw new Error('非支持图片');
+        metadata = {
+          ...format,
+          width: size.width,
+          height: size.height,
+          durationMs: null,
+          fps: null,
+          codec: null,
+          audioCodec: null,
+        };
+      } else {
+        metadata = await probeMedia(temporary);
+      }
+      if (expectedKind && !metadata.mime.startsWith(expectedKind + '/'))
+        throw new GenerationFailure(
+          'invalid_params',
+          'MEDIA_KIND_MISMATCH',
+          '素材实际类型与声明不符',
+        );
       const sha256 = hash.digest('hex');
       const row: StoredMedia = {
         sha256,
-        ...format,
+        ...metadata,
         bytes,
-        width: size.width,
-        height: size.height,
-        durationMs: null,
         createdAt: new Date().toISOString(),
       };
-      await rename(temporary, join(this.config.dataDir, 'media', `${sha256}.${format.ext}`));
+      await rename(temporary, join(this.config.dataDir, 'media', `${sha256}.${metadata.ext}`));
       this.database.db.insert(mediaFiles).values(row).onConflictDoNothing().run();
       return this.get(sha256);
     } finally {

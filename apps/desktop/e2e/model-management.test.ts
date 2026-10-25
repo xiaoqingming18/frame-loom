@@ -122,6 +122,18 @@ test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对�
             element.scrollWidth <= element.clientWidth,
         ),
       ).toBe(true);
+      await page.getByRole('tab', { name: '对象存储' }).click();
+      await expect(page.getByRole('heading', { name: '对象存储' })).toBeVisible();
+      await expect(page.getByText('素材与隐私')).toBeVisible();
+      await page.screenshot({ path: info.outputPath(`object-storage-${source}.png`) });
+      const storagePanel = page.getByRole('tabpanel', { name: '对象存储' });
+      expect(
+        await storagePanel.evaluate(
+          (element: { scrollWidth: number; clientWidth: number }) =>
+            element.scrollWidth <= element.clientWidth,
+        ),
+      ).toBe(true);
+      await page.getByRole('tab', { name: '模型服务' }).click();
       await page.getByRole('button', { name: '关闭', exact: true }).click();
       await page.getByRole('link', { name: '模型测试' }).click();
       await expect(page.getByRole('tab', { name: '文本', exact: true })).toHaveAttribute(

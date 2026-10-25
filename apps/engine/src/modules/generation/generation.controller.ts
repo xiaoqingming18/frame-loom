@@ -1,14 +1,31 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { GenerationRequest } from '@frame-loom/contracts';
 import { ZodValidationPipe } from '../../core/http/zod-validation.pipe.js';
 import { GenerationService } from './generation.service.js';
-import { imageProfiles } from './profiles/image-profiles.js';
+import { mediaProfiles } from './profiles/media-profiles.js';
+import { MediaService } from './media.service.js';
+import { DomainError } from '../../core/http/domain-error.js';
 
 @Controller()
 export class GenerationController {
-  constructor(private readonly generation: GenerationService) {}
+  constructor(
+    private readonly generation: GenerationService,
+    private readonly media: MediaService,
+  ) {}
   @Get('model-profiles') profiles() {
-    return imageProfiles;
+    return mediaProfiles;
+  }
+  @Post('media') upload(@Req() request: Request) {
+    if (request.headers['content-type'] !== 'application/octet-stream')
+      throw new DomainError('INVALID_MEDIA_UPLOAD', 415, '请使用二进制媒体上传');
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      request.destroy();
+    }, 120_000);
+    request.once('aborted', () => controller.abort());
+    return this.media.saveStream(request, controller.signal).finally(() => clearTimeout(timer));
   }
   @Get('generation-jobs') jobs() {
     return this.generation.list();

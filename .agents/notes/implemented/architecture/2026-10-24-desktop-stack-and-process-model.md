@@ -39,8 +39,8 @@ Frame Loom 要做多模态 AI 影视工作台：剧本、角色和场景资产�
 | 渲染层 | React 19、TanStack Router 和 Query、Tailwind 4、shadcn、lucide；明暗主题外壳、静态首页、项目库与设置中心 | Zustand、`@xyflow/react` 等到业务需求再引入 |
 | 本地服务 engine | NestJS 12 加 Express，整体 ESM，运行在 `utilityProcess` 中 | 领域服务和 Agent 模块 |
 | 数据库 | SQLite WAL、better-sqlite3 13.0.3、Drizzle，生成的迁移入库 | 业务表和任务恢复 |
-| 媒体 | 仅建立空 `media/` 目录 | ffmpeg、ffprobe、sharp 和按 SHA-256 存储媒体 |
-| AI 接入 | 无 | 渠道、协议适配器、能力档案与 SQLite 生成任务表，见[模型管理提案](../../proposed/architecture/2026-10-24-model-management.md) |
+| 媒体 | 图片、视频与参考素材落盘到 `<userData>/media/`，按 SHA-256 命名；用 `@ffprobe-installer/ffprobe@2.1.2` 读取视频元数据 | ffmpeg 转码/压缩、sharp 图像处理 |
+| AI 接入 | 渠道、协议适配器、能力档案、SQLite 生成任务、S3 兼容参考素材管线；详见[模型管理提案](../../proposed/architecture/2026-10-24-model-management.md) | TTS 与真实供应商整体验收仍在 05 阶段 |
 | 共享契约 | zod schema 和类型，renderer 与 engine 共用 | 业务契约随能力扩展 |
 | 打包和更新 | electron-builder 26.18.0，Windows x64 NSIS | 不接签名、发布、electron-updater 或自动更新 |
 | 测试 | Vitest 单元和契约测试；Playwright `_electron` 启动构建产物 | 加固 exe 与安装／卸载另行本地验证，未接入 CI 自动安装 |
@@ -69,7 +69,7 @@ Electron 主进程 ──utilityProcess.fork──> engine（NestJS，Electron �
 ### 数据位置
 
 - 数据库：`<userData>/data/frame-loom.sqlite`。迁移在 engine 启动时、开始监听之前执行，迁移失败则 engine 退出，不提供服务。
-- 媒体目录：`<userData>/media/`，当前只建目录，不写文件；内容 SHA-256 命名属于后续能力。
+- 媒体目录：`<userData>/media/`，生成结果按 SHA-256 命名并记录在 `media_files`；对象存储素材通过独立上传索引去重，远端对象由用户配置生命周期清理。
 - 开发模式也使用 Electron 的 `userData`，不往仓库目录里写数据。
 
 ### 模块格式
@@ -101,7 +101,7 @@ frame-loom/
 - desktop 的运行时依赖全部由 electron-vite 打进产物，`dependencies` 保持为空，这样 electron-builder 不需要收集 pnpm 的 `node_modules`。
 - engine 用 `pnpm deploy --prod` 生成一个独立目录，作为 electron-builder 的 `extraResources` 放进安装包。打包后的路径是 `process.resourcesPath/engine`，开发模式下用 `apps/engine/dist`。
 - 打包时通过 electron-builder 的 `electronFuses` 关闭以下开关：`runAsNode`、`enableNodeOptionsEnvironmentVariable`、`enableNodeCliInspectArguments`。同时打开 `onlyLoadAppFromAsar` 和 ASAR 完整性校验。这样别的程序就不能把安装好的 exe 当作普通 Node 运行时来用。`utilityProcess` 不依赖 `runAsNode`。
-- 首个里程碑不做插件机制，不把 engine 打成单文件，也不建 `resources/bin`。ffmpeg 等到第一个媒体能力落地时再加进来。
+- 首个里程碑不做插件机制，不把 engine 打成单文件，也不建 `resources/bin`。ffprobe 作为 engine 生产依赖由 pnpm 部署树分发，开发与生产都从包的 `path` 定位；ffmpeg 转码仍不引入。
 - Windows x64 打包使用 electron-builder 26.18.0；`files` 仅纳入桌面构建产物和 package.json。`pnpm package:win` 构建 contracts、engine，使用 `pnpm deploy --prod --force --node-linker=hoisted` 重新生成 `apps/desktop/build/engine`，再构建 desktop 并打 NSIS。按用户安装，卸载保留 userData，不接签名与发布；electron-winstaller 只用于 Squirrel，其 5.4.0 安装脚本明确禁用，本项目不使用 Squirrel。
 - 部署阶段单独使用 `--node-linker=hoisted` 生成无 pnpm 目录链接的生产树，仓库开发依赖仍采用 isolated。extraResources 从 `build` 匹配 `engine/**/*`，避免 electron-builder 默认跳过复制源根部的 `node_modules`；不引入复制脚本或更改全仓依赖布局。
 - Playwright 1.64.1 的 `_electron` 依赖主进程 `--inspect`。关闭该 fuse 后连接打包 exe 超时，因此使用同版未加固的 Electron 启动 electron-vite 构建产物；测试使用独立临时 userData，不改生产 fuse，也不写开发数据。目录参数去掉 Windows 尾部反斜杠，避免 launch 失败。`vitest` 仅收集 `src/**/*.test.ts`，不误收 Playwright 用例。
@@ -158,5 +158,5 @@ frame-loom/
 - 首次打包需要下载 Electron、NSIS 和压缩工具。Windows exe／安装包图标取用户提供的 `apps/desktop/resources/icon.png`，开发窗口使用同图；renderer 的 256px logo 独立生成，原始 `resources/` 不进入 asar。未接代码签名、发布、自动更新；这些不属于已完成能力。
 - 主进程等待 engine 最多 30 秒，首轮部署出现过超过原定 15 秒的冷启动。仍保留超时失败和关闭回收，不将等待改为无限期。
 - Playwright 自动冒烟与加固 exe 安装验证分开，自动用例不能证明 NSIS 安装行为；修改打包、fuse、原生模块或 engine 部署时需要重跑真实安装验证。CI 尚不自动安装，远端结果不能由本地验证替代。
-- Electron 45.0.0 处于早期版本，精确锁定并跟进补丁；运行时升级单独验证。SSE、主密钥与字段加密基础设施随[模型管理](../../proposed/architecture/2026-10-24-model-management.md)的 01 阶段引入；媒体、Provider、任务恢复与 Agent 能力仍未实现，相关选型不能当成现有功能。
+- Electron 45.0.0 处于早期版本，精确锁定并跟进补丁；运行时升级单独验证。SSE、主密钥与字段加密基础设施随[模型管理](../../proposed/architecture/2026-10-24-model-management.md)的 01 阶段引入；图片/视频生成、对象存储与任务恢复已经实现，TTS 和真实供应商整体验收仍未完成。
 - 鉴权只防本机其他进程和网页，防不住和用户同权限、能读进程环境变量的恶意程序。桌面应用接受这个边界。

@@ -168,11 +168,18 @@ async function setup() {
 
 it('真实 HTTP 创建图片任务、发布事件、哈希落盘并去重，接口与数据库不含凭据或内联请求', async () => {
   const context = await setup();
+  const origin = await context.app.getUrl();
+  const storage = await fetch(`${origin}/object-storage`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(storage.status).toBe(200);
+  expect(storage.headers.get('content-type')).toContain('application/json');
+  expect(await storage.json()).toBeNull();
+
   const changed: string[] = [];
   context.app.get(EventBus).events.subscribe((event) => {
     if (event.type === 'generation.job.updated') changed.push(event.jobId);
   });
-  const origin = await context.app.getUrl();
   const response = await fetch(`${origin}/generation-jobs`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

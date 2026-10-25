@@ -17,6 +17,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import type { EngineClient } from '@/lib/engine-client';
 import { channelsQuery, defaultsQuery, modelsQuery } from '@/lib/model-queries';
+import { VideoInputs } from './video-inputs';
 
 const states = {
   pending: '等待名额',
@@ -30,7 +31,14 @@ const states = {
 };
 const jobsKey = ['generation', 'jobs'];
 
-export function ImageLab({ client }: { client: EngineClient }) {
+export function ImageLab({
+  client,
+  kind = 'image',
+}: {
+  client: EngineClient;
+  kind?: 'image' | 'video';
+}) {
+  const label = kind === 'image' ? '图片' : '视频';
   const models = useQuery(modelsQuery(client));
   const channels = useQuery(channelsQuery(client));
   const defaults = useQuery(defaultsQuery(client));
@@ -54,13 +62,13 @@ export function ImageLab({ client }: { client: EngineClient }) {
   const available =
     models.data?.filter(
       (model) =>
-        model.kind === 'image' &&
+        model.kind === kind &&
         model.enabled &&
         channels.data?.some((channel) => channel.id === model.channelId && channel.enabled),
     ) ?? [];
   const model =
     available.find((item) => item.id === selected) ??
-    available.find((item) => item.id === defaults.data?.image) ??
+    available.find((item) => item.id === defaults.data?.[kind]) ??
     available[0];
   const profile =
     profiles.data?.find(
@@ -101,15 +109,15 @@ export function ImageLab({ client }: { client: EngineClient }) {
   const queryError =
     models.error ?? channels.error ?? defaults.error ?? profiles.error ?? jobs.error;
   return (
-    <section className="space-y-6" aria-labelledby="image-lab-heading">
+    <section className="space-y-6" aria-labelledby={`${kind}-lab-heading`}>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
             <ImagePlus className="size-4" aria-hidden="true" />
-            模型测试 · 图片
+            模型测试 · {label}
           </p>
-          <h1 id="image-lab-heading" className="font-serif text-2xl">
-            让画面先发生
+          <h1 id={`${kind}-lab-heading`} className="font-serif text-2xl">
+            {kind === 'image' ? '让画面先发生' : '让镜头动起来'}
           </h1>
           <p className="mt-2 text-xs text-muted-foreground">
             任务由本地服务持续执行，生成结果保存到本机。
@@ -128,13 +136,13 @@ export function ImageLab({ client }: { client: EngineClient }) {
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]">
         <div className="space-y-5 rounded-2xl border bg-card p-5 shadow-panel">
           <label className="grid gap-2 text-xs text-muted-foreground">
-            图片模型
+            {label}模型
             <NativeSelect
-              aria-label="图片模型"
+              aria-label={`${label}模型`}
               value={model?.id ?? ''}
               onChange={(event) => setSelected(event.target.value)}
             >
-              <option value="">选择已启用的图片模型</option>
+              <option value="">选择已启用的{label}模型</option>
               {available.map((item) => (
                 <option key={item.id} value={item.id}>
                   {channels.data?.find((channel) => channel.id === item.channelId)?.name} /{' '}
@@ -145,7 +153,7 @@ export function ImageLab({ client }: { client: EngineClient }) {
           </label>
           {!available.length && !models.isPending && (
             <p className="text-xs text-muted-foreground">
-              请在设置中心的「模型服务」添加并启用图片模型。
+              请在设置中心的「模型服务」添加并启用{label}模型。
             </p>
           )}
           {profile && model ? (
@@ -164,13 +172,13 @@ export function ImageLab({ client }: { client: EngineClient }) {
             )
           )}
         </div>
-        <div className="min-w-0 space-y-4" aria-label="图片任务列表">
+        <div className="min-w-0 space-y-4" aria-label={`${label}任务列表`}>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <h2 className="font-medium text-foreground">生成记录</h2>
             <span>最近 100 项</span>
           </div>
           {jobs.data
-            ?.filter((job) => job.kind === 'image')
+            ?.filter((job) => job.kind === kind)
             .map((job) => (
               <article key={job.id} className="space-y-4 rounded-2xl border bg-card p-5">
                 <div className="flex items-center justify-between gap-3">
@@ -196,13 +204,25 @@ export function ImageLab({ client }: { client: EngineClient }) {
                         key={`${output.sha256}:${index}`}
                         className="overflow-hidden rounded-xl border bg-muted/30"
                       >
-                        <img
-                          src={`frame-media://${output.sha256}`}
-                          alt={`生成图片 ${index + 1}`}
-                          className="aspect-square w-full object-contain"
-                        />
+                        {kind === 'video' ? (
+                          <video
+                            src={`frame-media://${output.sha256}`}
+                            aria-label={`生成视频 ${index + 1}`}
+                            controls
+                            preload="metadata"
+                            className="aspect-video w-full object-contain"
+                          />
+                        ) : (
+                          <img
+                            src={`frame-media://${output.sha256}`}
+                            alt={`生成图片 ${index + 1}`}
+                            className="aspect-square w-full object-contain"
+                          />
+                        )}
                         <figcaption className="px-3 py-2 text-xs text-muted-foreground">
                           {output.width} × {output.height}
+                          {output.durationMs != null &&
+                            ` · ${(output.durationMs / 1000).toFixed(1)} 秒`}
                         </figcaption>
                       </figure>
                     ))}
@@ -257,10 +277,12 @@ export function ImageLab({ client }: { client: EngineClient }) {
                 </div>
               </article>
             ))}
-          {jobs.data && !jobs.data.some((job) => job.kind === 'image') && (
+          {jobs.data && !jobs.data.some((job) => job.kind === kind) && (
             <div className="grid min-h-72 place-content-center gap-3 rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
               <ImagePlus className="mx-auto size-8" strokeWidth={1} aria-hidden="true" />
-              <p className="text-sm">第一张画面，从这里开始</p>
+              <p className="text-sm">
+                {kind === 'image' ? '第一张画面，从这里开始' : '第一段镜头，从这里开始'}
+              </p>
               <p className="text-xs">填写提示词并生成，产物会显示在此处。</p>
             </div>
           )}
@@ -366,10 +388,10 @@ function ImageForm({
         </NativeSelect>
       </label>
       <label className="grid gap-2 text-xs text-muted-foreground">
-        图片提示词
+        {profile.kind === 'video' ? '视频' : '图片'}提示词
         <Textarea
           value={prompt}
-          maxLength={32000}
+          maxLength={profile.protocol === 'minimax-video-v2' ? 7000 : 32000}
           required
           placeholder="描述主体、镜头、光线与氛围…"
           className="min-h-32"
@@ -425,7 +447,20 @@ function ImageForm({
           )}
         </label>
       ))}
-      {mode !== 'text' && (
+      {profile.kind === 'video' && (
+        <VideoInputs
+          key={mode}
+          client={client}
+          profile={profile}
+          mode={mode}
+          params={params}
+          inputs={inputs}
+          onChange={setInputs}
+          onReading={setReading}
+          disabled={submit.isPending}
+        />
+      )}
+      {profile.kind === 'image' && mode !== 'text' && (
         <label className="grid gap-2 text-xs text-muted-foreground">
           参考图
           <Input
@@ -459,7 +494,7 @@ function ImageForm({
         disabled={submit.isPending || reading || !prompt.trim() || !!issues.length}
       >
         <Sparkles aria-hidden="true" />
-        {submit.isPending ? '正在创建任务…' : '生成图片'}
+        {submit.isPending ? '正在创建任务…' : `生成${profile.kind === 'video' ? '视频' : '图片'}`}
       </Button>
     </form>
   );

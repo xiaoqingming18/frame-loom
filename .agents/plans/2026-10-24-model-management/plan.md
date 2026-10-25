@@ -33,7 +33,7 @@ Note: ../../notes/proposed/architecture/2026-10-24-model-management.md
 | 01 | [基础设施：写接口、密钥与事件](01-foundation.md) | done | — | CORS 放开、主密钥与字段加密、日志屏蔽、SSE 事件端点、client 写请求与 `stream()` |
 | 02 | [渠道与文本模型](02-channels-llm.md) | done | 01 | 渠道和模型的增删改查、拉取模型、pi-ai 连通测试、默认模型、"模型服务"设置页、模型测试页的文本页签 |
 | 03 | [生成任务内核与图片](03-generation-image.md) | done | 02 | `generation_jobs`、调度与恢复、媒体落盘、`frame-media://`、三个图片适配器、模型测试页的图片页签 |
-| 04 | [视频与参考素材](04-video-references.md) | draft | 03 | ffprobe、对象存储与预检、三个视频适配器、"对象存储"设置页、模型测试页的视频页签 |
+| 04 | [视频与参考素材](04-video-references.md) | done | 03 | ffprobe、对象存储与预检、三个视频适配器、"对象存储"设置页、模型测试页的视频页签 |
 | 05 | [TTS 与整体验收](05-tts-acceptance.md) | draft | 04 | 两个 TTS 适配器、配音页签、真实接口冒烟、人工验收、笔记转入 implemented |
 
 ## 依赖与顺序
@@ -54,4 +54,4 @@ Note: ../../notes/proposed/architecture/2026-10-24-model-management.md
 
 ## 发现与偏差
 
-- 01、02、03 已完成并独立验收，证据见各自子计划；04、05 尚未开始。整体模型管理仍未交付，因此提案保持 proposed、父计划保持 active，父级整体验收项不提前勾选。
+- 01～04 已完成并独立验收，证据见各自子计划；05 尚未开始。整体模型管理仍未交付，因此提案保持 proposed、父计划保持 active，父级整体验收项不提前勾选。

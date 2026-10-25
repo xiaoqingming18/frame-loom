@@ -313,6 +313,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: 1.4.0
         version: 1.4.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/signature-v4@5.7.4)(supports-color@7.2.0)(undici@8.12.3)(ws@8.22.0)(zod@4.6.7)
+      '@ffprobe-installer/ffprobe':
+        specifier: 2.1.2
+        version: 2.1.2
       '@frame-loom/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -325,6 +328,9 @@ importers:
       '@nestjs/platform-express':
         specifier: 12.2.0
         version: 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(@nestjs/core@12.2.0)(supports-color@7.2.0)
+      aws4fetch:
+        specifier: 1.0.20
+        version: 1.0.20
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
@@ -1276,6 +1282,50 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@ffprobe-installer/darwin-arm64@5.0.1':
+    resolution: {integrity: sha512-vwNCNjokH8hfkbl6m95zICHwkSzhEvDC3GVBcUp5HX8+4wsX10SP3B+bGur7XUzTIZ4cQpgJmEIAx6TUwRepMg==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@ffprobe-installer/darwin-x64@5.1.0':
+    resolution: {integrity: sha512-J+YGscZMpQclFg31O4cfVRGmDpkVsQ2fZujoUdMAAYcP0NtqpC49Hs3SWJpBdsGB4VeqOt5TTm1vSZQzs1NkhA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@ffprobe-installer/ffprobe@2.1.2':
+    resolution: {integrity: sha512-ZNvwk4f2magF42Zji2Ese16SMj9BS7Fui4kRjg6gTYTxY3gWZNpg85n4MIfQyI9nimHg4x/gT6FVkp/bBDuBwg==}
+    engines: {node: '>=14.21.2'}
+
+  '@ffprobe-installer/linux-arm64@5.2.0':
+    resolution: {integrity: sha512-X1VvWtlLs6ScP73biVLuHD5ohKJKsMTa0vafCESOen4mOoNeLAYbxOVxDWAdFz9cpZgRiloFj5QD6nDj8E28yQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@ffprobe-installer/linux-arm@5.2.0':
+    resolution: {integrity: sha512-PF5HqEhCY7WTWHtLDYbA/+rLS+rhslWvyBlAG1Fk8VzVlnRdl93o6hy7DE2kJgxWQbFaR3ZktPQGEzfkrmQHvQ==}
+    cpu: [arm]
+    os: [linux]
+
+  '@ffprobe-installer/linux-ia32@5.2.0':
+    resolution: {integrity: sha512-TFVK5sasXyXhbIG7LtPRDmtkrkOsInwKcL43iEvEw+D9vCS2rc//mn9/0Q+BR0UoJEiMK4+ApYr/3LLVUBPOCQ==}
+    cpu: [ia32]
+    os: [linux]
+
+  '@ffprobe-installer/linux-x64@5.2.0':
+    resolution: {integrity: sha512-D3UeqTLYPNs7pBWPLUYGehPdRVqU8eACox4OZy3pZUZatxye2YKlvBwEfaLdL1v2Z4FOAlLUhms0kY8m8kqSRA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@ffprobe-installer/win32-ia32@5.1.0':
+    resolution: {integrity: sha512-5O3vOoNRxmut0/Nu9vSazTdSHasrr+zPT2B3Hm7kjmO3QVFcIfVImS6ReQnZeSy8JPJOqXts5kX5x/3KOX54XQ==}
+    cpu: [ia32]
+    os: [win32]
+
+  '@ffprobe-installer/win32-x64@5.1.0':
+    resolution: {integrity: sha512-jMGYeAgkrdn4e2vvYt/qakgHRE3CPju4bn5TmdPfoAm1BlX1mY9cyMd8gf5vSzI8gH8Zq5WQAyAkmekX/8TSTg==}
+    cpu: [x64]
+    os: [win32]
 
   '@floating-ui/core@1.8.0':
     resolution: {integrity: sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ==}
@@ -3128,6 +3178,9 @@ packages:
 
   aws4@1.13.2:
     resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
+
+  aws4fetch@1.0.20:
+    resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
 
   babel-dead-code-elimination@1.0.12:
     resolution: {integrity: sha512-GERT7L2TiYcYDtYk1IpD+ASAYXjKbLTDPhBtYj7X1NuRMDTMtAx9kyBenub1Ev41lo91OHCKdmP+egTDmfQ7Ig==}
@@ -6743,6 +6796,41 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 1.8.0
 
+  '@ffprobe-installer/darwin-arm64@5.0.1':
+    optional: true
+
+  '@ffprobe-installer/darwin-x64@5.1.0':
+    optional: true
+
+  '@ffprobe-installer/ffprobe@2.1.2':
+    optionalDependencies:
+      '@ffprobe-installer/darwin-arm64': 5.0.1
+      '@ffprobe-installer/darwin-x64': 5.1.0
+      '@ffprobe-installer/linux-arm': 5.2.0
+      '@ffprobe-installer/linux-arm64': 5.2.0
+      '@ffprobe-installer/linux-ia32': 5.2.0
+      '@ffprobe-installer/linux-x64': 5.2.0
+      '@ffprobe-installer/win32-ia32': 5.1.0
+      '@ffprobe-installer/win32-x64': 5.1.0
+
+  '@ffprobe-installer/linux-arm64@5.2.0':
+    optional: true
+
+  '@ffprobe-installer/linux-arm@5.2.0':
+    optional: true
+
+  '@ffprobe-installer/linux-ia32@5.2.0':
+    optional: true
+
+  '@ffprobe-installer/linux-x64@5.2.0':
+    optional: true
+
+  '@ffprobe-installer/win32-ia32@5.1.0':
+    optional: true
+
+  '@ffprobe-installer/win32-x64@5.1.0':
+    optional: true
+
   '@floating-ui/core@1.8.0':
     dependencies:
       '@floating-ui/utils': 0.2.12
@@ -8596,6 +8684,8 @@ snapshots:
   at-least-node@1.0.0: {}
 
   aws4@1.13.2: {}
+
+  aws4fetch@1.0.20: {}
 
   babel-dead-code-elimination@1.0.12(supports-color@7.2.0):
     dependencies:

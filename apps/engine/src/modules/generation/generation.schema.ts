@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type {
   GenerationRequest,
   GenerationStatus,
@@ -45,6 +45,9 @@ export const mediaFiles = sqliteTable('media_files', {
   width: integer('width'),
   height: integer('height'),
   durationMs: integer('duration_ms'),
+  fps: real('fps'),
+  codec: text('codec'),
+  audioCodec: text('audio_codec'),
   createdAt: text('created_at').notNull(),
   ext: text('ext').notNull(),
 });

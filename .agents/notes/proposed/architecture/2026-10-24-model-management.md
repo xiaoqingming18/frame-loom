@@ -28,7 +28,7 @@ Status: proposed
 
 ### 当前实现边界
 
-01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型、四种文本协议的两步测试、设置中心的模型服务与模型测试页的文本对话。03 已实现图片档案与三种图片协议、持久化生成任务调度与恢复、sha256 媒体落盘、`frame-media://` 和图片测试页；视频、对象存储、TTS 及真实供应商整体验收仍属于 04～05。本篇保持 proposed，整体验收后再转 implemented。
+01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型、四种文本协议的两步测试、设置中心的模型服务与模型测试页的文本对话。03 已实现图片档案与三种图片协议、持久化生成任务调度与恢复、sha256 媒体落盘、`frame-media://` 和图片测试页。04 已实现 ffprobe 预检、S3 兼容对象存储、三种视频协议、对象存储设置页和视频测试页；Windows x64 新版 NSIS 安装后 ffprobe 实测通过。TTS 与真实供应商整体验收仍属于 05。本篇保持 proposed，整体验收后再转 implemented。
 
 ### 调研依据
 
@@ -208,7 +208,9 @@ created_at, updated_at, finished_at
   - 应用不自动删除远端对象。设置页建议用户为存储桶配置生命周期规则，例如 7 天后过期，并说明一点：素材会上传到你的存储桶，再由所选厂商通过链接下载。
 - **提交前预检**：用 ffprobe 检查时长、帧率、分辨率、编码、单个大小和总时长，按档案限制拦截。首期不做自动转码或压缩。
 - **以后的优化，本期不做**：厂商上传接口（MiniMax `mm_file://`、Gemini Files API），复用厂商结果链接（如方舟信任本账号 30 天内生成的视频），方舟音频 Base64 内联。
-- **签名实现**：用 AWS 官方 SDK，还是用轻量 SigV4 签名库，实施时按安装体积和维护状态选定，并原地补进本篇。
+- **签名实现**：04 选用精确锁定的 `aws4fetch@1.0.20`，仅使用签名能力，上传与下载的超时、重定向和重试由 engine 控制。npm 包解包 65,541 字节，无庞大服务 SDK；最后发布于 2024-08-28，维护频率低，需要 AWS 官方固定向量和模拟 S3 回归兜底。`@aws-sdk/client-s3@3.1156.0` 的最强理由是 AWS 官方维护、2026-10-22 仍有发布，服务与错误类型更完整；但仅本包即 3,312,166 字节，另有传递依赖，当前仅 PUT、DELETE 和 GET 预签名，不选完整 SDK。数据来自 2026-10-25 npm 查询，后续可能变化；来源：[aws4fetch](https://www.npmjs.com/package/aws4fetch)、[AWS SDK](https://www.npmjs.com/package/@aws-sdk/client-s3)。每次预签名加入参与签名的请求随机标识，避免同秒提交共用链接。
+- **ffprobe 分发**：04 选 `@ffprobe-installer/ffprobe@2.1.2` 的平台预编译依赖，开发和生产均通过包的 `path` 定位；随现有 engine 的生产依赖部署，无额外复制脚本。Windows x64 二进制包版本 5.1.0，解包约 81 MB，增加安装体积；本期只探测，不引入 ffmpeg 或转码。来源：[安装包](https://www.npmjs.com/package/@ffprobe-installer/ffprobe)。
+- **04 协议核对**：MiniMax 使用 `/v2/video_generation` 与 `/v2/query/video_generation/{id}`，H3、Highspeed、Lite、Max 各有独立限制，不能套用旧 Hailuo V1；来源：[创建](https://platform.minimax.io/docs/api-reference/video-generation-v2-create)、[查询](https://platform.minimax.io/docs/api-reference/video-generation-v2-query)。OpenAI 格式保留给兼容渠道；官方 SDK 已标注 Sora API 于 2026-09-24 停用，不把此适配器描述为官方服务可用；来源：[官方 SDK](https://github.com/openai/openai-node/blob/master/src/resources/videos.ts)。以上基于 2026-10-25 在线核对，真实厂商及中转差异留给 05 冒烟验证。
 
 ### 密钥与日志
 
@@ -245,6 +247,8 @@ created_at, updated_at, finished_at
   | 生成任务 | `/generation-jobs`、`/generation-jobs/:id`、`/generation-jobs/:id/{cancel,resubmit,requery}` |
   | 文本测试 | `/llm/test-chat`（流式） |
   | 事件 | `/events` |
+
+  `GET /object-storage` 在尚未配置时返回 JSON `null`，仍保持 `application/json`；renderer 按 JSON 响应解析，不把空响应体当作未配置状态。
 
 - **推送**：`GET /events` 是 engine 的第一个 SSE 端点，推送 `generation.job.updated` 等类型化事件，事件结构由 contracts 定义。renderer 的 engine client 加入 `stream()`：用 fetch 读流，token 放在请求头里。收到事件后更新对应的 TanStack Query 缓存。文本测试的流式响应复用同一个 `stream()`。
   - 01 的基础事件为 `heartbeat { timestamp }` 与 `generation.job.updated { jobId }`，通过 `type` 区分；任务事件只通知重新查询，完整任务数据与状态由 03 定义。心跳在连接建立时立即发送，此后每 15 秒一次；服务关闭时结束流。客户端返回异步迭代器，支持 AbortSignal 与提前结束迭代，不做自动重连或重放；重连后调用方重新拉取任务。
@@ -366,7 +370,7 @@ created_at, updated_at, finished_at
 - **预签名链接可能失效或不可达**：
   - 厂商若拒绝带查询参数的链接，或在排队很久之后才下载素材，链接可能被拒或已过期，默认 24 小时有效期只能缓解。
   - 厂商访问海外存储桶可能慢或失败，表现为 `input_unreachable` 错误；只能提示用户选择离所用厂商近的地域。
-- **ffprobe 打包**：引入 ffprobe 会增加安装包体积。打包方式（npm 预编译包，或随 `resources/` 分发的二进制）实施时选定，并同步应用骨架笔记。
+- **ffprobe 打包**：已选 `@ffprobe-installer/ffprobe@2.1.2` 平台预编译包，作为 engine 生产依赖随部署树分发；开发环境、packaged layout 与 Windows x64 新版 NSIS 安装后均通过模拟视频验证，安装目录中的 `ffprobe.exe` 能读取 H.264、320x256、24 fps 与 2 秒时长。安装体积增加约 81 MB，详见本篇的分发决策。真实厂商冒烟与整体验收仍归 05。
 - **pi API 变动快**：createProvider、compat 字段可能变化。缓解办法是精确锁版本、只在 `modules/llm` 中导入，升级单独提交并跑回归测试。
 - **主密钥的可用性**：safeStorage 依赖操作系统用户凭据。用户迁移系统或重装后，所有密钥都需要重新填写；这是有意的取舍，界面必须给出明确提示。
 - **SSE 推送丢事件**：连接断开期间会错过事件。renderer 重连后要重新拉取进行中的任务，不能只依赖事件。

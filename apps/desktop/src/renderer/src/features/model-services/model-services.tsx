@@ -13,6 +13,7 @@ import {
   ModelKind,
   LlmProtocol,
   ImageProtocol,
+  VideoProtocol,
   channelPresets,
   type ChannelPreset,
 } from '@frame-loom/contracts';
@@ -567,11 +568,13 @@ function ModelForm({
             defaultValue={model?.protocol ?? channelPresets[preset].protocol}
           >
             <option value="">未选择</option>
-            {[...LlmProtocol.options, ...ImageProtocol.options].map((protocol) => (
-              <option key={protocol} value={protocol}>
-                {protocol}
-              </option>
-            ))}
+            {[...LlmProtocol.options, ...ImageProtocol.options, ...VideoProtocol.options].map(
+              (protocol) => (
+                <option key={protocol} value={protocol}>
+                  {protocol}
+                </option>
+              ),
+            )}
           </NativeSelect>
         </Field>
         <Field label="媒体档案 ID">
@@ -581,6 +584,10 @@ function ModelForm({
             placeholder="留空按精确 ID 匹配，否则使用通用档案"
           />
         </Field>
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          MiniMax H3 视频请新建独立渠道，Base URL 使用 https://api.minimax.io（不含
+          /anthropic）；Sora 格式用于兼容渠道。内置档案可在模型测试页查看。
+        </p>
         <label className="flex items-center gap-2 text-xs">
           <input name="enabled" type="checkbox" defaultChecked={model?.enabled ?? false} />
           启用模型（先选择类别和协议）

@@ -29,7 +29,10 @@ export async function imageResponse(response: Response): Promise<unknown> {
     } catch {
       /* 非 JSON 错误仍按 HTTP 状态分类。 */
     }
-    const moderation = /moderation|safety|content_policy|blocked|sensitive|risk/i.test(code);
+    const moderation =
+      /1026|unprocessable_entity_error|moderation|safety|content_policy|blocked|sensitive|risk/i.test(
+        code,
+      );
     const category = moderation
       ? 'moderation'
       : response.status === 401 || response.status === 403

@@ -1,4 +1,4 @@
-import { Info, Palette, Server, Settings2, X } from 'lucide-react';
+import { Cloud, Info, Palette, Server, Settings2, X } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AppearanceSettings } from '@/features/theme/components/appearance-settings';
 import { EngineStatusPanel } from '@/features/engine-status/components/engine-status-panel';
 import { ModelServices } from '@/features/model-services/model-services';
+import { ObjectStorageSettings } from '@/features/object-storage/object-storage-settings';
 import type { EngineClient } from '@/lib/engine-client';
 import { settingsTab, type SettingsTab } from './settings-search';
 
@@ -73,6 +74,7 @@ export function SettingsDialog({
                   { value: 'appearance', label: '外观', Icon: Palette },
                   { value: 'engine', label: '本地引擎', Icon: Server },
                   { value: 'models', label: '模型服务', Icon: Settings2 },
+                  { value: 'storage', label: '对象存储', Icon: Cloud },
                   { value: 'about', label: '关于', Icon: Info },
                 ] as const
               ).map(({ value, label, Icon }) => (
@@ -129,6 +131,12 @@ export function SettingsDialog({
                 </div>
               </dl>
             </section>
+          </TabsContent>
+          <TabsContent
+            value="storage"
+            className="min-w-0 overflow-y-auto rounded-2xl bg-card px-6 py-8 lg:px-9"
+          >
+            <ObjectStorageSettings client={engineClient} />
           </TabsContent>
         </Tabs>
       </DialogContent>

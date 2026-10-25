@@ -34,13 +34,22 @@ export function createEngineClient(getConnection: () => Promise<unknown>) {
     }
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${token}`);
-    if (init.body !== undefined) headers.set('Content-Type', 'application/json');
+    if (init.body !== undefined)
+      headers.set(
+        'Content-Type',
+        init.body instanceof Blob ? 'application/octet-stream' : 'application/json',
+      );
     const requestInit = Object.fromEntries(
       Object.entries(init).filter(([key]) => key !== 'timeoutMs'),
     ) as RequestInit;
     const response = await fetch(url.href, {
       ...requestInit,
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      body:
+        init.body === undefined
+          ? undefined
+          : init.body instanceof Blob
+            ? init.body
+            : JSON.stringify(init.body),
       headers,
       signal,
       redirect: 'error',
