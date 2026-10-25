@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { useQuery } from '@tanstack/react-query';
 import { FlaskConical, Send, Square } from 'lucide-react';
 import { LlmEvent, type ModelUsage } from '@frame-loom/contracts';
-import { Button } from '@/components/ui/button';
-import { NativeSelect } from '@/components/ui/native-select';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@frame-loom/ui/components/button';
+import { NativeSelect } from '@frame-loom/ui/components/native-select';
+import { Textarea } from '@frame-loom/ui/components/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@frame-loom/ui/components/tabs';
 import type { EngineClient } from '@/lib/engine-client';
 import { channelsQuery, modelsQuery, defaultsQuery } from '@/lib/model-queries';
 import { ImageLab } from './image-lab';

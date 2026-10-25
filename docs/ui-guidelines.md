@@ -12,8 +12,8 @@ Frame Loom 的颜色、字体与阴影统一来自 `apps/desktop/src/renderer/sr
 
 ## 组件与结构
 
-- 基础交互优先复用 `components/ui/` 的 shadcn 组件，图标使用 `lucide-react`，装饰图标对辅助技术隐藏；纯图标按钮提供中文可访问名称。
-- 添加组件：在 `apps/desktop` 运行 `pnpm dlx shadcn@4.22.1 add <组件> --dry-run`，确认路径后生成。检查上游的 `cn` 导入，改用 `@/lib/utils`，移除多余依赖并替换硬编码颜色。
+- 基础交互优先复用 `@frame-loom/ui`（`packages/ui/src/components/`）的 shadcn 组件，以 `@frame-loom/ui/components/<name>` 导入；图标使用 `lucide-react`，装饰图标对辅助技术隐藏；纯图标按钮提供中文可访问名称。
+- 添加组件：在 `packages/ui` 运行 `pnpm dlx shadcn@4.22.1 add <组件> --dry-run`，确认路径后生成。检查上游的 `cn` 导入，包内改用相对路径 `../lib/utils`，移除多余依赖并替换硬编码颜色。工作区包经 node_modules 链接引入，新增含 Tailwind 类名的包时要在 `globals.css` 用 `@source` 登记源码目录。
 - 跨 feature 的布局放 `app/shell/`，业务界面放 `features/<feature>/`；feature 不互相导入，路由文件保持轻量。服务端数据使用 Query 和唯一 engine client。
 - 窗口使用 `frame: false`，标题栏高 42px。空白区域使用 `app-region: drag`，菜单和自绘窗口按钮使用 `no-drag`。右侧最小化、最大化／还原、关闭按钮经可信桥接操作窗口，最大化状态以主进程查询和事件为准，不能仅在点击时翻转图标。设置模态框打开时窗口按钮仍可点击，操作不关闭设置。
 - 自绘按钮适配明暗主题和中文可访问名称，关闭按钮悬停使用 `destructive`。不提供 Windows 11 原生最大化按钮悬停的贴靠弹层，系统拖动贴靠和快捷键保留。

@@ -12,7 +12,8 @@ Status: implemented
 - 开发加载 Vite 的完整源，构建产物使用 `app://frame-loom`。自定义协议只提供 renderer 目录内的静态文件；新窗口与外部导航被拒绝。窗口开启隔离、沙箱并关闭 Node 集成。
 - 每次启动生成独立随机令牌，utilityProcess 直接加载 engine 的 ESM 入口，传入 userData 和唯一允许源。30 秒内没有合法 ready、提前退出或启动失败都拒绝连接请求；打包验证中首次部署启动曾超过原定 15 秒，因此给冷启动留出余量，仍保留超时失败。退出时先发送 shutdown，限时等待后强制结束子进程，避免残留。
 - `main/secret-key.ts` 用 Electron 45 异步 safeStorage 保护随机 32 字节主密钥，原子保存到 `<userData>/secret-key.bin`，只经 `FRAME_LOOM_SECRET_KEY` 交给 engine。解密损坏时备份为 `.broken` 后换新并提示重填凭据；暂时不可用或读写失败时保留可恢复的文件，以空主密钥启动并显示原生提示。主密钥不进入 preload；字段加密和日志边界见[engine 服务](2026-10-24-engine-service.md)。
-- preload 暴露 `getEngineConnection`、`theme.get/set`、`window.command` 和窗口最大化状态查询／订阅固定方法。IPC 同时校验发起者属于应用窗口、是主框架、URL 属于可信源，主题和窗口参数使用 contracts 的枚举校验。窗口状态订阅只传布尔值，返回取消订阅函数。engine 退出时主进程通过重载使健康查询失效，界面重新请求并显示中文错误；未增加 engine 退出订阅 API。
+- preload 暴露 `getEngineConnection`、`theme.get/set`、`window.command` 和窗口最大化状态查询／订阅固定方法。IPC 同时校验发起者属于应用窗口、是主框架、URL 属于可信源，主题和窗口参数使用 contracts 的枚举校验。窗口状态订阅只传布尔值，返回取消订阅函数。engine 退出时主进程不重载页面，只在窗口仍加载可信源时发送 `engine:exited`；preload 的 `onEngineExited` 剥离原始事件、返回取消订阅函数，`lib/desktop-bridge.ts` 只接受整数或 null 退出码。外壳收到后使健康查询失效，界面重新请求并显示中文错误，页面内的编辑状态保留。这一变化由[无限画布](../../proposed/feature/2026-10-25-infinite-canvas.md)触发，满足下文"引入可编辑业务页面时改为类型化事件"的条件。
+- 主进程以 `Menu.setApplicationMenu(null)` 移除默认应用菜单，生产包不响应 Ctrl+R／F5 重载、开发者工具与 Ctrl+±／Ctrl+0 页面缩放；`setVisualZoomLevelLimits(1, 1)` 锁定捏合缩放，实测 Ctrl+滚轮也不改变缩放系数。开发模式保留 F12、Ctrl+Shift+I 打开开发者工具。
 - renderer 使用 TanStack 文件路由，`createHashHistory()` 初始化时将空 hash 归一为 `#/`，保留已有 hash 路径与查询参数；未知路径显示中文 404，路由错误显示中文兜底页。`app/shell/` 组合标题栏、侧栏、画布和设置中心，`features/home/` 提供静态首页，`/projects` 提供空状态。根路由以 zod 校验设置开关及页签，非法值回退为关闭；engine 退出后保留当前路径与设置页签。不修改 `app://` 静态文件映射，不添加创作业务。
 - `lib/desktop-bridge.ts` 是唯一读取 `window.frameLoom` 的模块。`lib/engine-client.ts` 在闭包中缓存已校验连接的 Promise，合并并发获取；连接或请求失败后，下次重新获取，过时请求不会清除更新的缓存。请求必须同源、无用户信息且拒绝重定向，token 只进入 Authorization 请求头。成功体使用调用方 schema 校验，错误体解析 `ErrorResponse`，非法体、网络错误、取消和超时均使用中文提示。
 - 五秒超时只覆盖普通 HTTP；首次获取连接继续受主进程 30 秒 ready 超时约束，避免把冷启动误判成请求失败。client 支持 JSON 写请求和返回异步迭代器的 SSE `stream()`；SSE 无五秒超时，可取消，不自动重连，调用方重连后补拉。engine client 与 QueryClient 由入口创建，经路由 context 注入；健康查询位于 `features/engine-status/api`，界面位于同 feature 的 `components`。QueryClient 默认关闭重试和窗口聚焦刷新。
@@ -41,7 +42,7 @@ Status: implemented
 
 ## Alternatives considered
 
-- **新增 preload 的退出订阅 API**：可以直接向页面推送结构化状态。但本里程碑只需要更新健康结果，主进程使页面重载即可重新查询，无需另增退出订阅方法；有实时业务事件需求时再建立事件契约。
+- **新增 preload 的退出订阅 API**：可以直接向页面推送结构化状态。首个里程碑只需要更新健康结果，曾以页面重载代替；画布引入可编辑状态后，按约定改为该 API，现为当前实现。
 - **只靠轮询发现 engine 退出**：实现简单，但会延迟错误反馈并持续发送请求。主进程已经监听进程退出，直接触发页面刷新即可复用现有错误路径。
 - 文件路由与浏览器 history、独立 renderer 包及请求框架的取舍，沿用[基础设施笔记](2026-10-24-engine-and-renderer-foundation.md)，不增加第二套协议映射或请求抽象。
 
@@ -62,6 +63,7 @@ Status: implemented
 - 收益：开发和构建页面都能通过可信 IPC 获得鉴权连接，真实 ESM engine 与 SQLite 已联通，故障与关闭行为可见且可验证。
 - 代价：安装依赖需要下载 Electron 二进制；engine 源码修改后需要重启开发命令，暂不增加多进程热重载设施。
 - renderer 骨架及 UI 依赖随 Vite 打包，桌面运行时 `dependencies` 仍为空；需要维护生成路由树、node／web 类型配置和主题 token。主题、设置中心与应用外壳见[主题与外壳笔记](../feature/2026-10-24-theme-and-app-shell.md)。
-- 退出通知通过重载页面实现，会重置侧栏折叠等局部状态；当前页面静态，路由保留设置开关和页签，主进程保留主题。引入可编辑的业务页面时必须改为类型化事件，避免丢失用户输入。
+- 退出通知使用类型化 `engine:exited` 事件，页面状态与输入不丢失；engine 退出后仍不自动重启，后续请求返回中文连接错误。默认菜单移除后，页面需要的快捷键由 renderer 自行处理。
+- 运行环境若设置 `ELECTRON_RUN_AS_NODE=1`（例如由 Electron 宿主启动的终端），Electron 按 Node 运行，桌面 e2e 会报 "Process failed to launch"；运行前须清除该变量。
 - 显式 process.exit 仅用于有 parentPort 的 engine，且始终在 HTTP／数据库关闭后执行；主进程仍保留五秒强制终止作为异常兜底。未实现自动重启。
 - NSIS、asar 外部署、fuse 和安装后行为已由分发验证覆盖；app 协议预览仍不能代替安装包测试。权限边界不能防御同用户权限下读取进程环境的恶意程序。

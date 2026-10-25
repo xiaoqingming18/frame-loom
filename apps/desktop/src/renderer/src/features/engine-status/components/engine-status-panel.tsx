@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Button } from '@/components/ui/button';
+import { Button } from '@frame-loom/ui/components/button';
 import { healthQueryOptions } from '../api/health';
 import type { EngineClient } from '@/lib/engine-client';
 

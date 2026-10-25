@@ -1,14 +1,14 @@
 import { Cloud, Info, Palette, Server, Settings2, Star, X } from 'lucide-react';
 import logo from '@/assets/logo.png';
-import { Button } from '@/components/ui/button';
+import { Button } from '@frame-loom/ui/components/button';
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+} from '@frame-loom/ui/components/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@frame-loom/ui/components/tabs';
 import { AppearanceSettings } from '@/features/theme/components/appearance-settings';
 import { EngineStatusPanel } from '@/features/engine-status/components/engine-status-panel';
 import { ModelServices } from '@/features/model-services/model-services';

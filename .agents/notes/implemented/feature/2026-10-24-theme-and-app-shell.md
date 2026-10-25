@@ -23,7 +23,7 @@ Status: implemented
 
 ### 技术选择
 
-- 样式继续用 Tailwind CSS 4。组件用 shadcn/ui：组件源码由 CLI 生成到 `components/ui/`，底层是 Radix（`radix-ui` 包），配套 `class-variance-authority`、`clsx`、`tailwind-merge`、`tw-animate-css`。图标用 `lucide-react`。设计稿的图标是 Feather 风格，lucide 从 Feather 分叉而来，图形一致。
+- 样式继续用 Tailwind CSS 4。组件用 shadcn/ui：组件源码由 CLI 生成到工作区包 `packages/ui/src/components/`（最初在 desktop 的 `components/ui/`，画布需要复用时迁出），底层是 Radix（`radix-ui` 包），配套 `class-variance-authority`、`clsx`、`tailwind-merge`、`tw-animate-css`。图标用 `lucide-react`。设计稿的图标是 Feather 风格，lucide 从 Feather 分叉而来，图形一致。
 - 主题偏好由主进程保存，并设置 Electron 的 `nativeTheme.themeSource`。按 [nativeTheme 文档](https://www.electronjs.org/docs/latest/api/native-theme)，设置之后 renderer 的 CSS 媒体查询 `prefers-color-scheme` 会跟着变，Windows 上的原生菜单和开发者工具也会切换明暗。renderer 只需要用这个媒体查询，不必用 JS 给页面加 `.dark` class。
 - Tailwind 4 的 `dark:` 变体默认就基于 `prefers-color-scheme`，和这套机制一致。shadcn CLI 生成的 `globals.css` 里有 `@custom-variant dark (&:is(.dark *))`，必须删掉，不能保留基于 class 的切换。
 
@@ -118,7 +118,7 @@ Status: implemented
   - **模型服务**：渠道列表与渠道编辑页（拉取后勾选模型、两步连通测试、渠道与模型一次保存），内容来自 `features/model-services`；读响应不含明文密钥和附加请求头值。见[以渠道为中心的模型设置](2026-10-25-channel-centric-model-settings.md)。
   - **默认模型**：每个类别选择一个已启用模型，内容来自 `features/model-services/model-defaults.tsx`。
   - **关于**：显示 logo、应用名和版本号。版本号由 Vite `define` 在构建时从 `apps/desktop/package.json` 注入。
-- 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'models' | 'defaults' | 'storage' | 'about'`，由 zod 校验。engine 退出时主进程会重载页面，弹窗在重载后仍然打开，停在同一个页签上显示错误。
+- 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'models' | 'defaults' | 'storage' | 'about'`，由 zod 校验。engine 退出时页面不重载，弹窗保持打开并停在同一个页签上显示错误；手动重载时 hash 同样保留弹窗与页签。
 - 非法 search 值回退为关闭；打开、切页和关闭保留当前路径。Dialog 关闭后焦点恢复到侧栏设置入口。外观读写使用 Query 与 mutation，读取失败可重试，写入失败保留原选择并显示中文错误；保存期间禁用切换，避免并发覆盖。
 
 ### logo 资源
@@ -142,7 +142,7 @@ Status: implemented
   - 只启用 correctness 规则：`no-unknown-classes`、`no-conflicting-classes`、`no-deprecated-classes`、`no-duplicate-classes`。
   - 用 `no-restricted-classes` 拦截调色板颜色类和任意值颜色。
   - 类名排序交给 Prettier 官方的 `prettier-plugin-tailwindcss`，ESLint 不启用排序和换行规则，避免两者冲突。
-- 新组件优先用 shadcn CLI 添加到 `components/ui/`，图标只用 lucide。
+- 新组件优先用 shadcn CLI 添加到 `packages/ui/src/components/`，图标只用 lucide。
 - 每个新界面都必须在明亮和暗黑两种模式下检查一遍。
 - 这些规则写进 `docs/ui-guidelines.md`，`AGENTS.md` 加一条指向它，后续的 AI 会话也能读到。
 
@@ -238,10 +238,10 @@ UI 包都放在 desktop 的 `devDependencies`，由 electron-vite 打进产物�
 - 收益：标题栏、外壳与设置统一使用语义 token 和成熟交互组件；主题由主进程持久化并驱动原生窗口及媒体查询，健康故障可见且保留诊断页签。
 - 代价：需要维护两份主题值、生成组件源码和原生／renderer 颜色一致性测试；生产样式 CSP 放宽，明亮次要文字保持设计稿原值仍有对比度缺口。
 
-- shadcn CLI 依赖根 tsconfig 的别名和 `components.json`，生成后仍须核对实际路径、`cn` 导入和颜色 token；前述 06 验证保留这项兼容成本。
-- Windows 使用 `autoHideMenuBar` 隐藏默认应用菜单栏，实测自定义菜单可点击。默认菜单在生产包里仍保留重新加载和开发者工具的快捷键，这是现有行为，不在本篇处理。
+- shadcn CLI 依赖 `packages/ui/components.json`，生成后仍须核对实际路径、`cn` 导入和颜色 token；前述 06 验证保留这项兼容成本。
+- 默认应用菜单已移除（见[桌面壳](../architecture/2026-10-24-desktop-shell.md)），生产包不再响应重新加载、开发者工具和页面缩放快捷键；标题栏的 HTML 菜单栏不受影响。
 - 原生按钮的图标和设计稿不同，属于已接受的偏差；如果设计方坚持自绘，需要另写笔记重新评估 `frame: false`。
 - 明亮模式次要文字对比度不足，等待设计确认，见上文「待确认」。
-- 首页输入区的控件都已禁用。等创作功能开放、输入框可以输入时，engine 退出触发的页面重载会清空已输入内容，此时必须按[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)记录的条件，把重载改为类型化事件。
+- engine 退出不再重载页面，改由类型化 `engine:exited` 事件刷新健康状态（见[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)），首页等页面以后开放输入也不会因此丢失内容。
 - `style-src 'unsafe-inline'` 放宽了 CSP。以后如果页面需要渲染外部 HTML（例如模型返回的富文本），必须先做净化，并重新评估这条 CSP。
 - 未覆盖 Windows 高对比度模式（forced colors）。

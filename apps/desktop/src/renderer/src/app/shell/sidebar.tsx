@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { FlaskConical, Folder, PanelLeft, Plus, Search, SquarePen } from 'lucide-react';
 import logo from '@/assets/logo.png';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Button } from '@frame-loom/ui/components/button';
+import { cn } from '@frame-loom/ui/lib/utils';
 import { SettingsMenu } from './settings-menu';
 
 export function Sidebar({ hasError, onSettings }: { hasError: boolean; onSettings: () => void }) {

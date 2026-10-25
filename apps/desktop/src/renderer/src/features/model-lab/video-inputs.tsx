@@ -7,7 +7,7 @@ import {
   type GenerationInput,
   type ModelProfile,
 } from '@frame-loom/contracts';
-import { Input } from '@/components/ui/input';
+import { Input } from '@frame-loom/ui/components/input';
 import type { EngineClient } from '@/lib/engine-client';
 
 const slots = [

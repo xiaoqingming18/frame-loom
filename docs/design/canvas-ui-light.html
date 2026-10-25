@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>无限画布复刻</title>
+    <style>
+        :root {
+            --bg-color: #fbfbfb;
+            --dot-color: #e0e0e0;
+            --border-color: #eaeaea;
+            --text-main: #333333;
+            --text-secondary: #888888;
+            --primary-color: #5c5cff;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+        }
+
+        /* 画布背景（带点阵） */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+            cursor: default;
+            z-index: 1;
+        }
+
+        #canvas-container.space-pressed {
+            cursor: grab;
+        }
+
+        #canvas-container.dragging {
+            cursor: grabbing;
+        }
+
+        /* 画布内部的节点容器 */
+        #nodes-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+        }
+
+        .node {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* ---------------- UI 悬浮层 ---------------- */
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 让鼠标事件穿透到画布，但特定元素恢复 */
+            z-index: 10;
+        }
+
+        .ui-layer > * {
+            pointer-events: auto;
+        }
+
+        /* 右上角工具栏 */
+        .top-right {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 12px;
+        }
+
+        .right-toolbar-group {
+            display: flex;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+            padding: 4px;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .toolbar-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 8px;
+            border-radius: 6px;
+            color: var(--text-main);
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .toolbar-item:hover {
+            background: #f5f5f5;
+        }
+
+        .toolbar-item svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+        }
+        
+        .toolbar-item.active {
+            background: #f0f0f0;
+        }
+
+        .divider {
+            width: 1px;
+            height: 16px;
+            background: var(--border-color);
+            margin: 0 4px;
+        }
+
+        /* 小地图 */
+        .minimap {
+            width: 180px;
+            height: 120px;
+            background: #f2f2f2;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .minimap-inner {
+            width: 160px;
+            height: 100px;
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        /* 居中提示文字 */
+        .center-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+            color: var(--text-main);
+            pointer-events: none;
+        }
+
+        .hint-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .hint-title svg {
+            width: 24px;
+            height: 24px;
+            color: var(--primary-color);
+            fill: currentColor;
+        }
+
+        .hint-desc {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .key-cap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 12px;
+            font-family: monospace;
+            background: #ffffff;
+            color: var(--text-secondary);
+            box-shadow: 0 1px 0 rgba(0,0,0,0.05);
+        }
+
+        .hint-desc svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            margin: 0 2px;
+        }
+
+        /* 底部工具栏 */
+        .bottom-toolbar {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+            padding: 6px;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .bottom-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .bottom-btn:hover {
+            background: #f5f5f5;
+        }
+
+        .bottom-btn.active {
+            background: #f0f0f0;
+            color: var(--text-main);
+        }
+
+        .bottom-btn.primary {
+            background: #000;
+            color: #fff;
+        }
+
+        .bottom-btn.primary:hover {
+            background: #222;
+        }
+
+        .bottom-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .bottom-divider {
+            width: 1px;
+            height: 20px;
+            background: var(--border-color);
+            margin: 0 4px;
+        }
+
+        /* 工具栏箭头图标(展开) */
+        .icon-chevron {
+            width: 12px !important;
+            height: 12px !important;
+            margin-left: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 画布层 -->
+    <div id="canvas-container">
+        <div id="nodes-layer"></div>
+    </div>
+
+    <!-- UI 层 -->
+    <div class="ui-layer">
+        <!-- 右上角 -->
+        <div class="top-right">
+            <div class="right-toolbar-group">
+                <div class="toolbar-item">41%</div>
+                <div class="divider"></div>
+                <div class="toolbar-item">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                </div>
+                <div class="toolbar-item">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                </div>
+                <div class="toolbar-item">
+                    <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                </div>
+                <div class="toolbar-item active">
+                    <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    小地图
+                </div>
+            </div>
+            
+            <div class="minimap">
+                <div class="minimap-inner"></div>
+            </div>
+        </div>
+
+        <!-- 居中提示 -->
+        <div class="center-hint">
+            <div class="hint-title">
+                <svg viewBox="0 0 24 24"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path></svg>
+                双击画布 自由生成节点
+            </div>
+            <div class="hint-desc">
+                按住 <span class="key-cap">Space</span> 可以拖拽画布 滚动 
+                <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="7" ry="7"></rect><line x1="12" y1="6" x2="12" y2="10"></line></svg> 
+                缩放画布
+            </div>
+        </div>
+
+        <!-- 底部工具栏 -->
+        <div class="bottom-toolbar">
+            <div class="bottom-btn primary" id="btn-add">
+                <svg viewBox="0 0 24 24" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
+            <div class="bottom-btn active">
+                <svg viewBox="0 0 24 24"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path></svg>
+            </div>
+            <div class="bottom-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path><line x1="13" y1="13" x2="19" y2="19"></line></svg>
+                <svg class="icon-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="bottom-divider"></div>
+            <div class="bottom-btn">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('canvas-container');
+        const nodesLayer = document.getElementById('nodes-layer');
+        const btnAdd = document.getElementById('btn-add');
+
+        // 画布状态
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+
+        // 交互状态
+        let isSpacePressed = false;
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+
+        // 节点计数
+        let nodeCount = 0;
+
+        // 更新画布变换
+        function updateTransform() {
+            nodesLayer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+
+        // 键盘事件（空格键拖拽）
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !isSpacePressed) {
+                isSpacePressed = true;
+                container.classList.add('space-pressed');
+                // 防止空格键滚动页面
+                if (e.target === document.body) {
+                    e.preventDefault();
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                isSpacePressed = false;
+                isDragging = false;
+                container.classList.remove('space-pressed', 'dragging');
+            }
+        });
+
+        // 鼠标拖拽
+        container.addEventListener('mousedown', (e) => {
+            if (isSpacePressed) {
+                isDragging = true;
+                container.classList.add('dragging');
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                updateTransform();
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            container.classList.remove('dragging');
+        });
+
+        // 滚轮缩放
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            // 计算缩放中心点
+            const rect = container.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // 鼠标位置在画布坐标系中的坐标
+            const canvasX = (mouseX - translateX) / scale;
+            const canvasY = (mouseY - translateY) / scale;
+
+            // 调整缩放比例 (限制在 10% 到 400% 之间)
+            const delta = -e.deltaY * 0.001; // 调整滚动灵敏度
+            const newScale = Math.min(Math.max(0.1, scale + delta), 4);
+
+            // 计算新的平移值，使鼠标指针下的画布点保持不动
+            translateX = mouseX - canvasX * newScale;
+            translateY = mouseY - canvasY * newScale;
+            scale = newScale;
+
+            updateTransform();
+        }, { passive: false });
+
+        // 双击画布生成节点
+        container.addEventListener('dblclick', (e) => {
+            if (isSpacePressed) return; // 拖拽状态下不生成
+
+            // 获取鼠标在画布坐标系中的位置
+            const rect = container.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const canvasX = (mouseX - translateX) / scale;
+            const canvasY = (mouseY - translateY) / scale;
+
+            createNode(canvasX, canvasY);
+        });
+
+        // 点击加号生成节点（居中生成）
+        btnAdd.addEventListener('click', () => {
+            // 生成在当前视口中心
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            
+            const canvasX = (centerX - translateX) / scale;
+            const canvasY = (centerY - translateY) / scale;
+
+            createNode(canvasX - 50, canvasY - 50); // 减去节点宽高的一半以居中
+        });
+
+        // 创建节点函数
+        function createNode(x, y) {
+            nodeCount++;
+            const node = document.createElement('div');
+            node.className = 'node';
+            node.style.left = `${x}px`;
+            node.style.top = `${y}px`;
+            node.innerText = `节点 ${nodeCount}`;
+            nodesLayer.appendChild(node);
+        }
+    </script>
+</body>
+</html>

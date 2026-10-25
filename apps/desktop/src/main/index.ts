@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
   nativeTheme,
   net,
   protocol,
@@ -124,8 +125,14 @@ async function start(): Promise<void> {
       // 令牌只通过环境和可信 IPC 传递，不写入日志。
       engine = manageEngine(child, token, (code) => {
         console.info(`engine 已退出，退出码 ${code}`);
-        // shortcut: 当前仅有静态页面和路由设置，增加有状态业务页面时改为类型化退出事件。
-        if (!quitting && window && !window.isDestroyed()) window.webContents.reload();
+        // 通知页面而不是重载，保留画布等未保存的编辑状态。
+        if (
+          !quitting &&
+          window &&
+          !window.isDestroyed() &&
+          isTrustedUrl(window.webContents.getURL(), origin)
+        )
+          window.webContents.send('engine:exited', code);
       });
     } catch (error) {
       startupError = error;
@@ -152,6 +159,17 @@ async function start(): Promise<void> {
       },
     });
     const contents = window.webContents;
+    // 默认菜单的重载、页面缩放等快捷键会丢失画布未保存的内容或与画布快捷键冲突。
+    Menu.setApplicationMenu(null);
+    void contents.setVisualZoomLevelLimits(1, 1);
+    if (!app.isPackaged)
+      contents.on('before-input-event', (_event, input) => {
+        if (
+          input.type === 'keyDown' &&
+          (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))
+        )
+          contents.toggleDevTools();
+      });
     registerDesktopIpc(window, origin);
     nativeTheme.on('updated', () => {
       if (window && !window.isDestroyed()) updateWindowTheme(window);

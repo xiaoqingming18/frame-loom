@@ -3,6 +3,13 @@ import type { ThemeSource, WindowCommand } from '@frame-loom/contracts';
 
 contextBridge.exposeInMainWorld('frameLoom', {
   getEngineConnection: (): Promise<unknown> => ipcRenderer.invoke('engine:connection'),
+  onEngineExited: (callback: (code: unknown) => void): (() => void) => {
+    const listener = (_event: unknown, code: unknown) => callback(code);
+    ipcRenderer.on('engine:exited', listener);
+    return () => {
+      ipcRenderer.removeListener('engine:exited', listener);
+    };
+  },
   theme: {
     get: (): Promise<unknown> => ipcRenderer.invoke('theme:get'),
     set: (source: ThemeSource): Promise<unknown> => ipcRenderer.invoke('theme:set', source),

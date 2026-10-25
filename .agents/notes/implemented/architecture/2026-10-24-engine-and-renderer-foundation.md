@@ -104,18 +104,16 @@ apps/desktop/src/renderer/src/
 │  ├─ engine-status/            # 健康检查，显示在设置中心
 │  ├─ theme/                    # 主题模式读取与切换
 │  └─ home/                     # 静态首页与禁用创作控件
-├─ components/
-│  └─ ui/                       # shadcn 生成的基础组件
 ├─ assets/                      # logo 等静态资源
 ├─ lib/
 │  ├─ desktop-bridge.ts         # 唯一读取 window.frameLoom 的模块
-│  ├─ engine-client.ts          # 唯一接触 engine 连接信息的模块
-│  └─ utils.ts                  # cn()
+│  └─ engine-client.ts          # 唯一接触 engine 连接信息的模块
 └─ styles/                      # globals.css、theme.css
 ```
 
 - 应用外壳（标题栏、侧栏、主画布、设置中心弹窗）放在 `app/shell/`，由 `app` 层组合多个 feature，避免 feature 互相导入。主题 token、外壳布局和设置中心的具体规则见[主题系统与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
-- 依赖方向固定为 `lib`、`components` → `features` → `routes`、`app`。feature 之间不能互相导入，renderer 不能导入 main、preload 或 engine。规则由 ESLint 检查（见 [lint 与格式化](../../implemented/process/2026-10-24-lint-and-format.md)）。
+- shadcn 组件与 `cn()` 位于工作区包 `packages/ui`（`@frame-loom/ui/components/<name>`、`@frame-loom/ui/lib/utils`），以源码导出；拆包取舍见下方备选与[无限画布](../../proposed/feature/2026-10-25-infinite-canvas.md)。工作区包不能导入 `apps/*`。
+- 依赖方向固定为 `lib`、`@frame-loom/ui` → `features` → `routes`、`app`。feature 之间不能互相导入，renderer 不能导入 main、preload 或 engine。规则由 ESLint 检查（见 [lint 与格式化](../../implemented/process/2026-10-24-lint-and-format.md)）。
 - 路由使用 `createHashHistory()`。初始化时将空 hash 归一为 `#/`，保留已有 hash 路径与查询参数。路径在 `#` 之后，重载始终请求 `/`，`rendererFile` 和协议处理函数不改。
 - 路由文件只负责：用 zod 校验 params 和 search、在 loader 中调用 `ensureQueryData`、把 `component` 指向 feature。
 - `engine-client.ts` 导出 `createEngineClient(getConnection)`：
@@ -164,7 +162,7 @@ apps/desktop/src/renderer/src/
 - **引入 nestjs-zod**：提供全局 pipe、序列化拦截器和 OpenAPI 集成，immich 在用。它与 Nest 12、zod 4 的兼容性尚未验证；手写的按参数 pipe 约 10 行，直接复用 contracts。
 - **引入 pino 或 winston**：结构化日志与多输出目标。桌面单用户场景只需要把日志交给主进程，继承内置 `ConsoleLogger` 写 stderr 即可，不增加依赖。
 - **协议处理函数回退到 `index.html`，使用浏览器 history**：URL 没有 `#`，和普通 Web 应用一致。但需要修改 `rendererFile` 的路径安全逻辑并补测试，而桌面应用没有地址栏，URL 形态没有用户价值；hash history 不改主进程。
-- **renderer 拆成 `apps/web` 或 `packages/ui`**：以后做网页版时可以复用。现在没有第二个使用者，拆包会多一套构建、tsconfig 和 electron-vite 的 root 配置。
+- **renderer 拆成 `apps/web` 或 `packages/ui`**：以后做网页版时可以复用。renderer 整体仍只有一个使用者，继续留在 desktop。画布包成为 shadcn 组件的第二个使用者后，组件已拆成 `packages/ui`；它以源码导出，不增加构建步骤或 electron-vite root 配置。
 - **使用 ts-rest、oRPC 或生成 OpenAPI 客户端**：端点、方法和类型由一处定义，客户端自动获得类型。现在只有一个端点，contracts 中的 zod schema 已能在两端复用；接口达到 3 到 5 个时再评估手写端点描述 `{ method, path, request, response }`，不引入框架。
 - **Feature-Sliced Design 全套分层**：`app`、`pages`、`widgets`、`features`、`entities`、`shared` 六层规则完整。项目还没有业务，四层（`lib`/`components`、`features`、`routes`、`app`）已能表达依赖方向，层数随实际需要再加。
 

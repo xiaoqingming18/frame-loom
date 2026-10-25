@@ -11,10 +11,10 @@ import {
   type GenerationRequest,
   type ModelProfile,
 } from '@frame-loom/contracts';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { NativeSelect } from '@/components/ui/native-select';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@frame-loom/ui/components/button';
+import { Input } from '@frame-loom/ui/components/input';
+import { NativeSelect } from '@frame-loom/ui/components/native-select';
+import { Textarea } from '@frame-loom/ui/components/textarea';
 import type { EngineClient } from '@/lib/engine-client';
 import { channelsQuery, defaultsQuery, modelsQuery } from '@/lib/model-queries';
 import { VideoInputs } from './video-inputs';

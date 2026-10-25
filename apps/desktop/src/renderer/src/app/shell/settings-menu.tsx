@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { ChevronRight, Palette, Settings } from 'lucide-react';
 import { Popover } from 'radix-ui';
-import { Button } from '@/components/ui/button';
+import { Button } from '@frame-loom/ui/components/button';
 import { ThemeSwitch } from '@/features/theme/components/theme-switch';
-import { cn } from '@/lib/utils';
+import { cn } from '@frame-loom/ui/lib/utils';
 
 export function SettingsMenu({
   collapsed,

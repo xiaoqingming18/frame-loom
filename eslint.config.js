@@ -54,7 +54,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}'],
+    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}'],
     extends: [
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
@@ -102,7 +102,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['apps/desktop/src/renderer/src/components/ui/{button,toggle,tabs}.tsx'],
+    files: ['packages/ui/src/components/{button,toggle,tabs}.tsx'],
     // shadcn 的变体函数供其他基础组件复用，保持生成组件的导出契约。
     rules: {
       'react-refresh/only-export-components': [
@@ -130,6 +130,7 @@ export default defineConfig(
             'apps/desktop/tsconfig.web.json',
             'apps/engine/tsconfig.json',
             'packages/contracts/tsconfig.json',
+            'packages/ui/tsconfig.json',
           ],
           // Node 与浏览器配置分别解析，保持 renderer 别名和跨层检查一致。
           noWarnOnMultipleProjects: true,
@@ -148,9 +149,12 @@ export default defineConfig(
             },
             { target: './apps/engine', from: './apps/desktop' },
             {
-              target: [`${renderer}/lib`, `${renderer}/components`],
+              target: `${renderer}/lib`,
               from: [features, `${renderer}/routes`, `${renderer}/app`],
             },
+            // 工作区包不能反向依赖应用；共享组件不能依赖画布。
+            { target: './packages', from: './apps' },
+
             { target: features, from: [`${renderer}/routes`, `${renderer}/app`] },
             ...featureZones,
           ],

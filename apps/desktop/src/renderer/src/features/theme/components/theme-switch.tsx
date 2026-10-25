@@ -1,8 +1,8 @@
 import { useMutationState, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { ThemeSource } from '@frame-loom/contracts';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Button } from '@/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@frame-loom/ui/components/toggle-group';
+import { Button } from '@frame-loom/ui/components/button';
 import { getTheme, setTheme } from '@/lib/desktop-bridge';
 
 export function ThemeSwitch() {

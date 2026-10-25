@@ -27,7 +27,8 @@ Status: implemented
 - `eslint-import-resolver-typescript` 的传递依赖 `unrs-resolver@1.12.2` 带 `napi-postinstall` 准备脚本。已读取脚本并验证 Windows x64 的可选原生绑定无需脚本即可加载，`allowBuilds` 精确登记 `false`，保留默认构建审核，不开放安装时兜底下载。
 - 忽略：`dist/`、`out/`、`release/`、`apps/desktop/build/`、`routeTree.gen.ts`、`.agents/`、`.cache/`、`docs/design/`。
 - renderer 启用 `eslint-plugin-better-tailwindcss@4.10.0` 的四条 correctness 规则与 `no-restricted-classes`，禁止调色板和任意值颜色；`no-restricted-syntax` 拒绝直接 JSX 内联颜色。插件在根目录安装，以 desktop 为解析 `cwd`，读取 `styles/globals.css` 和 web tsconfig，并检测标题栏与画布等自定义 CSS 类，避免误报或因缺少 Tailwind 静默停用。规则范围见[主题系统与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
-- shadcn 的 Button、Toggle、Tabs 命名变体需要供其他组件复用，只在三份源码中放行对应导出，其余组件仍检查 Fast Refresh。
+- shadcn 的 Button、Toggle、Tabs 命名变体需要供其他组件复用，只在 `packages/ui/src/components/` 的三份源码中放行对应导出，其余组件仍检查 Fast Refresh。
+- React、Fast Refresh、Tailwind correctness 与颜色限制规则同时覆盖 `packages/ui/src`；`no-restricted-paths` 另禁止 `packages/*` 导入 `apps/*`。新增含界面的工作区包时，把源码目录加入该规则块与 resolver 的 tsconfig 列表。
 
 ### Prettier
 

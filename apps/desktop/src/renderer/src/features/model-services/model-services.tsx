@@ -16,10 +16,10 @@ import {
   type ModelProbeRequest,
   type ModelProfile,
 } from '@frame-loom/contracts';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { NativeSelect } from '@/components/ui/native-select';
+import { Button } from '@frame-loom/ui/components/button';
+import { Input } from '@frame-loom/ui/components/input';
+import { Textarea } from '@frame-loom/ui/components/textarea';
+import { NativeSelect } from '@frame-loom/ui/components/native-select';
 import type { EngineClient } from '@/lib/engine-client';
 import { channelsQuery, modelsQuery } from '@/lib/model-queries';
 import { kindLabels } from './labels';

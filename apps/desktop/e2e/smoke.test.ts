@@ -264,7 +264,7 @@ test('损坏偏好可启动，主题同步原生窗口并在重启后保持', as
   }
 });
 
-test('引擎意外退出后重载仍停在设置的本地引擎页', async () => {
+test('引擎意外退出后不重载页面，仍停在设置的本地引擎页', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'frame-loom-failure-e2e-'));
   const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
   let application: ElectronApplication | undefined;
@@ -286,8 +286,11 @@ test('引擎意外退出后重载仍停在设置的本地引擎页', async () =>
       ({ app }) => app.getAppMetrics().find((metric) => metric.name === 'Frame Loom Engine')?.pid,
     );
     expect(enginePid).toBeDefined();
+    // 页面若被重载，这个运行时标记会消失。
+    await page.evaluate(() => Object.assign(globalThis, { notReloaded: true }));
     process.kill(enginePid!);
     await expect(page.getByRole('status')).toHaveText('连接中断');
+    expect(await page.evaluate(() => 'notReloaded' in globalThis)).toBe(true);
     expect(page.url()).toBe(before);
     await expect(page.getByRole('tab', { name: '本地引擎' })).toHaveAttribute(
       'aria-selected',

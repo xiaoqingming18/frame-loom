@@ -6,6 +6,7 @@ import {
   commandWindow,
   getWindowMaximized,
   onWindowMaximizedChanged,
+  onEngineExited,
 } from './desktop-bridge';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -39,6 +40,25 @@ it('窗口状态只接受布尔值，并转交订阅清理函数', async () => {
   listener(false);
   expect(callback).toHaveBeenCalledExactlyOnceWith(false);
   expect(() => listener({ maximized: true })).toThrow();
+  cleanup();
+  expect(unsubscribe).toHaveBeenCalledOnce();
+});
+
+it('engine 退出事件只接受整数或 null 退出码，并转交清理函数', () => {
+  let listener!: (value: unknown) => void;
+  const unsubscribe = vi.fn();
+  vi.stubGlobal('frameLoom', {
+    onEngineExited: (callback: typeof listener) => {
+      listener = callback;
+      return unsubscribe;
+    },
+  });
+  const callback = vi.fn();
+  const cleanup = onEngineExited(callback);
+  listener(1);
+  listener(null);
+  expect(callback.mock.calls).toEqual([[1], [null]]);
+  expect(() => listener('1')).toThrow();
   cleanup();
   expect(unsubscribe).toHaveBeenCalledOnce();
 });

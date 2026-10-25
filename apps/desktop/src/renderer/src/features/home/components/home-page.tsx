@@ -1,8 +1,8 @@
 import { ArrowUp, ChevronDown, Folder, Plus, Settings, Wrench } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import logo from '@/assets/logo.png';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@frame-loom/ui/components/tooltip';
+import { cn } from '@frame-loom/ui/lib/utils';
 
 function UnavailableButton({ className, ...props }: ComponentProps<'button'>) {
   return (

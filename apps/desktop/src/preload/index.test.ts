@@ -18,6 +18,7 @@ it('只暴露固定频道的桌面桥接方法', async () => {
     string,
     {
       getEngineConnection(): Promise<unknown>;
+      onEngineExited(callback: (value: unknown) => void): () => void;
       theme: { get(): Promise<unknown>; set(source: ThemeSource): Promise<unknown> };
       window: {
         command(name: WindowCommand): Promise<void>;
@@ -27,7 +28,7 @@ it('只暴露固定频道的桌面桥接方法', async () => {
     },
   ];
   expect(name).toBe('frameLoom');
-  expect(Object.keys(api)).toEqual(['getEngineConnection', 'theme', 'window']);
+  expect(Object.keys(api)).toEqual(['getEngineConnection', 'onEngineExited', 'theme', 'window']);
   await api.getEngineConnection();
   await api.theme.get();
   await api.theme.set('dark');
@@ -51,4 +52,15 @@ it('只暴露固定频道的桌面桥接方法', async () => {
   expect(callback).toHaveBeenCalledExactlyOnceWith(true);
   unsubscribe();
   expect(mocks.removeListener).toHaveBeenCalledWith('window:maximized', listener);
+  const exited = vi.fn();
+  const stop = api.onEngineExited(exited);
+  const [exitChannel, exitListener] = mocks.on.mock.calls[1] as [
+    string,
+    (event: unknown, value: unknown) => void,
+  ];
+  expect(exitChannel).toBe('engine:exited');
+  exitListener({ sender: '不应泄露' }, 1);
+  expect(exited).toHaveBeenCalledExactlyOnceWith(1);
+  stop();
+  expect(mocks.removeListener).toHaveBeenCalledWith('engine:exited', exitListener);
 });

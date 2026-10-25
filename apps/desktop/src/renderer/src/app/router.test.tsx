@@ -11,6 +11,7 @@ import {
   setTheme,
   getWindowMaximized,
   onWindowMaximizedChanged,
+  onEngineExited,
 } from '@/lib/desktop-bridge';
 
 vi.mock('@/lib/desktop-bridge', () => ({
@@ -19,6 +20,7 @@ vi.mock('@/lib/desktop-bridge', () => ({
   commandWindow: vi.fn(),
   getWindowMaximized: vi.fn(),
   onWindowMaximizedChanged: vi.fn(),
+  onEngineExited: vi.fn(),
 }));
 
 const clients: QueryClient[] = [];
@@ -27,6 +29,7 @@ const histories: ReturnType<typeof createMemoryHistory>[] = [];
 beforeEach(() => {
   vi.mocked(getWindowMaximized).mockResolvedValue(false);
   vi.mocked(onWindowMaximizedChanged).mockReturnValue(vi.fn());
+  vi.mocked(onEngineExited).mockReturnValue(vi.fn());
   vi.stubGlobal('scrollTo', vi.fn());
   vi.stubGlobal('__APP_VERSION__', '0.1.0');
   vi.stubGlobal(
@@ -122,6 +125,34 @@ it('错误状态显示中文业务消息且不自动重试', async () => {
   });
   await screen.findByText('连接中断');
   expect(request).toHaveBeenCalledOnce();
+});
+
+it('engine 退出事件使健康查询失效并显示错误圆点，不重载页面', async () => {
+  const listeners: ((code: number | null) => void)[] = [];
+  const unsubscribe = vi.fn();
+  vi.mocked(onEngineExited).mockImplementation((callback) => {
+    listeners.push(callback);
+    return unsubscribe;
+  });
+  const request = vi
+    .fn<EngineClient['request']>()
+    .mockResolvedValueOnce({
+      status: 'ok',
+      engineVersion: '0.1.0',
+      schemaVersion: '1',
+      startedAt: '2026-10-24T00:00:00Z',
+    })
+    .mockRejectedValue(new EngineRequestError(0, 'NETWORK', '无法连接本地服务'));
+  await renderPage(request);
+  await vi.waitFor(() =>
+    expect(clients.at(-1)!.getQueryState(['engine', 'health'])?.status).toBe('success'),
+  );
+  expect(screen.queryByLabelText('本地引擎连接失败')).toBeNull();
+  act(() => listeners.at(-1)!(1));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(await screen.findByLabelText('本地引擎连接失败')).toBeDefined();
+  cleanup();
+  expect(unsubscribe).toHaveBeenCalled();
 });
 
 it('未知路由显示中文 404 页并可返回首页', async () => {

@@ -7,8 +7,8 @@ import {
   ObjectStorageCheck,
   type ObjectStorageConfig,
 } from '@frame-loom/contracts';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@frame-loom/ui/components/button';
+import { Input } from '@frame-loom/ui/components/input';
 import type { EngineClient } from '@/lib/engine-client';
 
 const storageKey = ['object-storage'];

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Copy, Minus, Square, X } from 'lucide-react';
 import type { WindowCommand } from '@frame-loom/contracts';
-import { Button } from '@/components/ui/button';
+import { Button } from '@frame-loom/ui/components/button';
 import {
   Menubar,
   MenubarMenu,
   MenubarTrigger,
   MenubarContent,
   MenubarItem,
-} from '@/components/ui/menubar';
+} from '@frame-loom/ui/components/menubar';
 import { commandWindow, getWindowMaximized, onWindowMaximizedChanged } from '@/lib/desktop-bridge';
 
 export function TitleBar({ onAbout }: { onAbout: () => void }) {

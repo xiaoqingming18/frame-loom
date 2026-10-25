@@ -1,7 +1,9 @@
 import { Outlet, useNavigate, useRouteContext, useSearch } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { healthQueryOptions } from '@/features/engine-status/api/health';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { TooltipProvider } from '@frame-loom/ui/components/tooltip';
+import { engineStatusKeys, healthQueryOptions } from '@/features/engine-status/api/health';
+import { onEngineExited } from '@/lib/desktop-bridge';
 import { TitleBar } from './title-bar';
 import { Sidebar } from './sidebar';
 import { SettingsDialog } from './settings-dialog';
@@ -12,6 +14,14 @@ export function AppShell() {
   const { settings } = useSearch({ from: '__root__' });
   const navigate = useNavigate();
   const health = useQuery(healthQueryOptions(engineClient));
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      onEngineExited(() => {
+        void queryClient.invalidateQueries({ queryKey: engineStatusKeys.health() });
+      }),
+    [queryClient],
+  );
   function setSettings(tab?: SettingsTab) {
     void navigate({ to: '.', search: (previous) => ({ ...previous, settings: tab }) });
   }

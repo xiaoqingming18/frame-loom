@@ -5,6 +5,12 @@ export function getEngineConnection(): Promise<unknown> {
   return window.frameLoom.getEngineConnection();
 }
 
+export function onEngineExited(callback: (code: number | null) => void): () => void {
+  return window.frameLoom.onEngineExited((value) =>
+    callback(z.number().int().nullable().parse(value)),
+  );
+}
+
 export async function getTheme(): Promise<ThemeSource> {
   return ThemeSource.parse(await window.frameLoom.theme.get());
 }

@@ -2,6 +2,9 @@
 @import 'tw-animate-css';
 @import './theme.css';
 
+/* 工作区包经 node_modules 链接引入，Tailwind 自动扫描会跳过，需显式登记源码。 */
+@source '../../../../../../packages/ui/src';
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

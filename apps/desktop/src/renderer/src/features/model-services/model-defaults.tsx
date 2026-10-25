@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ModelDefaults, ModelKind } from '@frame-loom/contracts';
-import { Button } from '@/components/ui/button';
-import { NativeSelect } from '@/components/ui/native-select';
+import { Button } from '@frame-loom/ui/components/button';
+import { NativeSelect } from '@frame-loom/ui/components/native-select';
 import type { EngineClient } from '@/lib/engine-client';
 import { channelsQuery, defaultsQuery, modelsQuery } from '@/lib/model-queries';
 import { kindLabels } from './labels';
