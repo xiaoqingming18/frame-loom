@@ -1,0 +1,249 @@
+/* 画布样式：只使用 apps/desktop 的主题 token，明暗切换随 prefers-color-scheme。 */
+@import '@xyflow/react/dist/base.css' layer(base);
+
+@layer components {
+  /* nodrag／nopan 由 xyflow 识别，阻止节点内交互元素触发拖拽或平移；与标记类一起登记，供类名检查识别。 */
+  .nodrag,
+  .nopan,
+  .canvas-float,
+  .canvas-background {
+    --canvas-marker: 1;
+  }
+  .frame-loom-canvas .react-flow {
+    --xy-edge-stroke: var(--border-strong);
+    --xy-edge-stroke-width: 1.5;
+    --xy-edge-stroke-selected: var(--brand);
+    --xy-connectionline-stroke: var(--brand);
+    --xy-connectionline-stroke-width: 1.5;
+    --xy-background-color: transparent;
+    --xy-background-pattern-dots-color: var(--dot);
+    --xy-selection-background-color: color-mix(in srgb, var(--brand) 8%, transparent);
+    --xy-selection-border: 1px solid color-mix(in srgb, var(--brand) 70%, transparent);
+    --xy-minimap-background-color: var(--popover);
+    --xy-minimap-mask-background-color: var(--canvas-minimap-mask);
+    --xy-minimap-mask-stroke-color: var(--brand);
+    --xy-minimap-mask-stroke-width: 1;
+    --xy-minimap-node-background-color: var(--border-strong);
+    --xy-resize-background-color: var(--brand);
+    color: var(--foreground);
+  }
+
+  /* 光标：默认箭头，按住空格或抓手工具时 grab／grabbing。 */
+  .frame-loom-canvas .react-flow__pane {
+    cursor: default;
+  }
+  .frame-loom-canvas .canvas-hand .react-flow__pane,
+  .frame-loom-canvas .canvas-hand .react-flow__node {
+    cursor: grab;
+  }
+  .frame-loom-canvas .canvas-hand .react-flow__pane.dragging {
+    cursor: grabbing;
+  }
+  .frame-loom-canvas .canvas-space .react-flow__node * {
+    pointer-events: none;
+  }
+  .frame-loom-canvas.canvas-drop-target::after {
+    position: absolute;
+    inset: 8px;
+    border: 2px dashed var(--brand);
+    border-radius: 12px;
+    pointer-events: none;
+    content: '';
+  }
+
+  .frame-loom-canvas .react-flow__node {
+    border-radius: 8px;
+  }
+  .frame-loom-canvas .react-flow__node:focus-visible {
+    outline: 2px solid var(--ring, var(--brand));
+    outline-offset: 2px;
+  }
+  .frame-loom-canvas .canvas-node-card {
+    border-color: var(--border);
+    box-shadow: var(--canvas-node-shadow);
+  }
+  .frame-loom-canvas .canvas-node-selected {
+    border-color: var(--brand);
+    box-shadow:
+      0 0 0 1px var(--brand),
+      var(--canvas-node-shadow);
+  }
+
+  /* 端口：按数据类型着色，同时保留 title 与读屏名称，不只靠颜色区分。 */
+  .frame-loom-canvas .canvas-port {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--card);
+    border-radius: 9999px;
+    background: var(--border-strong);
+  }
+  .frame-loom-canvas .canvas-port-image {
+    background: var(--canvas-type-image);
+  }
+  .frame-loom-canvas .canvas-port-video {
+    background: var(--canvas-type-video);
+  }
+  .frame-loom-canvas .canvas-port-audio {
+    background: var(--canvas-type-audio);
+  }
+  .frame-loom-canvas .canvas-port-text {
+    background: var(--canvas-type-text);
+  }
+  .frame-loom-canvas .react-flow__handle.connectingto:not(.valid) {
+    background: var(--destructive);
+  }
+  .frame-loom-canvas .react-flow__handle.valid {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 35%, transparent);
+  }
+  .frame-loom-canvas .react-flow__handle-left {
+    left: -7px;
+  }
+  .frame-loom-canvas .react-flow__handle-right {
+    right: -7px;
+  }
+  .frame-loom-canvas .canvas-port-label {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    border-radius: 4px;
+    background: var(--popover);
+    padding: 0 4px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* 连线按源端口数据类型着色，选中时使用强调色。 */
+  .frame-loom-canvas .canvas-edge-image .react-flow__edge-path {
+    stroke: color-mix(in srgb, var(--canvas-type-image) 70%, var(--border-strong));
+  }
+  .frame-loom-canvas .canvas-edge-video .react-flow__edge-path {
+    stroke: color-mix(in srgb, var(--canvas-type-video) 70%, var(--border-strong));
+  }
+  .frame-loom-canvas .canvas-edge-audio .react-flow__edge-path {
+    stroke: color-mix(in srgb, var(--canvas-type-audio) 70%, var(--border-strong));
+  }
+  .frame-loom-canvas .canvas-edge-text .react-flow__edge-path {
+    stroke: color-mix(in srgb, var(--canvas-type-text) 70%, var(--border-strong));
+  }
+  .frame-loom-canvas .react-flow__edge.selected .react-flow__edge-path {
+    stroke: var(--brand);
+    stroke-width: 2;
+  }
+
+  .frame-loom-canvas .canvas-resize-line {
+    border-color: var(--brand);
+  }
+  .frame-loom-canvas .canvas-resize-handle {
+    width: 8px;
+    height: 8px;
+    border: 1px solid var(--brand);
+    border-radius: 2px;
+    background: var(--card);
+  }
+
+  /* 分组：浅色底与描边成对定义，8 种颜色。 */
+  .frame-loom-canvas .canvas-group {
+    border-style: dashed;
+  }
+  .frame-loom-canvas .canvas-group.canvas-node-selected {
+    border-style: solid;
+  }
+  .frame-loom-canvas .canvas-group-gray {
+    border-color: var(--canvas-group-gray-border);
+    background: var(--canvas-group-gray);
+  }
+  .frame-loom-canvas .canvas-group-red {
+    border-color: var(--canvas-group-red-border);
+    background: var(--canvas-group-red);
+  }
+  .frame-loom-canvas .canvas-group-orange {
+    border-color: var(--canvas-group-orange-border);
+    background: var(--canvas-group-orange);
+  }
+  .frame-loom-canvas .canvas-group-yellow {
+    border-color: var(--canvas-group-yellow-border);
+    background: var(--canvas-group-yellow);
+  }
+  .frame-loom-canvas .canvas-group-green {
+    border-color: var(--canvas-group-green-border);
+    background: var(--canvas-group-green);
+  }
+  .frame-loom-canvas .canvas-group-cyan {
+    border-color: var(--canvas-group-cyan-border);
+    background: var(--canvas-group-cyan);
+  }
+  .frame-loom-canvas .canvas-group-blue {
+    border-color: var(--canvas-group-blue-border);
+    background: var(--canvas-group-blue);
+  }
+  .frame-loom-canvas .canvas-group-purple {
+    border-color: var(--canvas-group-purple-border);
+    background: var(--canvas-group-purple);
+  }
+  /* 色块用不透明描边色填充，透明底色在色块上不易分辨。 */
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-gray {
+    background: var(--canvas-group-gray-border);
+  }
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-red {
+    background: var(--canvas-group-red-border);
+  }
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-orange {
+    background: var(--canvas-group-orange-border);
+  }
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-yellow {
+    background: var(--canvas-group-yellow-border);
+  }
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-green {
+    background: var(--canvas-group-green-border);
+  }
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-cyan {
+    background: var(--canvas-group-cyan-border);
+  }
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-blue {
+    background: var(--canvas-group-blue-border);
+  }
+  .frame-loom-canvas .canvas-group-swatch.canvas-group-purple {
+    background: var(--canvas-group-purple-border);
+  }
+
+  /* 小地图：位于右上工具组下方，180×120。 */
+  .frame-loom-canvas .canvas-minimap {
+    top: 72px;
+    right: 16px;
+    margin: 0;
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: var(--canvas-bar-shadow);
+  }
+  .frame-loom-canvas .canvas-minimap svg {
+    display: block;
+    width: 180px;
+    height: 120px;
+  }
+  .frame-loom-canvas .canvas-minimap-image {
+    fill: color-mix(in srgb, var(--canvas-type-image) 55%, var(--popover));
+  }
+  .frame-loom-canvas .canvas-minimap-video {
+    fill: color-mix(in srgb, var(--canvas-type-video) 55%, var(--popover));
+  }
+  .frame-loom-canvas .canvas-minimap-group {
+    fill: color-mix(in srgb, var(--border-strong) 35%, transparent);
+  }
+
+  .canvas-keycap {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--card);
+    padding: 1px 6px;
+    color: var(--muted-foreground);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+    box-shadow: 0 1px 0 var(--border);
+  }
+}

@@ -6,3 +6,4 @@ export { EngineEvent } from './events.js';
 export * from './models.js';
 export * from './generation.js';
 export * from './object-storage.js';
+export * from './canvas.js';

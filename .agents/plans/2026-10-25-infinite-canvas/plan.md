@@ -23,7 +23,7 @@ Note: ../../notes/proposed/feature/2026-10-25-infinite-canvas.md
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
 | 01 | [预备：退出事件、应用菜单、UI 包](01-foundation.md) | done | — | `engine:exited` 事件替代重载；默认菜单移除；`packages/ui` 纯迁移 |
-| 02 | [画布骨架](02-canvas-shell.md) | active | 01 | `packages/canvas`、`/canvas-lab` 页面、视口、工具、操作栏、右上工具组、小地图、快捷键层 |
+| 02 | [画布骨架](02-canvas-shell.md) | done | 01 | `packages/canvas`、`/canvas-lab` 页面、视口、工具、操作栏、右上工具组、小地图、快捷键层 |
 | 03 | [节点与连线](03-nodes-edges.md) | draft | 02 | 注册表、图片／视频节点、连线校验、复制粘贴、撤销重做、连线显示 |
 | 04 | [分组与整理](04-organize.md) | draft | 03 | 分组解组、四种整理、右键菜单、锁定与层级、导出导入 |
 | 05 | [持久化](05-persistence.md) | draft | 03 | engine `modules/canvas`、自动保存、409 处理、视图状态 |

@@ -23,6 +23,32 @@
   --panel-shadow: 0 4px 24px rgb(0 0 0 / 0.04), 0 1px 4px rgb(0 0 0 / 0.02);
   --panel-focus-shadow: 0 4px 32px rgb(0 0 0 / 0.08);
   --radius: 0.5rem;
+  /* 画布：端口数据类型、分组、警告与浮层阴影，取值参照 docs/design/canvas-ui-light.html。 */
+  --canvas-type-image: #16a34a;
+  --canvas-type-video: #dc2626;
+  --canvas-type-audio: #d97706;
+  --canvas-type-text: #7c3aed;
+  --canvas-warning: #d97706;
+  --canvas-minimap-mask: rgb(240 240 240 / 0.6);
+  --canvas-group-gray: rgb(115 115 115 / 0.08);
+  --canvas-group-red: rgb(239 68 68 / 0.08);
+  --canvas-group-orange: rgb(249 115 22 / 0.08);
+  --canvas-group-yellow: rgb(234 179 8 / 0.1);
+  --canvas-group-green: rgb(34 197 94 / 0.08);
+  --canvas-group-cyan: rgb(6 182 212 / 0.08);
+  --canvas-group-blue: rgb(59 130 246 / 0.08);
+  --canvas-group-purple: rgb(168 85 247 / 0.08);
+  --canvas-group-gray-border: rgb(115 115 115 / 0.35);
+  --canvas-group-red-border: rgb(239 68 68 / 0.45);
+  --canvas-group-orange-border: rgb(249 115 22 / 0.45);
+  --canvas-group-yellow-border: rgb(234 179 8 / 0.5);
+  --canvas-group-green-border: rgb(34 197 94 / 0.45);
+  --canvas-group-cyan-border: rgb(6 182 212 / 0.45);
+  --canvas-group-blue-border: rgb(59 130 246 / 0.45);
+  --canvas-group-purple-border: rgb(168 85 247 / 0.45);
+  --canvas-dock-shadow: 0 4px 16px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
+  --canvas-bar-shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
+  --canvas-node-shadow: 0 4px 12px rgb(0 0 0 / 0.05);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -48,6 +74,32 @@
     --destructive: #ef4444;
     --panel-shadow: 0 4px 24px rgb(0 0 0 / 0.3), 0 1px 4px rgb(0 0 0 / 0.2);
     --panel-focus-shadow: 0 4px 32px rgb(0 0 0 / 0.4);
+    /* 暗色画布 token 按现有暗色阴影与对比度推算，待设计确认。 */
+    --canvas-type-image: #4ade80;
+    --canvas-type-video: #f87171;
+    --canvas-type-audio: #fbbf24;
+    --canvas-type-text: #a78bfa;
+    --canvas-warning: #fbbf24;
+    --canvas-minimap-mask: rgb(0 0 0 / 0.45);
+    --canvas-group-gray: rgb(161 161 170 / 0.08);
+    --canvas-group-red: rgb(248 113 113 / 0.1);
+    --canvas-group-orange: rgb(251 146 60 / 0.1);
+    --canvas-group-yellow: rgb(250 204 21 / 0.1);
+    --canvas-group-green: rgb(74 222 128 / 0.1);
+    --canvas-group-cyan: rgb(34 211 238 / 0.1);
+    --canvas-group-blue: rgb(96 165 250 / 0.1);
+    --canvas-group-purple: rgb(192 132 252 / 0.1);
+    --canvas-group-gray-border: rgb(161 161 170 / 0.35);
+    --canvas-group-red-border: rgb(248 113 113 / 0.45);
+    --canvas-group-orange-border: rgb(251 146 60 / 0.45);
+    --canvas-group-yellow-border: rgb(250 204 21 / 0.45);
+    --canvas-group-green-border: rgb(74 222 128 / 0.45);
+    --canvas-group-cyan-border: rgb(34 211 238 / 0.45);
+    --canvas-group-blue-border: rgb(96 165 250 / 0.45);
+    --canvas-group-purple-border: rgb(192 132 252 / 0.45);
+    --canvas-dock-shadow: 0 4px 16px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --canvas-bar-shadow: 0 1px 3px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(255 255 255 / 0.05);
+    --canvas-node-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
   }
 }
 
@@ -81,6 +133,10 @@
   --color-overlay: var(--overlay);
   --shadow-panel: var(--panel-shadow);
   --shadow-panel-focus: var(--panel-focus-shadow);
+  --shadow-canvas-dock: var(--canvas-dock-shadow);
+  --shadow-canvas-bar: var(--canvas-bar-shadow);
+  --shadow-canvas-panel: var(--canvas-bar-shadow);
+  --shadow-canvas-node: var(--canvas-node-shadow);
   --font-sans:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'Microsoft YaHei UI', 'PingFang SC', sans-serif;

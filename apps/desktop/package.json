@@ -19,6 +19,7 @@
   "dependencies": {},
   "devDependencies": {
     "@frame-loom/contracts": "workspace:*",
+    "@frame-loom/canvas": "workspace:*",
     "@frame-loom/ui": "workspace:*",
     "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.3",

@@ -1,7 +1,14 @@
-import { Outlet, useNavigate, useRouteContext, useSearch } from '@tanstack/react-router';
+import {
+  Outlet,
+  useNavigate,
+  useRouteContext,
+  useRouterState,
+  useSearch,
+} from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TooltipProvider } from '@frame-loom/ui/components/tooltip';
+import { cn } from '@frame-loom/ui/lib/utils';
 import { engineStatusKeys, healthQueryOptions } from '@/features/engine-status/api/health';
 import { onEngineExited } from '@/lib/desktop-bridge';
 import { TitleBar } from './title-bar';
@@ -15,6 +22,9 @@ export function AppShell() {
   const navigate = useNavigate();
   const health = useQuery(healthQueryOptions(engineClient));
   const queryClient = useQueryClient();
+  const fullBleed = useRouterState({
+    select: (state) => state.location.pathname === '/canvas-lab',
+  });
   useEffect(
     () =>
       onEngineExited(() => {
@@ -31,7 +41,13 @@ export function AppShell() {
         <TitleBar onAbout={() => setSettings('about')} />
         <div className="flex min-h-0 flex-1">
           <Sidebar hasError={health.isError} onSettings={() => setSettings('appearance')} />
-          <main className="canvas-grid min-w-0 flex-1 overflow-y-auto rounded-tl-2xl border-t border-l bg-canvas">
+          <main
+            className={cn(
+              'min-w-0 flex-1 rounded-tl-2xl border-t border-l bg-canvas',
+              // 画布自带随视口移动的点阵，且自行处理平移，主区不再滚动。
+              fullBleed ? 'overflow-hidden' : 'canvas-grid overflow-y-auto',
+            )}
+          >
             <Outlet />
           </main>
         </div>

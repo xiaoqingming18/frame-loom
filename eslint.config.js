@@ -54,7 +54,11 @@ export default defineConfig(
     },
   },
   {
-    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}'],
+    files: [
+      'apps/desktop/src/renderer/**/*.{ts,tsx}',
+      'packages/ui/src/**/*.{ts,tsx}',
+      'packages/canvas/src/**/*.{ts,tsx}',
+    ],
     extends: [
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
@@ -131,6 +135,7 @@ export default defineConfig(
             'apps/engine/tsconfig.json',
             'packages/contracts/tsconfig.json',
             'packages/ui/tsconfig.json',
+            'packages/canvas/tsconfig.json',
           ],
           // Node 与浏览器配置分别解析，保持 renderer 别名和跨层检查一致。
           noWarnOnMultipleProjects: true,

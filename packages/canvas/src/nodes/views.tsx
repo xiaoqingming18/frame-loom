@@ -1,0 +1,368 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Handle, NodeResizer, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { Film, ImageIcon, Loader2, Lock } from 'lucide-react';
+import type { CanvasGroupData, CanvasMediaData, CanvasVideoMode } from '@frame-loom/contracts';
+import { cn } from '@frame-loom/ui/lib/utils';
+import { useCanvas, useCanvasState } from '../context';
+import { changeDataDroppingEdges, updateData, updateNode } from '../commands/commands';
+import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
+import { activeVersion, GROUP_COLORS, VIDEO_MODES } from './media';
+
+const portClass: Record<string, string> = {
+  image: 'canvas-port-image',
+  video: 'canvas-port-video',
+  audio: 'canvas-port-audio',
+  text: 'canvas-port-text',
+};
+
+function Ports({
+  nodeId,
+  inputs,
+  outputs,
+}: {
+  nodeId: string;
+  inputs: readonly InputPort[];
+  outputs: readonly OutputPort[];
+}) {
+  const update = useUpdateNodeInternals();
+  const key = inputs.map((port) => port.id).join();
+  // 端口随视频方式增减时，xyflow 需要重新测量端口位置。
+  useEffect(() => update(nodeId), [key, nodeId, update]);
+  return (
+    <>
+      {inputs.map((port, index) => (
+        <Handle
+          key={port.id}
+          id={port.id}
+          type="target"
+          position={Position.Left}
+          title={`${port.label}（接受 ${port.accepts.map((kind) => kindName[kind]).join('、')}）`}
+          aria-label={port.label}
+          className={cn('canvas-port', portClass[port.accepts[0]])}
+          style={{ top: `${((index + 1) / (inputs.length + 1)) * 100}%` }}
+        >
+          {inputs.length > 1 && <span className="canvas-port-label">{port.label}</span>}
+        </Handle>
+      ))}
+      {outputs.map((port) => (
+        <Handle
+          key={port.id}
+          id={port.id}
+          type="source"
+          position={Position.Right}
+          title={`输出${port.label}`}
+          aria-label={`输出${port.label}`}
+          className={cn('canvas-port', portClass[port.dataType])}
+        />
+      ))}
+    </>
+  );
+}
+
+const kindName = { image: '图片', video: '视频', audio: '音频', text: '文本' };
+
+function TitleInput({ nodeId, title }: { nodeId: string; title: string }) {
+  const { store } = useCanvas();
+  const [value, setValue] = useState(title);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.select(), []);
+  const finish = (save: boolean) => {
+    const state = store.getState();
+    if (save && value.trim() && value.trim() !== title)
+      state.apply((document) =>
+        updateNode(document, nodeId, { title: value.trim().slice(0, 200) }),
+      );
+    state.setEditingTitle(null);
+  };
+  return (
+    <input
+      ref={input}
+      aria-label="节点名称"
+      className="nodrag nopan min-w-0 flex-1 rounded-sm border bg-card px-1 text-foreground outline-none focus:border-ring"
+      value={value}
+      maxLength={200}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === 'Enter') finish(true);
+        if (event.key === 'Escape') finish(false);
+      }}
+    />
+  );
+}
+
+export function NodeTitle({
+  nodeId,
+  title,
+  icon,
+}: {
+  nodeId: string;
+  title: string;
+  icon: ReactNode;
+}) {
+  const { store } = useCanvas();
+  const editing = useCanvasState((state) => state.editingTitle === nodeId);
+  return (
+    <div className="flex h-6 min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <span aria-hidden="true" className="shrink-0 [&_svg]:size-3.5">
+        {icon}
+      </span>
+      {editing ? (
+        <TitleInput nodeId={nodeId} title={title} />
+      ) : (
+        <span
+          className="truncate"
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            store.getState().setEditingTitle(nodeId);
+          }}
+        >
+          {title}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function MediaFrame({
+  node,
+  selected,
+  kind,
+  children,
+  toolbar,
+}: NodeViewProps<CanvasMediaData> & {
+  kind: 'image' | 'video';
+  children: ReactNode;
+  toolbar?: ReactNode;
+}) {
+  const { registry } = useCanvas();
+  const definition = registry.get(node.type)!;
+  const inputCount = useCanvasState(
+    (state) => state.document.edges.filter((edge) => edge.target === node.id).length,
+  );
+  const edgeDisplay = useCanvasState((state) => state.view.edgeDisplay);
+  return (
+    <div className="flex size-full flex-col">
+      <div className="absolute -top-7 right-0 left-0 flex items-center justify-between gap-2">
+        <NodeTitle
+          nodeId={node.id}
+          title={node.title ?? definition.label}
+          icon={kind === 'image' ? <ImageIcon /> : <Film />}
+        />
+        <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+          {node.locked && <Lock aria-label="已锁定" className="size-3" />}
+          {edgeDisplay !== 'all' && inputCount > 0 && (
+            <span title="参考数量">{inputCount} 个参考</span>
+          )}
+        </div>
+      </div>
+      <NodeResizer
+        isVisible={selected && !node.locked}
+        minWidth={definition.minSize.width}
+        minHeight={definition.minSize.height}
+        keepAspectRatio={definition.keepAspect}
+        lineClassName="canvas-resize-line"
+        handleClassName="canvas-resize-handle"
+      />
+      {toolbar}
+      <div
+        className={cn(
+          'canvas-node-card relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-card',
+          selected && 'canvas-node-selected',
+        )}
+      >
+        {children}
+      </div>
+      <Ports nodeId={node.id} inputs={registry.inputs(node)} outputs={registry.outputs(node)} />
+    </div>
+  );
+}
+
+function Empty({ kind, pending }: { kind: 'image' | 'video'; pending: boolean }) {
+  return (
+    <div className="flex size-full flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+      {pending ? (
+        <Loader2 aria-hidden="true" className="size-6 animate-spin" />
+      ) : kind === 'image' ? (
+        <ImageIcon aria-hidden="true" className="size-6" strokeWidth={1.25} />
+      ) : (
+        <Film aria-hidden="true" className="size-6" strokeWidth={1.25} />
+      )}
+      <span>{pending ? '生成中…' : kind === 'image' ? '拖入或粘贴图片' : '拖入或粘贴视频'}</span>
+    </div>
+  );
+}
+
+export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
+  const { host } = useCanvas();
+  const version = activeVersion(props.node.data);
+  return (
+    <MediaFrame {...props} kind="image">
+      {version ? (
+        <img
+          src={host.media.url(version.sha256)}
+          alt={props.node.title ?? '图片'}
+          draggable={false}
+          decoding="async"
+          loading="lazy"
+          className="size-full object-contain"
+        />
+      ) : (
+        <Empty kind="image" pending={!!props.node.data.pendingJobId} />
+      )}
+    </MediaFrame>
+  );
+}
+
+export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
+  const { host, store, registry } = useCanvas();
+  const version = activeVersion(props.node.data);
+  const hovered = useCanvasState((state) => state.hoveredNode === props.node.id);
+  // 只为悬停或选中的节点挂载播放器，避免超出 Chromium 的媒体播放器上限。
+  const play = !!version && (hovered || props.selected);
+  const mode = props.node.data.mode ?? 'text';
+  const setMode = (next: CanvasVideoMode) => {
+    if (next === mode) return;
+    const state = store.getState();
+    let dropped = 0;
+    state.apply((document) => {
+      const result = changeDataDroppingEdges<CanvasMediaData>(
+        registry,
+        document,
+        props.node.id,
+        (data) => ({
+          ...data,
+          mode: next,
+        }),
+      );
+      dropped = result.dropped;
+      return result.document;
+    });
+    if (dropped)
+      state.notify(
+        `已切换为${VIDEO_MODES.find((item) => item.id === next)!.label}，断开 ${dropped} 条不兼容的连线`,
+      );
+  };
+  return (
+    <MediaFrame
+      {...props}
+      kind="video"
+      toolbar={
+        <div
+          role="radiogroup"
+          aria-label="生成方式"
+          className="nodrag nopan absolute -bottom-9 left-1/2 flex -translate-x-1/2 gap-0.5 rounded-lg border bg-popover p-0.5 shadow-canvas-panel"
+        >
+          {VIDEO_MODES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="radio"
+              aria-checked={mode === item.id}
+              disabled={props.node.locked}
+              onClick={() => setMode(item.id)}
+              className={cn(
+                'rounded-md px-2 py-1 text-xs whitespace-nowrap text-muted-foreground hover:bg-accent disabled:opacity-50',
+                mode === item.id && 'bg-accent-active text-foreground',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {version ? (
+        play ? (
+          <video
+            src={host.media.url(version.sha256)}
+            poster={version.posterSha256 ? host.media.url(version.posterSha256) : undefined}
+            aria-label={props.node.title ?? '视频'}
+            muted
+            loop
+            autoPlay
+            playsInline
+            preload="metadata"
+            className="size-full object-contain"
+          />
+        ) : version.posterSha256 ? (
+          <img
+            src={host.media.url(version.posterSha256)}
+            alt={props.node.title ?? '视频封面'}
+            draggable={false}
+            decoding="async"
+            className="size-full object-contain"
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground">
+            <Film aria-hidden="true" className="size-6" strokeWidth={1.25} />
+          </div>
+        )
+      ) : (
+        <Empty kind="video" pending={!!props.node.data.pendingJobId} />
+      )}
+    </MediaFrame>
+  );
+}
+
+export function GroupNodeView({ node, selected }: NodeViewProps<CanvasGroupData>) {
+  const { registry, store } = useCanvas();
+  const definition = registry.get('group')!;
+  return (
+    <div
+      className={cn(
+        'canvas-group size-full rounded-xl border',
+        `canvas-group-${node.data.color}`,
+        selected && 'canvas-node-selected',
+      )}
+    >
+      <NodeResizer
+        isVisible={selected && !node.locked}
+        minWidth={definition.minSize.width}
+        minHeight={definition.minSize.height}
+        lineClassName="canvas-resize-line"
+        handleClassName="canvas-resize-handle"
+      />
+      <div className="flex items-center justify-between gap-2 px-3 pt-2.5">
+        <NodeTitle nodeId={node.id} title={node.title ?? definition.label} icon={null} />
+        {selected && !node.locked && (
+          <div className="nodrag nopan flex gap-1" role="radiogroup" aria-label="分组颜色">
+            {GROUP_COLORS.map((color) => (
+              <button
+                key={color.id}
+                type="button"
+                role="radio"
+                aria-checked={node.data.color === color.id}
+                aria-label={color.label}
+                title={color.label}
+                onClick={() =>
+                  store
+                    .getState()
+                    .apply((document) =>
+                      updateData<CanvasGroupData>(document, node.id, () => ({ color: color.id })),
+                    )
+                }
+                className={cn(
+                  'canvas-group-swatch size-3.5 rounded-full border',
+                  `canvas-group-${color.id}`,
+                  node.data.color === color.id && 'ring-2 ring-ring',
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 未注册类型（例如新版本创建的节点）的占位视图，数据原样保留。 */
+export function UnknownNodeView({ node }: { node: { type: string; title?: string } }) {
+  return (
+    <div className="flex size-full items-center justify-center rounded-lg border border-dashed bg-card p-3 text-center text-xs text-muted-foreground">
+      当前版本不支持「{node.title ?? node.type}」节点，数据已保留。
+    </div>
+  );
+}

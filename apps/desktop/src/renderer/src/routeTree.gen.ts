@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CanvasLabRouteImport } from './routes/canvas-lab'
 import { Route as ModelLabRouteImport } from './routes/model-lab'
 import { Route as ProjectsRouteImport } from './routes/projects'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CanvasLabRoute = CanvasLabRouteImport.update({
+  id: '/canvas-lab',
+  path: '/canvas-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ModelLabRoute = ModelLabRouteImport.update({
@@ -31,30 +37,34 @@ const ProjectsRoute = ProjectsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/canvas-lab': typeof CanvasLabRoute
   '/model-lab': typeof ModelLabRoute
   '/projects': typeof ProjectsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/canvas-lab': typeof CanvasLabRoute
   '/model-lab': typeof ModelLabRoute
   '/projects': typeof ProjectsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/canvas-lab': typeof CanvasLabRoute
   '/model-lab': typeof ModelLabRoute
   '/projects': typeof ProjectsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/model-lab' | '/projects'
+  fullPaths: '/' | '/canvas-lab' | '/model-lab' | '/projects'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/model-lab' | '/projects'
-  id: '__root__' | '/' | '/model-lab' | '/projects'
+  to: '/' | '/canvas-lab' | '/model-lab' | '/projects'
+  id: '__root__' | '/' | '/canvas-lab' | '/model-lab' | '/projects'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CanvasLabRoute: typeof CanvasLabRoute
   ModelLabRoute: typeof ModelLabRoute
   ProjectsRoute: typeof ProjectsRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/canvas-lab': {
+      id: '/canvas-lab'
+      path: '/canvas-lab'
+      fullPath: '/canvas-lab'
+      preLoaderRoute: typeof CanvasLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/model-lab': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CanvasLabRoute: CanvasLabRoute,
   ModelLabRoute: ModelLabRoute,
   ProjectsRoute: ProjectsRoute,
 }

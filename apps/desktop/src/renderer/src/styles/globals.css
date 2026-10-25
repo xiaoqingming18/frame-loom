@@ -4,6 +4,8 @@
 
 /* 工作区包经 node_modules 链接引入，Tailwind 自动扫描会跳过，需显式登记源码。 */
 @source '../../../../../../packages/ui/src';
+@source '../../../../../../packages/canvas/src';
+@import '@frame-loom/canvas/styles.css';
 
 @layer base {
   * {
