@@ -38,11 +38,11 @@ function caretAtEnd(editor: HTMLElement) {
   window.getSelection()!.addRange(range);
 }
 
-function Panel() {
+function Panel({ kind = 'image' }: { kind?: 'image' | 'video' }) {
   const data = useCanvasState((state) => state.document.nodes[1].data as CanvasMediaData);
   return (
     <>
-      <GenerationPanel nodeId="target" kind="image" data={data} />
+      <GenerationPanel nodeId="target" kind={kind} data={data} />
       <GenerationStatus nodeId="target" data={data} />
     </>
   );
@@ -84,6 +84,52 @@ it('超长粘贴恢复原文并提示，不保存超出 schema 的提示词', ()
   expect(test.data().prompt).toBe('暖光');
   expect(editor.textContent).toBe('暖光');
   expect(test.store.getState().notice?.text).toContain('最多 32000 字');
+});
+
+it('普通图片输入保留文本节点、光标和选区，组字期间外部更新不重建 DOM', () => {
+  const test = setupPanel();
+  const editor = screen.getByRole('textbox', { name: '生成提示词' });
+  editor.textContent = '暖光照在胶片上';
+  caretAtEnd(editor);
+  const text = editor.firstChild!;
+  fireEvent.input(editor);
+  expect(editor.firstChild).toBe(text);
+  expect(window.getSelection()?.anchorOffset).toBe(1);
+  const range = document.createRange();
+  range.setStart(text, 2);
+  range.setEnd(text, 4);
+  window.getSelection()!.removeAllRanges();
+  window.getSelection()!.addRange(range);
+  fireEvent.click(screen.getByRole('button', { name: '展开提示词' }));
+  expect(window.getSelection()?.toString()).toBe('照在');
+  fireEvent.compositionStart(editor);
+  text.textContent = '暖光照在胶片上中文';
+  act(() => test.store.getState().notify('其他状态更新'));
+  fireEvent.input(editor);
+  expect(editor.firstChild).toBe(text);
+  expect(test.data().prompt).toBe('暖光照在胶片上');
+  caretAtEnd(editor);
+  fireEvent.compositionEnd(editor);
+  expect(test.data().prompt).toBe('暖光照在胶片上中文');
+  expect(editor.firstChild).toBe(text);
+});
+
+it('视频组字只在结束后同步文档，保留输入元素并支持外部撤销', () => {
+  const test = setupPanel({}, 'video');
+  const editor = screen.getByRole<HTMLTextAreaElement>('textbox', { name: '生成提示词' });
+  editor.focus();
+  fireEvent.compositionStart(editor);
+  fireEvent.change(editor, { target: { value: '暖光zhong' } });
+  expect(test.data().prompt).toBe('暖光');
+  act(() => test.store.getState().notify('其他状态更新'));
+  expect(editor.value).toBe('暖光zhong');
+  fireEvent.change(editor, { target: { value: '暖光中文' } });
+  fireEvent.compositionEnd(editor);
+  expect(test.data().prompt).toBe('暖光中文');
+  expect(screen.getByRole('textbox')).toBe(editor);
+  expect(document.activeElement).toBe(editor);
+  act(() => test.store.getState().undo());
+  expect(editor.value).toBe('暖光');
 });
 
 it('组字不触发菜单或撤销，完成后普通 @ 可用键盘选入', async () => {
@@ -165,7 +211,7 @@ it('替换后超出字数上限时禁止发送', async () => {
     })),
   );
   expect(screen.getByText('替换后的提示词最多 32000 字')).toBeDefined();
-  expect(screen.getByLabelText('提示词字数').textContent).toBe('32003 字');
+  expect(screen.getByLabelText('提示词字数').textContent).toBe('32003 / 32000');
   fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
   expect(test.api.create).not.toHaveBeenCalled();
 });
@@ -199,7 +245,7 @@ it.each([
   });
   expect(test.data().inputOrder).toEqual(['e2', 'e1']);
   expect(screen.getByRole('textbox').querySelector('[data-reference]')?.textContent).toBe('图2');
-  expect(screen.getByLabelText('提示词字数').textContent).toBe(`${expected.length} 字`);
+  expect(screen.getByLabelText('提示词字数').textContent).toBe(`${expected.length} / 32000`);
   test.api.create.mockResolvedValue(generationJob({ status: 'pending' }));
   fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
   await waitFor(() => expect(test.api.create).toHaveBeenCalled());
@@ -277,8 +323,8 @@ const profile = ModelProfile.parse({
   },
 });
 
-function setupPanel(data: Partial<CanvasMediaData> = {}) {
-  const target = media('target');
+function setupPanel(data: Partial<CanvasMediaData> = {}, kind: 'image' | 'video' = 'image') {
+  const target = media('target', kind);
   target.data = { ...(target.data as CanvasMediaData), prompt: '暖光', ...data };
   const store = createCanvasStore(doc([media('source'), target]));
   store.getState().setGenerationConfig({
@@ -302,7 +348,7 @@ function setupPanel(data: Partial<CanvasMediaData> = {}) {
         host: { media: { upload: vi.fn(), url: (id) => id }, generation: api },
       }}
     >
-      <Panel />
+      <Panel kind={kind} />
     </CanvasContext.Provider>,
   );
   return {
@@ -427,7 +473,7 @@ it('提示词为空时发送按钮提供可读禁用原因，展开和字数同�
   editor.textContent = '暖光';
   fireEvent.input(editor);
   expect(test.data().prompt).toBe('暖光');
-  expect(screen.getByLabelText('提示词字数').textContent).toBe('2 字');
+  expect(screen.getByLabelText('提示词字数').textContent).toBe('2 / 32000');
   expect(send.disabled).toBe(false);
 });
 

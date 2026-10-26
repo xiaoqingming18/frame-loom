@@ -1,5 +1,14 @@
-import { useRef, useState } from 'react';
-import { ArrowUp, ChevronDown, Copy, Expand, Minimize2, Plus } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import {
+  ArrowUp,
+  ChevronDown,
+  Copy,
+  Maximize2,
+  Minimize2,
+  Plus,
+  Shapes,
+  RectangleHorizontal,
+} from 'lucide-react';
 import {
   IMAGE_PARAM_LABELS,
   IMAGE_QUALITY_LABELS,
@@ -69,6 +78,12 @@ export function GenerationComposer({
   const references = generationReferences(document, nodeId);
   const dragged = useRef<string | null>(null);
   const promptEditor = useRef<{ open: () => void }>(null);
+  const videoEditor = useRef<HTMLTextAreaElement>(null);
+  const composing = useRef(false);
+  useLayoutEffect(() => {
+    const editor = videoEditor.current;
+    if (editor && !composing.current && editor.value !== data.prompt) editor.value = data.prompt;
+  }, [data.prompt]);
   function reorderReference(sourceId: string, targetId: string) {
     if (locked || sourceId === targetId) return;
     const order = references.map((reference) => reference.edge.id);
@@ -100,12 +115,22 @@ export function GenerationComposer({
     <TooltipProvider>
       <div
         onKeyDown={(event) => event.stopPropagation()}
-        className="nodrag nopan nowheel w-full overflow-hidden rounded-2xl border bg-card text-foreground shadow-panel focus-within:border-ring"
+        className="nodrag nopan nowheel w-full overflow-hidden rounded-2xl bg-card text-foreground shadow-panel"
       >
-        <div className="flex items-center justify-between gap-3 px-4 pt-3">
+        <div className="flex h-16 items-start justify-between gap-3 px-2 pt-2">
           <div aria-label="参考素材" className="flex min-w-0 items-center gap-2 overflow-x-auto">
-            {!inputs.length && (
-              <span className="text-xs text-muted-foreground">连入素材作为参考</span>
+            {kind === 'image' && (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="添加参考"
+                disabled={locked}
+                className="size-12 shrink-0 rounded-lg border border-dashed text-muted-foreground"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => promptEditor.current?.open()}
+              >
+                <Plus aria-hidden="true" className="size-4" />
+              </Button>
             )}
             {inputs.map((input, index) => (
               <span
@@ -147,7 +172,7 @@ export function GenerationComposer({
                   const target = references[index + (event.key === 'ArrowLeft' ? -1 : 1)];
                   if (target) reorderReference(references[index].edge.id, target.edge.id);
                 }}
-                className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 {input.kind === 'image' && input.sha256 ? (
                   <img
@@ -161,30 +186,19 @@ export function GenerationComposer({
                 )}
               </span>
             ))}
-            {kind === 'image' && (
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="添加参考"
-                disabled={locked}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => promptEditor.current?.open()}
-              >
-                <Plus aria-hidden="true" className="size-4" />
-              </Button>
-            )}
           </div>
           <Button
             size="icon"
             variant="ghost"
             aria-label={expanded ? '收起提示词' : '展开提示词'}
             aria-expanded={expanded}
+            className="size-7 text-muted-foreground"
             onClick={() => setExpanded(!expanded)}
           >
             {expanded ? (
               <Minimize2 aria-hidden="true" className="size-4" />
             ) : (
-              <Expand aria-hidden="true" className="size-4" />
+              <Maximize2 aria-hidden="true" className="size-3.5" />
             )}
           </Button>
         </div>
@@ -200,20 +214,31 @@ export function GenerationComposer({
           />
         ) : (
           <Textarea
+            ref={videoEditor}
             aria-label="生成提示词"
             disabled={locked}
-            value={data.prompt}
+            defaultValue={data.prompt}
             maxLength={profile?.protocol === 'minimax-video-v2' ? 7000 : 32000}
             placeholder="描述你想要生成的内容…"
-            className={`min-h-20 resize-none border-0 bg-transparent px-4 py-3 text-sm shadow-none transition-[height] duration-200 focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[min(260px,35vh)]' : 'h-20'}`}
-            onChange={(event) => onPrompt(event.target.value)}
+            className={`min-h-0 resize-none rounded-none border-0 bg-transparent px-3.5 py-6 text-sm shadow-none transition-[height] duration-200 ease-in-out focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[292px]' : 'h-32'}`}
+            onCompositionStart={() => {
+              composing.current = true;
+            }}
+            onCompositionEnd={(event) => {
+              composing.current = false;
+              onPrompt(event.currentTarget.value);
+            }}
+            onChange={(event) => {
+              if (!composing.current) onPrompt(event.target.value);
+            }}
           />
         )}
-        <div className="flex items-center justify-between px-3 pb-2 text-xs text-muted-foreground">
+        <div className="flex h-9 items-center justify-end gap-2 px-3.5 text-[10px] text-muted-foreground">
           <Button
             size="icon"
             variant="ghost"
             aria-label="复制提示词"
+            className="size-6"
             onClick={() => {
               void navigator.clipboard
                 .writeText(data.prompt)
@@ -230,10 +255,10 @@ export function GenerationComposer({
                   references.map((reference) => reference.node.id),
                 ).prompt.length
               : data.prompt.length}{' '}
-            字
+            / {profile?.protocol === 'minimax-video-v2' ? 7000 : 32000}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2">
+        <div className="flex items-center gap-1 px-3 pb-3">
           <Popover open={modelOpen} onOpenChange={setModelOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -241,8 +266,9 @@ export function GenerationComposer({
                 size="sm"
                 aria-label="生成模型"
                 disabled={locked}
-                className="max-w-48 gap-1 text-xs"
+                className="h-8 max-w-48 shrink-0 gap-1 px-1 text-xs font-normal"
               >
+                <Shapes aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{model?.label ?? '选择模型'}</span>
                 <ChevronDown aria-hidden="true" className="size-3" />
               </Button>
@@ -281,6 +307,7 @@ export function GenerationComposer({
               )}
             </PopoverContent>
           </Popover>
+          <span aria-hidden="true" className="mx-1 h-3 w-px shrink-0 bg-border" />
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -288,8 +315,12 @@ export function GenerationComposer({
                 size="sm"
                 aria-label="生成参数"
                 disabled={!profile || locked}
-                className="min-w-0 flex-1 gap-1 text-xs"
+                className="h-8 min-w-0 gap-1 px-1 text-xs font-normal"
               >
+                <RectangleHorizontal
+                  aria-hidden="true"
+                  className="size-3 shrink-0 text-muted-foreground"
+                />
                 <span className="truncate">{summary || '参数'}</span>
                 <ChevronDown aria-hidden="true" className="size-3" />
               </Button>
@@ -312,41 +343,50 @@ export function GenerationComposer({
             </PopoverContent>
           </Popover>
           {kind === 'image' && (
-            <Popover open={countOpen} onOpenChange={setCountOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" aria-label="生成数量" disabled={countDisabled}>
-                  ×{data.count ?? 1}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                onKeyDown={(event) => event.stopPropagation()}
-                aria-label="生成数量"
-                side="top"
-                collisionPadding={{ top: 58, right: 16, bottom: 16, left: 16 }}
-                className="nodrag nopan nowheel w-28 p-1"
-              >
-                {[1, 2, 3, 4].map((count) => (
+            <>
+              <span aria-hidden="true" className="mx-1 h-3 w-px shrink-0 bg-border" />
+              <Popover open={countOpen} onOpenChange={setCountOpen}>
+                <PopoverTrigger asChild>
                   <Button
-                    key={count}
                     variant="ghost"
-                    aria-pressed={(data.count ?? 1) === count}
-                    className="w-full"
-                    onClick={() => {
-                      onCount(count);
-                      setCountOpen(false);
-                    }}
+                    size="sm"
+                    aria-label="生成数量"
+                    disabled={countDisabled}
+                    className="h-8 shrink-0 px-1 text-xs font-normal text-muted-foreground"
                   >
-                    ×{count}
+                    ×{data.count ?? 1}
                   </Button>
-                ))}
-              </PopoverContent>
-            </Popover>
+                </PopoverTrigger>
+                <PopoverContent
+                  onKeyDown={(event) => event.stopPropagation()}
+                  aria-label="生成数量"
+                  side="top"
+                  collisionPadding={{ top: 58, right: 16, bottom: 16, left: 16 }}
+                  className="nodrag nopan nowheel w-28 p-1"
+                >
+                  {[1, 2, 3, 4].map((count) => (
+                    <Button
+                      key={count}
+                      variant="ghost"
+                      aria-pressed={(data.count ?? 1) === count}
+                      className="w-full"
+                      onClick={() => {
+                        onCount(count);
+                        setCountOpen(false);
+                      }}
+                    >
+                      ×{count}
+                    </Button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            </>
           )}
           <Tooltip>
             <TooltipTrigger asChild>
               <span
                 tabIndex={disabledReason ? 0 : undefined}
-                className="rounded-full focus-visible:ring-2 focus-visible:ring-ring"
+                className="ml-auto shrink-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Button
                   size="icon"
@@ -354,7 +394,8 @@ export function GenerationComposer({
                   aria-describedby={disabledReason ? `generation-reason-${nodeId}` : undefined}
                   disabled={!!disabledReason}
                   onClick={onGenerate}
-                  className="rounded-full"
+                  variant="outline"
+                  className="size-8 rounded-lg bg-muted text-muted-foreground shadow-none"
                 >
                   <ArrowUp aria-hidden="true" className="size-4" />
                 </Button>
@@ -364,7 +405,14 @@ export function GenerationComposer({
           </Tooltip>
         </div>
         {disabledReason && (
-          <p id={`generation-reason-${nodeId}`} className="px-4 pb-3 text-xs text-muted-foreground">
+          <p
+            id={`generation-reason-${nodeId}`}
+            className={
+              disabledReason === '请填写提示词'
+                ? 'sr-only'
+                : 'px-4 pb-3 text-xs text-muted-foreground'
+            }
+          >
             {disabledReason}
           </p>
         )}

@@ -128,10 +128,35 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       (await editor.boundingBox())!.y + 260,
     );
     await page.getByRole('menuitem', { name: '图片', exact: true }).click();
+    const ime = await page.context().newCDPSession(page);
+    await page.getByLabel('生成提示词').focus();
+    await ime.send('Input.imeSetComposition', {
+      text: '中文组字',
+      selectionStart: 4,
+      selectionEnd: 4,
+    });
+    await expect(page.getByLabel('生成提示词')).toBeFocused();
+    await ime.send('Input.insertText', { text: '中文组字' });
+    await expect(page.getByLabel('生成提示词')).toHaveText('中文组字');
     await page.getByLabel('生成提示词').fill('一束暖光落在旧电影胶片上');
+    await page.getByLabel('生成提示词').press('End');
+    await page.getByLabel('生成提示词').pressSequentially('ABC');
+    await expect(page.getByLabel('生成提示词')).toHaveText('一束暖光落在旧电影胶片上ABC');
+    await page.getByLabel('生成提示词').press('Backspace');
+    await page.getByLabel('生成提示词').press('Backspace');
+    await page.getByLabel('生成提示词').press('Backspace');
     const composer = page.locator('.react-flow__node-toolbar > div');
     const screenshots = resolve(desktop, '../../.cache/canvas-image-node');
     await mkdir(screenshots, { recursive: true });
+    await expect(page.getByLabel('生成提示词')).toHaveCSS('transition-property', 'height');
+    await page.getByRole('button', { name: '展开提示词' }).click();
+    await expect(page.getByLabel('生成提示词')).toHaveCSS('height', '292px');
+    await page.getByRole('button', { name: '收起提示词' }).click();
+    await expect(page.getByLabel('生成提示词')).toHaveCSS('height', '128px');
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+      await composer.screenshot({ path: join(screenshots, `composer-fixed-${theme}.png`) });
+    }
     await page.getByRole('button', { name: '生成参数' }).click();
     const parameters = page.getByRole('dialog', { name: '生成参数' });
     const viewport = await page.locator('.react-flow__viewport').getAttribute('style');
@@ -151,16 +176,12 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       await expect
         .poll(async () => {
           const box = await composer.boundingBox();
-          const viewport =
-            page.viewportSize() ??
-            (await page.evaluate(() => ({ width: innerWidth, height: innerHeight })));
-          const canvasBounds = (await editor.boundingBox())!;
+          const node = (await page.locator('.react-flow__node-image').boundingBox())!;
           return (
             !!box &&
-            box.x >= canvasBounds.x &&
-            box.y >= canvasBounds.y &&
-            box.x + box.width <= viewport.width &&
-            box.y + box.height <= viewport.height
+            Math.abs(box.width - 620) < 1 &&
+            Math.abs(box.y - node.y - node.height - 16) < 1 &&
+            Math.abs(box.x + box.width / 2 - node.x - node.width / 2) < 1
           );
         })
         .toBe(true);
@@ -168,6 +189,9 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
         path: join(screenshots, `composer-small-${theme}.png`),
         animations: 'disabled',
       });
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].setSize(1500, 960),
+      );
       await page.getByRole('button', { name: '生成参数' }).click();
       await expect(parameters).toBeVisible();
       const bounds = (await parameters.boundingBox())!;
@@ -182,6 +206,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       });
       await page.keyboard.press('Escape');
       await expect(page.getByRole('button', { name: '生成参数' })).toBeFocused();
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
     }
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1500, 960));
     await page.getByRole('button', { name: '生成图片', exact: true }).click();
@@ -215,6 +240,15 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       videoNode.locator('[data-handleid="first_frame"]'),
     );
     await videoNode.click();
+    await page.getByLabel('生成提示词').focus();
+    await ime.send('Input.imeSetComposition', {
+      text: '视频中文',
+      selectionStart: 4,
+      selectionEnd: 4,
+    });
+    await expect(page.getByLabel('生成提示词')).toBeFocused();
+    await ime.send('Input.insertText', { text: '视频中文' });
+    await expect(page.getByLabel('生成提示词')).toHaveValue('视频中文');
     await page.getByLabel('生成提示词').fill('让这束暖光缓慢掠过胶片');
     await page.getByRole('button', { name: '生成视频', exact: true }).click();
     const previewVideo = videoNode.locator('video');
@@ -250,7 +284,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     await promptEditor.press('Control+Shift+z');
     await expect(promptEditor.locator('[data-reference]')).toHaveText('图1');
     await expect(page.locator('.react-flow__edge')).toHaveCount(2);
-    await expect(page.getByLabel('提示词字数')).toHaveText('5 字');
+    await expect(page.getByLabel('提示词字数')).toHaveText('5 / 32000');
     for (const theme of ['light', 'dark']) {
       await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
       await page.getByRole('button', { name: '添加参考' }).click();
@@ -259,8 +293,9 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
       await expect(async () => {
         const menuBounds = (await page.getByRole('listbox', { name: '引用参考' }).boundingBox())!;
-        expect(menuBounds.x).toBeGreaterThanOrEqual((await editor.boundingBox())!.x);
-        expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(720);
+        const composerBounds = (await composer.boundingBox())!;
+        expect(menuBounds.x).toBeGreaterThanOrEqual(composerBounds.x);
+        expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(composerBounds.x + 620);
       }).toPass();
       await page.screenshot({ path: join(screenshots, `mentions-small-${theme}.png`) });
       await app.evaluate(({ BrowserWindow }) =>

@@ -1,11 +1,10 @@
-import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Handle,
   NodeResizer,
   NodeToolbar,
   Position,
   useConnection,
-  useStore,
   useUpdateNodeInternals,
 } from '@xyflow/react';
 import {
@@ -43,72 +42,11 @@ const portClass: Record<string, string> = {
   text: 'canvas-port-text',
 };
 
-/** NodeToolbar 保持屏幕尺寸；节点靠近边缘时只挪动输入框，不改变画布视口。 */
-function ComposerToolbar({
-  children,
-  offset,
-  nodeId,
-}: {
-  children: ReactNode;
-  offset: number;
-  nodeId: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const transform = useStore((state) => state.transform);
-  const position = useStore((state) => state.nodeLookup?.get(nodeId)?.internals.positionAbsolute);
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    const place = () => {
-      element.style.translate = '';
-      const canvas = element.closest('[aria-label="画布编辑区"]')?.getBoundingClientRect();
-      // 留出画布右上工具组与底部操作栏，避免它们遮挡输入框控件。
-      const bounds = {
-        left: canvas?.left ?? 0,
-        top: canvas ? canvas.top + 64 : 0,
-        right: canvas?.right ?? window.innerWidth,
-        bottom: canvas ? canvas.bottom - 80 : window.innerHeight,
-        width: canvas?.width ?? window.innerWidth,
-      };
-      element.style.width = `${Math.min(620, bounds.width - 32)}px`;
-      element.style.maxHeight = `${Math.max(120, bounds.bottom - bounds.top - 32)}px`;
-      const rect = element.getBoundingClientRect();
-      const x = Math.max(bounds.left + 16 - rect.left, Math.min(0, bounds.right - 16 - rect.right));
-      const node = window.document.querySelector(
-        `.react-flow__node[data-id="${CSS.escape(nodeId)}"]`,
-      );
-      const nodeTop = node?.getBoundingClientRect().top ?? rect.top;
-      const above = nodeTop - 56 - offset - rect.height;
-      const preferredTop =
-        rect.bottom > bounds.bottom - 16
-          ? above >= bounds.top + 16
-            ? above
-            : Math.max(bounds.top + 16, nodeTop + 16)
-          : rect.top;
-      const y =
-        Math.max(bounds.top + 16, Math.min(preferredTop, bounds.bottom - 16 - rect.height)) -
-        rect.top;
-      element.style.translate = `${x}px ${y}px`;
-    };
-    place();
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
-    observer?.observe(element);
-    const canvas = element.closest('[aria-label="画布编辑区"]');
-    if (canvas) observer?.observe(canvas);
-    window.addEventListener('resize', place);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', place);
-    };
-  }, [transform, position, nodeId, offset]);
+/** 输入框保持屏幕尺寸与节点下方锚点，超出视口时通过平移画布查看。 */
+function ComposerToolbar({ children, offset }: { children: ReactNode; offset: number }) {
   return (
     <NodeToolbar isVisible position={Position.Bottom} offset={offset}>
-      <div
-        ref={ref}
-        className="nowheel w-[min(620px,calc(100vw-32px))] overflow-y-auto rounded-2xl"
-      >
-        {children}
-      </div>
+      <div className="nowheel w-[620px] rounded-2xl">{children}</div>
     </NodeToolbar>
   );
 }
@@ -370,7 +308,7 @@ function MediaFrame({
         )}
       </div>
       {selected && single && (
-        <ComposerToolbar nodeId={node.id} offset={kind === 'video' ? 48 : 16}>
+        <ComposerToolbar offset={kind === 'video' ? 48 : 16}>
           <Generation nodeId={node.id} kind={kind} data={node.data} />
         </ComposerToolbar>
       )}

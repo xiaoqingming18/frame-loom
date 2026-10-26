@@ -70,6 +70,7 @@ export function ImagePromptEditor({
   const composing = useRef(false);
   const nextCaret = useRef<number | null>(null);
   const rendered = useRef('');
+  const renderedValue = useRef(value);
   const [menu, setMenu] = useState<{ start: number; end: number; query: string } | null>(null);
   const [active, setActive] = useState(0);
   const references = generationReferences(canvas, nodeId);
@@ -143,10 +144,15 @@ export function ImagePromptEditor({
     const root = editor.current;
     if (!root || composing.current) return;
     const signature = JSON.stringify([
-      value,
       references.map((item) => [item.node.id, item.node.title, item.input.sha256]),
     ]);
-    if (rendered.current === signature && promptText(root) === value && nextCaret.current === null)
+    const valueChanged = renderedValue.current !== value;
+    renderedValue.current = value;
+    if (
+      rendered.current === signature &&
+      (!valueChanged || promptText(root) === value) &&
+      nextCaret.current === null
+    )
       return;
     rendered.current = signature;
     const offset =
@@ -187,6 +193,7 @@ export function ImagePromptEditor({
     const root = editor.current!;
     const text = promptText(root);
     if (text.length > 32000) {
+      rendered.current = '';
       store.getState().notify('提示词最多 32000 字（含引用标记）');
       onChange(value);
       return;
@@ -226,7 +233,8 @@ export function ImagePromptEditor({
         aria-activedescendant={
           menu && enabled[active] ? `reference-${nodeId}-${enabled[active].node.id}` : undefined
         }
-        className={`overflow-y-auto px-4 py-3 text-sm break-words whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring ${expanded ? 'h-[min(260px,35vh)]' : 'h-20'}`}
+        data-placeholder="描述你想要生成的内容，点击 @ 添加参考内容。"
+        className={`canvas-prompt-editor overflow-y-auto px-3.5 py-6 text-sm break-words whitespace-pre-wrap transition-[height] duration-200 ease-in-out outline-none motion-reduce:transition-none ${expanded ? 'h-[292px]' : 'h-32'}`}
         onInput={() => {
           if (!composing.current) readInput();
         }}
