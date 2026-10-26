@@ -31,11 +31,11 @@ function openDatabase() {
 
 it('迁移创建 app_meta、schema 版本和迁移日志，并启用 WAL 与外键', () => {
   const { database } = openDatabase();
-  expect(database.getSchemaVersion()).toBe('2');
+  expect(database.getSchemaVersion()).toBe('3');
   expect(database.db.get(sql`PRAGMA journal_mode`)).toEqual({ journal_mode: 'wal' });
   expect(database.db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 });
   expect(database.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 7,
+    count: 8,
   });
 });
 
@@ -91,7 +91,7 @@ it('重复迁移不丢已有元数据且不重复执行，关闭后连接不可�
     value: '保留数据',
   });
   expect(reopened.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 7,
+    count: 8,
   });
 });
 
@@ -108,10 +108,15 @@ it('从 0005 升级保留画布测试数据，新增注册表、复合视图键�
   const sqlite = new Database(join(directory, 'data/frame-loom.sqlite'));
   migrate(drizzle(sqlite), { migrationsFolder: legacy });
   sqlite.exec(`INSERT INTO canvas_documents VALUES ('lab', '画布测试', 1, 1, '{}', NULL, '', '')`);
+  sqlite.exec(`INSERT INTO generation_jobs (id,kind,channel_model_id,profile_id,profile_json,status,request_json,outputs_json,source,created_at,updated_at,deadline_at)
+    VALUES ('old-job','image','model','profile','{}','succeeded','{}','[]','canvas','','','')`);
   sqlite.close();
   const database = new DatabaseService(new EngineConfig('a'.repeat(64), directory, []));
   databases.push(database);
-  expect(database.getSchemaVersion()).toBe('2');
+  expect(database.getSchemaVersion()).toBe('3');
+  expect(
+    database.db.get(sql`SELECT staged_outputs_json FROM generation_jobs WHERE id = 'old-job'`),
+  ).toEqual({ staged_outputs_json: '[]' });
   expect(database.db.get(sql`SELECT title FROM canvas_documents WHERE id = 'lab'`)).toEqual({
     title: '画布测试',
   });

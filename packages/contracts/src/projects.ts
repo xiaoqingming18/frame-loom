@@ -119,7 +119,7 @@ export const ProjectPageSaveRequest = z.strictObject({
   document: CanvasDocument,
 });
 export type ProjectPageSaveRequest = z.infer<typeof ProjectPageSaveRequest>;
-export const ProjectPageSaveResult = CanvasSaveResult;
+export const ProjectPageSaveResult = CanvasSaveResult.extend({ missing: z.array(Sha256) });
 export type ProjectPageSaveResult = z.infer<typeof ProjectPageSaveResult>;
 export const ProjectPageRecord = ProjectPageFile.extend({ view: CanvasView.nullable() });
 export type ProjectPageRecord = z.infer<typeof ProjectPageRecord>;

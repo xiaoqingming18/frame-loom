@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { openAsBlob } from 'node:fs';
-import { join } from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { AwsClient } from 'aws4fetch';
 import {
@@ -10,7 +9,7 @@ import {
   type ObjectStorageCheck,
 } from '@frame-loom/contracts';
 import { DatabaseService } from '../../core/database/database.service.js';
-import { EngineConfig } from '../../core/config/config.js';
+import { MediaService } from '../generation/media.service.js';
 import { SecretCipher } from '../../core/crypto/secret-cipher.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { objectStorageConfig, objectUploads } from './object-storage.schema.js';
@@ -24,7 +23,7 @@ export class ObjectStorageService {
   constructor(
     private readonly database: DatabaseService,
     private readonly cipher: SecretCipher,
-    private readonly config: EngineConfig,
+    private readonly mediaService: MediaService,
   ) {}
   private row() {
     return this.database.db
@@ -135,7 +134,7 @@ export class ObjectStorageService {
     url.searchParams.set('x-frame-loom-request', randomUUID());
     return (await client.sign(url, { method: 'GET', aws: { signQuery: true } })).url;
   }
-  async reference(media: StoredMedia, signal?: AbortSignal): Promise<string> {
+  async reference(media: StoredMedia, signal?: AbortSignal, projectId?: string): Promise<string> {
     const { row, client } = this.require();
     const fingerprint = createHash('sha256')
       .update(
@@ -169,7 +168,7 @@ export class ObjectStorageService {
         // 生命周期可能删除旧对象；缓存一天后重传，兼容推荐的七天过期规则。
         if (cached && Date.now() - Date.parse(cached.uploadedAt) < 86_400_000) return;
         const blob = await openAsBlob(
-          join(this.config.dataDir, 'media', `${media.sha256}.${media.ext}`),
+          (await this.mediaService.resolve(media.sha256, projectId)).path,
           { type: media.mime },
         );
         await this.request(client, this.url(row, key), 'PUT', blob, media.sha256, signal);

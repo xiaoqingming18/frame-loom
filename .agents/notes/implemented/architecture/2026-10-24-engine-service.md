@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-- 项目存储阶段新增 `modules/projects` 与 `ProjectStore`／`LocalProjectStore`。engine 通过鉴权接口在用户选择的绝对位置新建独立项目目录，或登记带有效清单的已有项目；后续内部读写基于登记目录，检查 junction／符号链接和 realpath 边界。0006 迁移增加 `projects`、`page_views` 和可空任务归属列，schema_version 为 2，保留旧画布表；项目媒体、资产和任务流程接入仍待[项目库方案](../../proposed/feature/2026-10-26-project-library.md)后续阶段。项目与页面生命周期、revision 冲突和原子写入已由真实 SQLite／HTTP 与临时目录测试覆盖。
+- 项目存储使用 `modules/projects` 与 `ProjectStore`／`LocalProjectStore`。engine 在登记目录内检查 junction／符号链接和 realpath 边界，提供项目、页面、媒体与资产鉴权接口。0006 增加注册表、页面视图和任务归属列，0007 增加任务待复制产物哈希，schema_version 为 3；保留旧画布表。媒体服务由 projects 模块导出，供生成与对象存储解析项目文件；调度启动前完成全局媒体清理，离线产物恢复后清除待复制标记。项目生命周期、revision 冲突、媒体清理与资产边界由真实 SQLite／HTTP 与临时目录测试覆盖；桌面接入仍待[项目库方案](../../proposed/feature/2026-10-26-project-library.md)后续阶段。
 
 - engine 位于 `apps/engine`，沿用 Nest 官方 `ts-esm` 模板的 ESM、装饰器元数据和 `nest build`，以 Express 适配器运行；生产入口为 `dist/main.js`，测试不进入产物。
 - zod 校验环境变量：64 位十六进制 token、绝对数据目录；`FRAME_LOOM_SECRET_KEY` 为可省略、可为空的 64 位十六进制主密钥，未配置时健康检查正常，但 `SecretCipher` 拒绝加解密。桌面主进程用 Electron 45 异步 safeStorage 解封 `<userData>/secret-key.bin` 后经环境变量传入，不经 preload 或 HTTP 返回。`FRAME_LOOM_ALLOWED_ORIGINS` 使用 JSON 字符串数组，省略时不允许浏览器源。只接受完整 HTTP(S) 或 `app://<host>` 源，不接受通配符、`null`、凭据和路径。Node 调试请求可以不带 Origin。

@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { ObjectStorageWrite } from '@frame-loom/contracts';
 import { ZodValidationPipe } from '../../core/http/zod-validation.pipe.js';
 import { ObjectStorageService } from './object-storage.service.js';
+import { ProjectsModule } from '../projects/projects.module.js';
 
 @Controller('object-storage')
 class ObjectStorageController {
@@ -21,6 +22,7 @@ class ObjectStorageController {
   }
 }
 @Module({
+  imports: [ProjectsModule],
   controllers: [ObjectStorageController],
   providers: [ObjectStorageService],
   exports: [ObjectStorageService],

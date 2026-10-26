@@ -17,6 +17,8 @@ import { DomainError } from '../../core/http/domain-error.js';
 import { ChannelsRepository } from '../channels/channels.repository.js';
 import { generationJobs, type JobRow } from './generation.schema.js';
 import { MediaService } from './media.service.js';
+import { ProjectFilesService } from '../projects/project-files.service.js';
+import { ProjectMediaService } from '../projects/project-media.service.js';
 import { mediaProfile } from './profiles/media-profiles.js';
 import { ObjectStorageService } from '../object-storage/object-storage.service.js';
 import { arkVideoTasks, minimaxVideoV2, openaiVideos } from './adapters/video-tasks.js';
@@ -69,6 +71,8 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     private readonly registry: GenerationAdapters,
     private readonly events: EventBus,
     private readonly storage: ObjectStorageService,
+    private readonly files: ProjectFilesService,
+    private readonly projectMedia: ProjectMediaService,
   ) {}
   private get db() {
     return this.database.db;
@@ -101,6 +105,18 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   }
   async create(input: GenerationRequest): Promise<GenerationJob> {
     const request = GenerationRequest.parse(input);
+    if (request.pageId && !request.projectId)
+      throw new DomainError('PROJECT_REQUIRED', 400, '创作页必须指定所属项目');
+    if (!request.projectId) return this.createAt(request);
+    return this.files.store.serial(request.projectId, async () => {
+      const root = await this.files.root(request.projectId!);
+      const manifest = await this.files.store.readManifest(root);
+      if (request.pageId && !manifest.pages.some((page) => page.id === request.pageId))
+        throw new DomainError('PAGE_NOT_FOUND', 404, '创作页不存在');
+      return this.createAt(request, root);
+    });
+  }
+  private async createAt(request: GenerationRequest, root?: string): Promise<GenerationJob> {
     const model = this.channels.getModel(request.modelId);
     if (!model.enabled || !this.channels.getChannel(model.channelId).enabled)
       throw new DomainError('MODEL_DISABLED', 422, '渠道或模型已禁用');
@@ -130,8 +146,15 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     );
     for (const item of request.inputs) {
       const stored = item.sha256
-        ? this.media.get(item.sha256)
-        : await this.media.save({ data: item.dataUrl!.split(',')[1], mime: `${item.kind}/` });
+        ? (await this.media.resolveAt(item.sha256, root)).media
+        : await this.media.saveStream(
+            [Buffer.from(item.dataUrl!.split(',')[1], 'base64')],
+            undefined,
+            item.kind,
+            undefined,
+            root,
+          );
+      if (root) await this.media.adoptAt(root, [stored.sha256]);
       const limit = profile.inputs.find((entry) => entry.kind === item.kind)!;
       if (
         !stored.mime.startsWith(item.kind + '/') ||
@@ -195,6 +218,8 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         },
         status: 'pending',
         request,
+        projectId: request.projectId ?? null,
+        pageId: request.pageId ?? null,
         outputs: [],
         source: request.source,
         createdAt: now,
@@ -244,7 +269,8 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     });
     return this.get(id);
   }
-  onApplicationBootstrap() {
+  async onApplicationBootstrap() {
+    await this.projectMedia.initialize();
     this.db
       .update(generationJobs)
       .set({
@@ -320,6 +346,16 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         if (!row.rawResponse?.length)
           throw new GenerationFailure('upstream', 'MISSING_OUTPUT', '缺少下载记录');
         const outputs: string[] = [];
+        const stagedOutputs = new Set(row.stagedOutputs);
+        const record = (media: { sha256: string }, staged: boolean) => {
+          outputs.push(media.sha256);
+          if (staged) stagedOutputs.add(media.sha256);
+          else stagedOutputs.delete(media.sha256);
+          this.update(row.id, {
+            outputs: [...new Set([...row.outputs, ...outputs])],
+            stagedOutputs: [...stagedOutputs],
+          });
+        };
         for (const output of row.rawResponse) {
           if (output.providerContent) {
             if (row.profile.protocol !== 'openai-videos')
@@ -329,24 +365,24 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
                 '内容下载协议不匹配',
               );
             const ctx = this.context(row, signal);
-            outputs.push(
-              (
-                await this.media.save(
-                  {
-                    ...output,
-                    url: `${ctx.baseUrl}/videos/${encodeURIComponent(output.providerContent)}/content`,
-                  },
-                  signal,
-                  { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },
-                )
-              ).sha256,
+            await this.media.save(
+              {
+                ...output,
+                url: `${ctx.baseUrl}/videos/${encodeURIComponent(output.providerContent)}/content`,
+              },
+              signal,
+              { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },
+              row.projectId ?? undefined,
+              record,
             );
-          } else outputs.push((await this.media.save(output, signal)).sha256);
+          } else
+            await this.media.save(output, signal, undefined, row.projectId ?? undefined, record);
         }
         if (signal.aborted || this.row(row.id).status === 'cancelled') return;
         this.update(row.id, {
           status: 'succeeded',
           outputs,
+          stagedOutputs: [...stagedOutputs].filter((hash) => outputs.includes(hash)),
           rawResponse: null,
           nextPollAt: null,
           errorCategory: null,
@@ -375,6 +411,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
             context.referenceUrls[item.sha256!] = await this.storage.reference(
               this.media.get(item.sha256!),
               context.signal,
+              row.projectId ?? undefined,
             );
           else {
             inlineBytes += Math.ceil(this.media.get(item.sha256!).bytes / 3) * 4;
@@ -384,7 +421,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
                 'INLINE_TOO_LARGE',
                 '内联素材合计过大，请减少参考图',
               );
-            item.dataUrl = await this.media.inline(item.sha256!);
+            item.dataUrl = await this.media.inline(item.sha256!, row.projectId ?? undefined);
           }
         }
         // 到这一步之前失败能确认没有提交；此后异常一律按是否明确未受理分类。

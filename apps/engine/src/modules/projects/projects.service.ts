@@ -23,6 +23,8 @@ import { DomainError } from '../../core/http/domain-error.js';
 import { ProjectStore } from './project-store.js';
 import { errorCode, internalPath } from './local-project-store.js';
 import { pageViews, projects } from './projects.schema.js';
+import { MediaService } from '../generation/media.service.js';
+import { ProjectMediaService, documentReferences } from './project-media.service.js';
 
 type ProjectRow = typeof projects.$inferSelect;
 const fail = (code: string, message: string, status = 409): never => {
@@ -34,6 +36,8 @@ export class ProjectsService {
   constructor(
     private readonly database: DatabaseService,
     private readonly store: ProjectStore,
+    private readonly media: MediaService,
+    private readonly projectMedia: ProjectMediaService,
   ) {}
 
   private row(id: string): ProjectRow {
@@ -154,7 +158,13 @@ export class ProjectsService {
         .select()
         .from(projects)
         .all()
-        .map(async (row) => (await this.inspect(row)).summary),
+        .map((row) =>
+          this.store.serial(row.id, async () => {
+            const inspected = await this.inspect(row);
+            if (inspected.manifest) await this.projectMedia.restoreAt(row.id, row.rootPath);
+            return inspected.summary;
+          }),
+        ),
     );
   }
 
@@ -237,7 +247,9 @@ export class ProjectsService {
           manifest = { ...manifest, id: randomUUID(), name, updatedAt: new Date().toISOString() };
         else manifest = { ...manifest, name };
         if (copy || input.name !== undefined) await this.store.writeManifest(root, manifest);
-        return this.register(root, manifest);
+        const result = this.register(root, manifest);
+        await this.projectMedia.restoreAt(manifest.id, root);
+        return result;
       });
     });
   }
@@ -256,7 +268,9 @@ export class ProjectsService {
         }
         if (manifest.id !== id) fail('PROJECT_MISMATCH', '所选目录不是此项目');
         this.uniqueName(manifest.name, id);
-        return this.register(root, manifest);
+        const result = this.register(root, manifest);
+        await this.projectMedia.restoreAt(id, root);
+        return result;
       }),
     );
   }
@@ -287,7 +301,12 @@ export class ProjectsService {
   }
 
   async manifest(id: string): Promise<ProjectManifest> {
-    return (await this.available(id)).manifest;
+    return this.store.serial(id, async () => {
+      const { row, manifest } = await this.available(id);
+      await this.projectMedia.restoreAt(id, row.rootPath);
+      await this.projectMedia.cleanupAt(id, row.rootPath);
+      return manifest;
+    });
   }
 
   private page(manifest: ProjectManifest, pageId: string): ProjectPageSummary {
@@ -361,6 +380,7 @@ export class ProjectsService {
         .delete(pageViews)
         .where(and(eq(pageViews.projectId, id), eq(pageViews.pageId, pageId)))
         .run();
+      await this.projectMedia.cleanupAt(id, row.rootPath);
       return { saved: true };
     });
   }
@@ -413,7 +433,7 @@ export class ProjectsService {
     id: string,
     pageId: string,
     input: ProjectPageSaveRequest,
-  ): Promise<{ revision: number }> {
+  ): Promise<{ revision: number; missing: string[] }> {
     return this.store.serial(id, async () => {
       const { row, manifest } = await this.available(id);
       this.page(manifest, pageId);
@@ -421,10 +441,13 @@ export class ProjectsService {
       if (current.revision !== input.revision)
         fail('PAGE_REVISION_CONFLICT', '创作页已被修改，请重新加载或导出当前画布');
       const page = { ...current, document: input.document, revision: current.revision + 1 };
+      const missing = await this.media.adoptAt(row.rootPath, [
+        ...documentReferences(input.document).hashes,
+      ]);
       const now = new Date().toISOString();
       await this.store.writePage(row.rootPath, page);
       await this.repair(row.rootPath, manifest, page, now);
-      return { revision: page.revision };
+      return { revision: page.revision, missing };
     });
   }
 

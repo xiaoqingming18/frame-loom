@@ -49,10 +49,23 @@ Invoke-RestMethod 'http://127.0.0.1:45678/health' -Headers @{ Authorization = "B
 
 - `GET /projects` 返回注册表与 `available | missing | mismatch | unreadable | too_new` 状态；`POST /projects { name, location }` 在已存在的绝对位置下新建项目；`POST /projects/open { rootPath, asCopy?, name? }` 登记已有项目。复制目录的 id 若仍在可用原路径登记，返回 `PROJECT_ALREADY_REGISTERED`，可显式 `asCopy: true` 创建新 id，或用 `name` 解决库内重名。
 - `GET /projects/:id` 读取清单；`POST /projects/:id/relocate { rootPath }` 校验 id 后重新定位；`PATCH /projects/:id { name }` 只改显示名；`DELETE /projects/:id` 只删本机注册行和视图，不删项目目录。
-- `POST /projects/:id/pages { name }` 创建 revision 1 的空画布；页面 `GET`／`PUT`／`PATCH`／`DELETE` 路径为 `/projects/:id/pages/:pageId`。保存传 `{ revision, document }`，成功返回新 revision；过期 revision 或外部修改返回 409 `PAGE_REVISION_CONFLICT`，需重新加载。重命名传 `{ name }`；删除移入 `.frameloom/trash/pages/`。
+- `POST /projects/:id/pages { name }` 创建 revision 1 的空画布；页面 `GET`／`PUT`／`PATCH`／`DELETE` 路径为 `/projects/:id/pages/:pageId`。保存传 `{ revision, document }`，自动补齐全部版本和封面媒体，返回 `{ revision, missing }`，媒体缺失不阻止保存；过期 revision 或外部修改返回 409 `PAGE_REVISION_CONFLICT`，需重新加载。重命名传 `{ name }`；删除移入 `.frameloom/trash/pages/`。
 - `PUT /projects/:id/pages/:pageId/view` 接受 `CanvasView`，只写 SQLite 的本机视图，页面 GET 返回文件内容与 `view`。文件夹清单、页面 JSON 是事实来源；SQLite 注册表可通过打开项目重建。
 
-内部 JSON 经项目串行队列写入 `.frameloom/tmp/`，fsync 后 rename，遇 EPERM／EBUSY 最多退避重试 2 秒。清单保留未知字段。页面保存先写页面再写清单，下次读页面修复摘要；多文件操作不是事务。媒体／资产接口、30 天回收区清理、系统回收站和桌面界面尚未接入；旧画布测试仍可用。
+内部 JSON 经项目串行队列写入 `.frameloom/tmp/`，fsync 后 rename，遇 EPERM／EBUSY 最多退避重试 2 秒。清单保留未知字段。页面保存先写页面再写清单，下次读页面修复摘要；多文件操作不是事务。系统回收站和桌面界面待后续阶段；旧画布测试仍可用。
+
+## 项目媒体与资产
+
+以下路径均以 `/projects/:id` 为前缀，实际请求必须带 Bearer。
+
+- `POST /media` 接受 `application/octet-stream`，流式上限 256 MiB（图片沿用 64 MiB）；`POST /media/adopt { sha256: [] }` 从全局、其他已登记项目及回收区复制，返回 `{ missing: [] }`。解析顺序为项目媒体、项目回收区（自动找回）、全局目录；缺少 SQLite 元数据时重新探测。
+- 生成请求可带 `projectId`／`pageId`，提交时验证归属；输入与对象存储上传均通过媒体解析器读取。产物写项目，项目离线时写全局暂存；任务 `staged_outputs_json` 记录待复制哈希，项目列表、详情、打开、重新定位和启动恢复时补齐，成功后清除标记。0007 迁移将 schema_version 升至 3。
+- `POST /sessions/open`／`close` 标记画布会话；打开期间跳过该项目的自动与手动清理。项目详情、删除页面和关闭会话触发自动清理，无引用媒体移到 `trash/media/`；回收区页面与媒体保留 30 天，`tmp/` 保留 1 小时。引用包括所有页面的全部版本、poster、未结束任务和页面 pending 任务的输入与产物；页面不可读时停止清理。
+- `POST /media/cleanup?dryRun=true|false` 默认只统计，返回 `{ files, bytes, skipped }`；执行时直接删除无引用媒体并清空无引用回收媒体。统计为本轮处理文件量，自动清理的移入回收区不等于释放空间。启动调度前清理全局无引用文件，保留未结束任务、未复制暂存和无法确定引用的文件；旧无项目完成任务只保留记录。
+- `GET /assets?path=` 列目录；`GET /assets/search?q=` 搜索全项目文件名，最多 500 条并返回 `truncated`。路径使用 `/` 分隔的相对路径，空串表示根；拒绝设备名、越界、内部目录、符号链接与 junction，列表和搜索跳过链接与无权限内容。
+- `POST /assets/folders { path, name }`；`POST /assets/files?path=&name=` 二进制上传，4 GiB 上限并检查可用空间，同名自动加 `(2)` 等后缀；`PATCH /assets { path, name }` 重命名；`POST /assets/move { path, destination }` 移动。重命名与移动遇同名报错，不能移入自身或子目录。上传 120 秒超时／中断后清除临时文件。
+- `POST /media/from-asset { path }` 仅导入图片、视频；`POST /assets/from-media { sha256, path, name }` 复制导出并自动改同名。上传写完并 fsync 后通过同卷硬链接发布，再清除临时链接；文件移动也先创建目标链接再移除源，防止覆盖外部刚创建的文件，因此需要支持硬链接的本地磁盘（已验证 Windows NTFS）。
+- `GET /files/media/:sha256` 与 `GET /files/assets?path=` 使用 `sendFile` 支持 Range，设置 `nosniff`；图片、视频、音频扩展白名单可内联，其余类型以 `application/octet-stream` 附件返回。资产删除由后续桌面主进程回收站实现。
 
 ## 主进程对接
 

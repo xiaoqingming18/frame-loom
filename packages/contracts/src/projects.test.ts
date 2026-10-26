@@ -9,6 +9,7 @@ import {
   GenerationRequest,
   ProjectManifest,
   ProjectPageFile,
+  ProjectPageSaveResult,
   ProjectName,
   ProjectTrashRequest,
   emptyCanvasDocument,
@@ -18,6 +19,9 @@ import {
 const randomUUID = () => '123e4567-e89b-42d3-a456-426614174000';
 
 it('资产条目校验大小和类型，搜索必须明确是否截断，移动可指向根目录', () => {
+  expect(ProjectPageSaveResult.parse({ revision: 2, missing: ['a'.repeat(64)] }).missing).toEqual([
+    'a'.repeat(64),
+  ]);
   const entry = {
     name: '镜头.png',
     path: '图片/镜头.png',

@@ -32,6 +32,10 @@ export const generationJobs = sqliteTable(
     usage: text('usage_json', { mode: 'json' }).$type<unknown>(),
     rawResponse: text('raw_response_json', { mode: 'json' }).$type<AdapterOutput[]>(),
     outputs: text('outputs_json', { mode: 'json' }).$type<string[]>().notNull(),
+    stagedOutputs: text('staged_outputs_json', { mode: 'json' })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     source: text('source').$type<GenerationRequest['source']>().notNull(),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),

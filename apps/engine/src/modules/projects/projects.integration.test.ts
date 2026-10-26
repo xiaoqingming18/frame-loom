@@ -308,7 +308,10 @@ it('并发保存一个成功；外部修改（含相同 revision）必须重新�
     body: { code: 'PAGE_REVISION_CONFLICT' },
   });
   expect(ProjectPageRecord.parse((await call(url)).body).revision).toBe(8);
-  expect((await call(url, 'PUT', { ...input, revision: 8 })).body).toEqual({ revision: 9 });
+  expect((await call(url, 'PUT', { ...input, revision: 8 })).body).toEqual({
+    revision: 9,
+    missing: [],
+  });
   const external: unknown = JSON.parse(await fs.readFile(file, 'utf8'));
   const parsed = ProjectPageRecord.parse({ ...(external as object), view: null });
   await fs.writeFile(file, JSON.stringify({ ...parsed, sync: '外部同 revision' }));

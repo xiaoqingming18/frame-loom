@@ -25,8 +25,8 @@ Note: ../../notes/proposed/feature/2026-10-26-project-library.md
 | --- | --- | --- | --- | --- |
 | 01 | [契约与名称规则](01-contracts.md) | done | — | contracts 中的项目、页面、资产、偏好 schema 与纯函数单测 |
 | 02 | [项目存储与生命周期](02-engine-store.md) | done | 01 | `modules/projects`、`LocalProjectStore`、注册表与页面视图迁移、项目／页面接口与集成测试 |
-| 03 | [项目媒体、生成归属与孤儿清理](03-engine-media.md) | draft | 02 | 媒体解析器、项目媒体上传／补齐、生成产物入项目与暂存、清理任务 |
-| 04 | [项目资产接口](04-engine-assets.md) | draft | 02 | 资产列目录、搜索、文件夹、上传、重命名、移动、资产与媒体互转、文件读取接口 |
+| 03 | [项目媒体、生成归属与孤儿清理](03-engine-media.md) | done | 02 | 媒体解析器、项目媒体上传／补齐、生成产物入项目与暂存、清理任务 |
+| 04 | [项目资产接口](04-engine-assets.md) | done | 02 | 资产列目录、搜索、文件夹、上传、重命名、移动、资产与媒体互转、文件读取接口 |
 | 05 | [主进程能力与协议](05-desktop-main.md) | draft | 02、04 | 目录选择、显示、回收站 IPC，`frame-project:` 协议与 CSP，偏好合并写入 |
 | 06 | [项目库与详情页界面](06-renderer-library.md) | draft | 05 | `/projects`、新建／打开／重命名／删除对话框、详情页创作页 Tab、侧栏项目树 |
 | 07 | [项目资产界面](07-renderer-assets.md) | draft | 06 | 资产 Tab、上传队列、拖放、预览、移动与删除 |
@@ -49,4 +49,5 @@ Note: ../../notes/proposed/feature/2026-10-26-project-library.md
 ## 发现与偏差
 
 - 2026-10-26：用户授权并完成 01、02；全仓 589 项测试、typecheck、lint 通过。总计划保留 active，03–09 尚未实施，总笔记保留 proposed，避免把项目界面和媒体接入描述为已完成。
-- 下一步可从 03（媒体）或 04（资产）继续；复用 `ProjectStore.serial(projectId, operation)`，不能在队列内再次等待同一项目的队列。生命周期额外使用注册表队列保护跨项目名称唯一性。
+- 2026-10-26：完成 03、04；全仓 598 项测试、typecheck、lint 通过。新增 0007 迁移追踪待复制产物，schema_version 为 3；资产文件发布要求支持硬链接。总笔记仍为 proposed，05–09 尚未实施。
+- 下一步从 05（主进程能力与协议）继续；接口与字段说明见 `apps/engine/README.md`。复用 `ProjectStore.serial(projectId, operation)`，不能嵌套等待同一项目队列。桌面画布必须先打开会话、完成保存后关闭会话，以保证清理避让。

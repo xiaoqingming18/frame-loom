@@ -50,6 +50,13 @@
       "when": 1793026131449,
       "tag": "0006_same_squirrel_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793027947142,
+      "tag": "0007_cuddly_sprite",
+      "breakpoints": true
     }
   ]
 }
