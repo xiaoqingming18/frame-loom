@@ -11,7 +11,7 @@ Status: proposed
 - **切换模型丢失选择。** `packages/canvas/src/nodes/generation-panel.tsx` 切换模型时写入 `params: {}`。
 - **一次只能出一张。** 节点只有一个 `pendingJobId`，`packages/canvas/src/nodes/generation-writeback.ts` 只写回第一张产物。
 - **交互是表单。** 原生下拉框和复选框堆在节点卡片底部，没有比例图示、参数摘要，也不能在提示词里指明"哪张参考图做什么"。
-- **产物 mime。** `apps/engine/src/modules/generation/adapters/image-response.ts` 把产物声明为 `image/png`，Seedream 实际返回 jpeg；入库时 `probeMedia` 会按文件头重新识别，但适配器层的声明需核实，避免透明背景等依赖格式的判断出错。
+- **产物 mime。** 改造前 `apps/engine/src/modules/generation/adapters/image-response.ts` 把产物统一声明为 `image/png`，Seedream 实际返回 jpeg；入库时 `MediaService` 已按文件头重新识别，但适配器层仍需修正声明，避免透明背景等依赖格式的判断出错。
 
 用户要求：
 
@@ -24,6 +24,12 @@ Status: proposed
 失败条件：用户能在界面上选出某模型不支持的参数组合并提交；切换模型后参数静默变化而无提示；同一节点多张生成互相覆盖或丢失；@ 引用与实际发送的参考图编号不一致。
 
 ## Proposal
+
+### 已落地边界
+
+01 的共享契约与 02 的 engine 档案、适配器已落地；画布数据、运行时、界面和 @ 引用仍待后续子计划。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
+
+任务提交通过 `AdapterContext.profile` 传递创建时保存的档案快照，避免显式通用档案在执行时按模型 ID 重新匹配成更高能力。三个图片适配器先按档案解析语义参数，再显式组装供应商字段；OpenAI generations／edits 共享尺寸、画质与背景映射，透明时指定 PNG；Gemini 仅对声明清晰度的档案发送 `imageSize`；Seedream 发送像素尺寸和水印，产物声明 JPEG。`MediaService` 已有图片文件头及 `image-size` 识别，图片不经过 `probeMedia`，本次保留该实现并以 JPEG 下载入库集成测试确认真实格式。
 
 ### 调研依据
 
@@ -79,7 +85,7 @@ Status: proposed
 
 ### 尺寸换算：contracts 中的共享纯函数
 
-01 契约子计划已落地；其余 engine 与画布行为仍为本篇提案。共享入口使用 `imageRequestSize(profile, params)`、`resolveImageParams(profile, current)`、`parseImageReferences(prompt)` 与 `resolveImagePrompt(prompt, inputNodeIds)`。引用函数接收与实际 `inputs` 一一对应的已排序源节点 id，不直接读取画布连线或 `inputOrder`（后者存的是边 id）。失效引用保留原标记并返回 `missingNodeIds`，调用方据此阻止提交。
+01 契约与 02 engine 已落地；画布接入仍为本篇提案。共享入口使用 `imageRequestSize(profile, params)`、`resolveImageParams(profile, current)`、`parseImageReferences(prompt)` 与 `resolveImagePrompt(prompt, inputNodeIds)`。引用函数接收与实际 `inputs` 一一对应的已排序源节点 id，不直接读取画布连线或 `inputOrder`（后者存的是边 id）。失效引用保留原标记并返回 `missingNodeIds`，调用方据此阻止提交。
 
 尺寸换算按档案能力区分版本，不再维护第二份模型 id 匹配：OpenAI 是否声明 `resolution` 区分固定尺寸与任意尺寸；Seedream 是否允许 `1K` 区分 4.0 与 4.5／通用档案的面积下限。入参先按同一档案回退，未提供参数使用档案默认值；非图片档案拒绝换算，Gemini 返回 `undefined`。`changes` 记录显式传入值的调整／移除（含中文文案），首次填充默认值不产生模型切换提示。数量属于节点 `data.count`，不进入此函数，由 03／04 处理。
 

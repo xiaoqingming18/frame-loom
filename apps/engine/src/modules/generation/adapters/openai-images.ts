@@ -1,10 +1,28 @@
+import { imageRequestSize, resolveImageParams } from '@frame-loom/contracts';
+import { imageProfile } from '../profiles/image-profiles.js';
 import type { GenerationAdapter } from './types.js';
 import { imageOutputs, imageResponse } from './image-response.js';
 
 export const openaiImages: GenerationAdapter = {
   protocol: 'openai-images',
   async submit(ctx, request) {
-    const payload = { model: ctx.model, prompt: request.prompt, ...request.params };
+    const profile =
+      ctx.profile ??
+      imageProfile({
+        kind: 'image',
+        protocol: 'openai-images',
+        profileId: null,
+        upstreamModelId: ctx.model,
+      });
+    const { params } = resolveImageParams(profile, request.params);
+    const payload = {
+      model: ctx.model,
+      prompt: request.prompt,
+      size: imageRequestSize(profile, params),
+      quality: params.quality,
+      background: params.background,
+      ...(params.background === 'transparent' ? { output_format: 'png' } : {}),
+    };
     const headers = new Headers({ ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` });
     let body: FormData | string;
     if (request.inputs.length) {

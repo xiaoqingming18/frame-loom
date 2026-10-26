@@ -1,4 +1,31 @@
 {
+  "requestCases": [
+    {
+      "model": "gpt-image-1.5",
+      "params": { "aspectRatio": "3:2", "quality": "high", "background": "opaque" },
+      "payload": { "size": "1536x1024", "quality": "high", "background": "opaque" }
+    },
+    {
+      "model": "gpt-image-2-2026-04-21",
+      "params": {
+        "aspectRatio": "16:9",
+        "resolution": "2K",
+        "quality": "medium",
+        "background": "transparent"
+      },
+      "payload": {
+        "size": "2560x1440",
+        "quality": "medium",
+        "background": "transparent",
+        "output_format": "png"
+      }
+    },
+    {
+      "model": "gpt-image-2.5-flare-2026-09-08",
+      "params": { "aspectRatio": "1:1", "resolution": "4K", "quality": "max" },
+      "payload": { "size": "2880x2880", "quality": "max", "background": "auto" }
+    }
+  ],
   "data": [
     {
       "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1cAAAAASUVORK5CYII="

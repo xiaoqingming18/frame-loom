@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, expect, it } from 'vitest';
-import { GenerationJob, GenerationRequest } from '@frame-loom/contracts';
+import { GenerationJob, GenerationRequest, type ImageProtocol } from '@frame-loom/contracts';
 import { createEngine } from '../../application.js';
 import { EngineConfig } from '../../core/config/config.js';
 import { DatabaseService } from '../../core/database/database.service.js';
@@ -21,21 +21,37 @@ const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1cAAAAASUVORK5CYII=';
 const token = 'a'.repeat(64);
 const secret = 'sk-generation-private-key-932847';
+const arkFixture = JSON.parse(
+  await readFile(new URL('./adapters/fixtures/ark-images.json', import.meta.url), 'utf8'),
+) as { jpegBase64: string; data: { url: string }[] };
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function setup() {
+async function setup(
+  modelOptions: { upstreamModelId: string; protocol: ImageProtocol } = {
+    upstreamModelId: 'gpt-image-1',
+    protocol: 'openai-images',
+  },
+) {
   const directory = await mkdtemp(join(tmpdir(), 'loom-generation-'));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   let submissions = 0;
   let downloads = 0;
   let polls = 0;
-  let mode: 'success' | 'timeout' | 'limit' | 'download' | 'async' | 'hold' | 'server-error' =
+  let mode:
+    'success' | 'timeout' | 'limit' | 'download' | 'async' | 'hold' | 'server-error' | 'jpeg' =
     'success';
   let release: (() => void) | undefined;
   const upstream = createServer((req, res) => {
+    if (req.url === '/result.jpg') {
+      downloads++;
+      // 故意声明错误类型，入库必须以真实字节为准。
+      res.writeHead(200, { 'Content-Type': 'image/png' });
+      res.end(Buffer.from(arkFixture.jpegBase64, 'base64'));
+      return;
+    }
     if (req.url === '/result.png') {
       downloads++;
       res.writeHead(downloads === 1 ? 503 : 200, { 'Content-Type': 'image/png' });
@@ -55,11 +71,13 @@ async function setup() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify(
-            mode === 'async'
-              ? { status: 'running', remoteTaskId: 'remote-1', remoteStatus: 'queued' }
-              : mode === 'download'
-                ? { data: [{ url: `${remote}/result.png` }] }
-                : { data: [{ b64_json: png }] },
+            mode === 'jpeg'
+              ? { ...arkFixture, data: [{ ...arkFixture.data[0], url: `${remote}/result.jpg` }] }
+              : mode === 'async'
+                ? { status: 'running', remoteTaskId: 'remote-1', remoteStatus: 'queued' }
+                : mode === 'download'
+                  ? { data: [{ url: `${remote}/result.png` }] }
+                  : { data: [{ b64_json: png }] },
           ),
         );
       };
@@ -104,10 +122,10 @@ async function setup() {
     enabled: true,
   });
   const model = channels.saveModel(channel.id, {
-    upstreamModelId: 'gpt-image-1',
+    upstreamModelId: modelOptions.upstreamModelId,
     displayName: '图片',
     kind: 'image',
-    protocol: 'openai-images',
+    protocol: modelOptions.protocol,
     profileId: null,
     overrides: {},
     enabled: true,
@@ -204,6 +222,33 @@ it('真实 HTTP 创建图片任务、发布事件、哈希落盘并去重，接�
   expect(JSON.stringify(context.app.get(GenerationService).list())).not.toContain('rawResponse');
   const file = await readFile(join(context.directory, 'data', 'frame-loom.sqlite'));
   expect(file.includes(Buffer.from(secret))).toBe(false);
+});
+
+it('Seedream 4.5 快照匹配、JPEG 固件下载与哈希入库保留真实格式', async () => {
+  const context = await setup({
+    upstreamModelId: 'doubao-seedream-4-5-251128',
+    protocol: 'ark-images',
+  });
+  context.setMode('jpeg');
+  const job = await context.create({
+    params: { aspectRatio: '16:9', resolution: '2K', watermark: false },
+  });
+  const row = context.app
+    .get(DatabaseService)
+    .db.select()
+    .from(generationJobs)
+    .where(eq(generationJobs.id, job.id))
+    .get()!;
+  expect(row.profile.id).toBe('ark-images-seedream-4.5');
+  const completed = await context.waitStatus(job.id, 'succeeded');
+  expect(completed.outputs[0]).toMatchObject({ mime: 'image/jpeg', width: 1, height: 1 });
+  const stored = context.app.get(MediaService).get(completed.outputs[0].sha256);
+  expect(stored).toMatchObject({ mime: 'image/jpeg', ext: 'jpg' });
+  expect(await readFile(join(context.directory, 'media', `${stored.sha256}.jpg`))).toEqual(
+    Buffer.from(arkFixture.jpegBase64, 'base64'),
+  );
+  expect(context.downloads).toBe(1);
+  expect(context.submissions).toBe(1);
 });
 
 it('提交超时进入 submit_unknown，后续调度不会自动重提；503 同样保守处理', async () => {

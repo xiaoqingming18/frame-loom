@@ -72,7 +72,7 @@ export async function imageResponse(response: Response): Promise<unknown> {
   }
 }
 
-export function imageOutputs(json: unknown) {
+export function imageOutputs(json: unknown, mime = 'image/png') {
   const parsed = ImageData.safeParse(json);
   if (!parsed.success || parsed.data.data.some((item) => !item.url && !item.b64_json))
     throw new GenerationFailure('upstream', 'INVALID_RESPONSE', '未收到有效图片产物', false, true);
@@ -80,7 +80,7 @@ export function imageOutputs(json: unknown) {
     status: 'succeeded' as const,
     outputs: parsed.data.data.map((item) => ({
       ...(item.b64_json ? { data: item.b64_json } : { url: item.url }),
-      mime: 'image/png',
+      mime,
     })),
     usage: parsed.data.usage,
   };

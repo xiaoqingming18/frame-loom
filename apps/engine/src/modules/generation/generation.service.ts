@@ -307,6 +307,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       apiKey,
       headers,
       model: model.upstreamModelId,
+      profile: row.profile,
       signal,
     };
   }

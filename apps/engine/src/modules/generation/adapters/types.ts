@@ -2,6 +2,7 @@ import type {
   GenerationErrorCategory,
   GenerationRequest,
   MediaProtocol,
+  ModelProfile,
 } from '@frame-loom/contracts';
 
 export type AdapterContext = {
@@ -10,6 +11,7 @@ export type AdapterContext = {
   headers: Record<string, string>;
   model: string;
   signal: AbortSignal;
+  profile?: ModelProfile;
   referenceUrls?: Record<string, string>;
 };
 export type AdapterOutput = { url?: string; data?: string; mime: string; providerContent?: string };

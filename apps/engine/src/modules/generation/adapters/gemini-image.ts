@@ -1,10 +1,21 @@
 import { z } from 'zod';
+import { resolveImageParams } from '@frame-loom/contracts';
+import { imageProfile } from '../profiles/image-profiles.js';
 import { GenerationFailure, type GenerationAdapter } from './types.js';
 import { imageResponse } from './image-response.js';
 
 export const geminiImage: GenerationAdapter = {
   protocol: 'gemini-image',
   async submit(ctx, request) {
+    const profile =
+      ctx.profile ??
+      imageProfile({
+        kind: 'image',
+        protocol: 'gemini-image',
+        profileId: null,
+        upstreamModelId: ctx.model,
+      });
+    const { params } = resolveImageParams(profile, request.params);
     const json = await imageResponse(
       await fetch(
         `${ctx.baseUrl}/models/${encodeURIComponent(ctx.model.replace(/^models\//, ''))}:generateContent`,
@@ -30,7 +41,10 @@ export const geminiImage: GenerationAdapter = {
             ],
             generationConfig: {
               responseModalities: ['TEXT', 'IMAGE'],
-              ...(Object.keys(request.params).length ? { imageConfig: request.params } : {}),
+              imageConfig: {
+                aspectRatio: params.aspectRatio,
+                ...(params.resolution ? { imageSize: params.resolution } : {}),
+              },
             },
           }),
           signal: ctx.signal,

@@ -1,4 +1,12 @@
-import { ModelProfile, type ChannelModelWrite, ImageProtocol } from '@frame-loom/contracts';
+import {
+  ModelProfile,
+  type ChannelModelWrite,
+  ImageProtocol,
+  IMAGE_ASPECT_RATIOS,
+  IMAGE_RESOLUTIONS,
+  IMAGE_QUALITIES,
+  IMAGE_BACKGROUNDS,
+} from '@frame-loom/contracts';
 import { DomainError } from '../../../core/http/domain-error.js';
 
 const runtime = {
@@ -24,82 +32,124 @@ const modes = [
   { id: 'text', name: '文生图' },
   { id: 'reference', name: '参考图' },
 ];
-const definitions = [
-  {
-    protocol: 'openai-images',
-    name: 'OpenAI 图片',
-    ids: ['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2'],
-    params: [
-      {
-        key: 'size',
-        name: '尺寸',
-        type: 'enum',
-        values: ['1024x1024', '1536x1024', '1024x1536'],
-        default: '1024x1024',
-      },
-      {
-        key: 'quality',
-        name: '质量',
-        type: 'enum',
-        values: ['auto', 'low', 'medium', 'high'],
-        default: 'auto',
-      },
-      { key: 'n', name: '图片数量', type: 'enum', values: [1], default: 1 },
-    ],
-  },
-  {
-    protocol: 'gemini-image',
-    name: 'Gemini 图片',
-    ids: ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview'],
-    params: [
-      {
-        key: 'aspectRatio',
-        name: '画面比例',
-        type: 'enum',
-        values: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-        default: '1:1',
-      },
-    ],
-  },
-  {
-    protocol: 'ark-images',
-    name: 'Seedream 图片',
-    ids: ['doubao-seedream-4-0-250828', 'doubao-seedream-4-5-251128'],
-    params: [
-      { key: 'size', name: '尺寸', type: 'enum', values: ['2K', '4K'], default: '2K' },
-      { key: 'watermark', name: '水印', type: 'boolean', default: true },
-    ],
-  },
-];
+type Param = ModelProfile['params'][number];
+function choice(
+  key: string,
+  name: string,
+  values: readonly string[],
+  defaultValue: string,
+  notes?: Record<string, string>,
+): Param {
+  return {
+    key,
+    name,
+    type: 'enum',
+    values: [...values],
+    default: defaultValue,
+    mapped: true,
+    notes,
+  };
+}
+const ratios = choice('aspectRatio', '比例', IMAGE_ASPECT_RATIOS, '1:1');
+const resolution = choice('resolution', '清晰度', IMAGE_RESOLUTIONS, '2K');
+const quality = choice('quality', '画质', IMAGE_QUALITIES.slice(0, 3), 'medium');
+const background = choice('background', '背景', IMAGE_BACKGROUNDS, 'auto');
+const fixedRatios = choice('aspectRatio', '比例', ['1:1', '3:2', '2:3'], '1:1');
+const geminiRatios = choice('aspectRatio', '比例', IMAGE_ASPECT_RATIOS.slice(0, 10), '1:1');
+const experimentalResolution = { ...resolution, notes: { '4K': '实验' } };
+const seedreamResolution = choice('resolution', '清晰度', ['2K', '4K'], '2K');
+const watermark: Param = {
+  key: 'watermark',
+  name: '水印',
+  type: 'boolean',
+  default: true,
+  mapped: true,
+};
+const fixedOpenaiParams = [fixedRatios, quality, background];
+const seedreamParams = [ratios, seedreamResolution, watermark];
 
-export const imageProfiles: ModelProfile[] = definitions.flatMap((definition) => [
-  ModelProfile.parse({
-    id: `${definition.protocol}-default`,
-    name: definition.name,
+function profile(
+  protocol: ImageProtocol,
+  suffix: string,
+  name: string,
+  matchIds: string[],
+  params: Param[],
+): ModelProfile {
+  return ModelProfile.parse({
+    id: `${protocol}-${suffix}`,
+    name,
     kind: 'image',
-    protocol: definition.protocol,
-    matchIds: definition.ids,
-    generic: false,
+    protocol,
+    matchIds,
+    generic: suffix === 'generic',
     modes,
-    params: definition.params,
+    params,
     constraints: [],
-    inputs: [imageInput],
+    inputs: [{ ...imageInput, maxCount: suffix === 'generic' ? 1 : imageInput.maxCount }],
     runtime,
-  }),
-  ModelProfile.parse({
-    id: `${definition.protocol}-generic`,
-    name: `通用 ${definition.name}`,
-    kind: 'image',
-    protocol: definition.protocol,
-    matchIds: [],
-    generic: true,
-    modes,
-    params: [],
-    constraints: [],
-    inputs: [{ ...imageInput, maxCount: 1 }],
-    runtime,
-  }),
-]);
+  });
+}
+
+export const imageProfiles: ModelProfile[] = [
+  profile(
+    'openai-images',
+    'default',
+    'OpenAI GPT Image 1',
+    ['gpt-image-1', 'chatgpt-image'],
+    fixedOpenaiParams,
+  ),
+  profile(
+    'openai-images',
+    'gpt-image-2',
+    'OpenAI GPT Image 2',
+    ['gpt-image-2'],
+    [ratios, experimentalResolution, quality, { ...background, notes: { transparent: '预览' } }],
+  ),
+  profile(
+    'openai-images',
+    'gpt-image-2.5',
+    'OpenAI GPT Image 2.5',
+    ['gpt-image-2.5'],
+    [
+      ratios,
+      experimentalResolution,
+      choice('quality', '画质', IMAGE_QUALITIES, 'medium'),
+      background,
+    ],
+  ),
+  profile('openai-images', 'generic', '通用 OpenAI 图片', [], fixedOpenaiParams),
+  profile(
+    'gemini-image',
+    'default',
+    'Gemini 2.5 Flash Image',
+    ['gemini-2.5-flash-image'],
+    [geminiRatios],
+  ),
+  profile(
+    'gemini-image',
+    'gemini-3-pro',
+    'Gemini 3 Pro Image',
+    ['gemini-3-pro-image'],
+    [geminiRatios, resolution],
+  ),
+  profile(
+    'gemini-image',
+    'gemini-3.1-flash',
+    'Gemini 3.1 Flash Image',
+    ['gemini-3.1-flash-image'],
+    [geminiRatios, resolution],
+  ),
+  profile('gemini-image', 'generic', '通用 Gemini 图片', [], [geminiRatios]),
+  profile(
+    'ark-images',
+    'default',
+    'Seedream 4.0',
+    ['doubao-seedream-4-0'],
+    [ratios, resolution, watermark],
+  ),
+  profile('ark-images', 'seedream-4.5', 'Seedream 4.5', ['doubao-seedream-4-5'], seedreamParams),
+  profile('ark-images', 'generic', '通用 Seedream 图片', [], seedreamParams),
+];
 
 export function imageProfile(
   model: Pick<ChannelModelWrite, 'kind' | 'protocol' | 'profileId' | 'upstreamModelId'>,
@@ -110,10 +160,15 @@ export function imageProfile(
     ? imageProfiles.find(
         (profile) => profile.id === model.profileId && profile.protocol === model.protocol,
       )
-    : (imageProfiles.find(
-        (profile) =>
-          profile.protocol === model.protocol && profile.matchIds.includes(model.upstreamModelId),
-      ) ?? imageProfiles.find((profile) => profile.protocol === model.protocol && profile.generic));
+    : (imageProfiles
+        .filter((profile) => profile.protocol === model.protocol)
+        .flatMap((profile) =>
+          profile.matchIds
+            .filter((prefix) => model.upstreamModelId.startsWith(prefix))
+            .map((prefix) => ({ profile, length: prefix.length })),
+        )
+        .sort((a, b) => b.length - a.length)[0]?.profile ??
+      imageProfiles.find((profile) => profile.protocol === model.protocol && profile.generic));
   if (!selected) throw new DomainError('INVALID_PROFILE', 422, '档案不存在或与模型协议不匹配');
   return selected;
 }

@@ -135,7 +135,7 @@ interface GenerationAdapter {
 
 - 能力档案的 zod schema 放在 `packages/contracts`，与之配套的纯函数 `checkGenerationRequest(profile, request)` 也放在 contracts。renderer 用它禁用不可选的项，engine 用同一个函数在提交前强制校验。
 - 内置档案数据放在 `modules/generation/profiles/`，通过 `GET /model-profiles` 提供给 renderer，不在 renderer 里复制一份。档案字段：
-  - `id`、`kind`、`protocol`；`matchIds`，即用于精确匹配的上游 ID 和别名列表。
+  - `id`、`kind`、`protocol`；`matchIds` 为上游 ID、别名或前缀。图片按最长前缀匹配模型族，显式 `profileId` 优先；视频与 TTS 保持精确匹配。
   - `modes`：文生、首帧、首尾帧、仅尾帧、全模态参考。
   - `params`：每个参数的类型、可选值或取值范围、默认值，以及是否映射到厂商字段。
   - `constraints`：组合约束。规则形如"当参数或输入满足条件时，限制另一参数的可选值，或禁止某类输入"。
@@ -143,6 +143,8 @@ interface GenerationAdapter {
   - `runtime`：默认并发数、轮询初始间隔、最大间隔、总等待上限、是否支持取消。
 - 每个类别再提供一份通用档案，例如"通用 OpenAI 图片"，只开放最基础的参数。上游 ID 匹配不上内置档案的渠道模型使用通用档案，并提示用户确认。不按模型名称关键词猜类别，拉取到的未知模型由用户选择类别后才能启用。
 - 厂商特有、档案未建模的参数，只能通过档案声明的透传白名单传入，不接受任意字段。不提供用户自定义调用脚本。
+
+[画布图片节点改造](../feature/2026-10-26-canvas-image-node.md)已完成 contracts 与 engine 部分：图片有 GPT Image 1／2／2.5、Gemini 2.5 Flash／3 Pro／3.1 Flash、Seedream 4.0／4.5 共 8 个模型族及 3 个通用档案，档案声明比例、清晰度、画质、背景与可选取值标签 `notes`。旧 `*-default` ID 保留，分别对应 GPT Image 1、Gemini 2.5 Flash、Seedream 4.0；显式选择不随模型前缀改变。任务按创建时保存的档案快照执行，三个适配器显式翻译语义参数，不整体展开 `request.params`；Seedream 产物声明 JPEG，媒体入库按真实文件头识别。画布参数界面与多任务尚未完成，真实供应商冒烟仍待验收。
 
 ### 生成任务
 
@@ -301,7 +303,7 @@ created_at, updated_at, finished_at
   - 不选的原因：同一个中转站上常常 GPT 走 Responses、Claude 走 Anthropic；渠道级协议要么迫使用户为同一中转站建多个渠道，要么让部分模型经过有损的协议转换。
 - **按模型名称关键词自动判断类别**（infinite-canvas 的 `guessCapability`）
   - 最强理由：拉取模型后零操作，体验顺滑。
-  - 不选的原因：中转站的模型命名没有规律，猜错后请求会走错协议，用户还会把报错误当成模型故障。改为精确匹配档案，匹配不上的由用户选择类别，只多一次点击。
+  - 不选的原因：中转站的模型命名没有规律，猜错后请求会走错协议，用户还会把报错误当成模型故障。类别与协议仍由用户选择；选定图片协议后才按已声明的模型族前缀匹配能力，视频与 TTS 保持精确匹配，未知 ID 使用对应协议的通用档案。
 - **用户自定义调用脚本**（infinite-canvas 的 model-plugin）
   - 最强理由：不发版也能接入任意接口，覆盖面最广。
   - 不选的原因：脚本执行任意代码，并能直接拿到明文密钥；放在拥有本地文件和数据库权限的 engine 里执行风险更高。用户确认不提供。通用档案加透传白名单能覆盖大部分"兼容但有少量差异"的接口。
