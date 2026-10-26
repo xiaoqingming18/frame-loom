@@ -5,6 +5,7 @@
   /* nodrag／nopan 由 xyflow 识别，阻止节点内交互元素触发拖拽或平移；与标记类一起登记，供类名检查识别。 */
   .nodrag,
   .nopan,
+  .nowheel,
   .canvas-float,
   .canvas-background {
     --canvas-marker: 1;

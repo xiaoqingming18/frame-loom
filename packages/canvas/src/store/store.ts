@@ -6,7 +6,9 @@ import {
   type CanvasDocument,
   type CanvasEdgeDisplay,
   type CanvasView,
+  type GenerationJob,
 } from '@frame-loom/contracts';
+import type { CanvasGenerationConfig } from '../host';
 import { CanvasCommandError } from '../commands/commands';
 
 function withinLimits(document: CanvasDocument): CanvasDocument {
@@ -41,6 +43,10 @@ export interface CanvasState {
   spaceHeld: boolean;
   view: CanvasView;
   notice: { id: number; text: string } | null;
+  generationConfig: CanvasGenerationConfig | null;
+  generationJobs: ReadonlyMap<string, GenerationJob>;
+  generationSubmitting: ReadonlySet<string>;
+  generationError: string | null;
 }
 
 export interface CanvasActions {
@@ -65,6 +71,10 @@ export interface CanvasActions {
   setView(patch: Partial<CanvasView>): void;
   setEdgeDisplay(display: CanvasEdgeDisplay): void;
   notify(text: string): void;
+  setGenerationConfig(config: CanvasGenerationConfig): void;
+  setGenerationJob(job: GenerationJob): void;
+  setGenerationSubmitting(nodeId: string, submitting: boolean): void;
+  setGenerationError(error: string): void;
 }
 
 export type CanvasStore = ReturnType<typeof createCanvasStore>;
@@ -88,6 +98,10 @@ export function createCanvasStore(
     spaceHeld: false,
     view: view ?? DEFAULT_VIEW,
     notice: null,
+    generationConfig: null,
+    generationJobs: new Map(),
+    generationSubmitting: new Set(),
+    generationError: null,
     apply(change, { record = true } = {}) {
       const { document: current, past, transaction } = get();
       let next: CanvasDocument;
@@ -176,6 +190,21 @@ export function createCanvasStore(
     },
     notify(text) {
       set({ notice: { id: ++noticeId, text } });
+    },
+    setGenerationConfig(config) {
+      set({ generationConfig: config });
+    },
+    setGenerationJob(job) {
+      set((state) => ({ generationJobs: new Map(state.generationJobs).set(job.id, job) }));
+    },
+    setGenerationSubmitting(nodeId, submitting) {
+      const ids = new Set(get().generationSubmitting);
+      if (submitting) ids.add(nodeId);
+      else ids.delete(nodeId);
+      set({ generationSubmitting: ids });
+    },
+    setGenerationError(error) {
+      set({ generationError: error });
     },
   }));
 }

@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useBlocker } from '@tanstack/react-router';
 import { z } from 'zod';
-import { CanvasRecord, CanvasSaveResult, MediaFile } from '@frame-loom/contracts';
+import {
+  CanvasRecord,
+  CanvasSaveResult,
+  ChannelList,
+  ChannelModelList,
+  EngineEvent,
+  GenerationJob,
+  MediaFile,
+  ModelDefaults,
+  ModelProfileList,
+  ObjectStorageState,
+} from '@frame-loom/contracts';
 import { CanvasEditor, downloadCanvasDocument, type CanvasHost } from '@frame-loom/canvas';
 import { Button } from '@frame-loom/ui/components/button';
 import {
@@ -32,6 +43,79 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
               timeoutMs: 120_000,
             }),
           url: (sha256: string) => `frame-media://${sha256}`,
+        },
+        generation: {
+          load: async (signal) => {
+            const [channels, models, defaults, profiles, storage] = await Promise.all([
+              engineClient.request('/channels', ChannelList, { signal }),
+              engineClient.request('/channel-models', ChannelModelList, { signal }),
+              engineClient.request('/model-defaults', ModelDefaults, { signal }),
+              engineClient.request('/model-profiles', ModelProfileList, { signal }),
+              engineClient.request('/object-storage', ObjectStorageState, { signal }),
+            ]);
+            return {
+              storageReady: !!storage?.hasSecret && !storage.secretNeedsUpdate,
+              models: models
+                .flatMap((model) => {
+                  if (
+                    !model.enabled ||
+                    !channels.some(
+                      (channel) => channel.id === model.channelId && channel.enabled,
+                    ) ||
+                    (model.kind !== 'image' && model.kind !== 'video')
+                  )
+                    return [];
+                  const profile =
+                    profiles.find(
+                      (item) =>
+                        item.kind === model.kind &&
+                        item.protocol === model.protocol &&
+                        (model.profileId
+                          ? item.id === model.profileId
+                          : item.matchIds.includes(model.upstreamModelId)),
+                    ) ??
+                    profiles.find(
+                      (item) =>
+                        !model.profileId &&
+                        item.protocol === model.protocol &&
+                        item.kind === model.kind &&
+                        item.generic,
+                    ) ??
+                    null;
+                  return [
+                    {
+                      id: model.id,
+                      label: model.displayName,
+                      kind: model.kind,
+                      profile,
+                      preferred: defaults[model.kind] === model.id,
+                    },
+                  ];
+                })
+                .sort((a, b) => Number(b.preferred) - Number(a.preferred)),
+            };
+          },
+          create: (request) =>
+            engineClient.request('/generation-jobs', GenerationJob, {
+              method: 'POST',
+              body: request,
+            }),
+          get: (id, signal) =>
+            engineClient.request('/generation-jobs/' + id, GenerationJob, { signal }),
+          cancel: (id) =>
+            engineClient.request('/generation-jobs/' + id + '/cancel', GenerationJob, {
+              method: 'POST',
+            }),
+          subscribe: (changed, signal) => {
+            void (async () => {
+              try {
+                for await (const event of engineClient.stream('/events', EngineEvent, { signal }))
+                  if (event.type === 'generation.job.updated') changed(event.jobId);
+              } catch {
+                /* 任务轮询继续兜底。 */
+              }
+            })();
+          },
         },
         documents: {
           load: (id) => engineClient.request(`/canvases/${id}`, CanvasRecord.nullable()),

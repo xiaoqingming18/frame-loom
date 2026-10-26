@@ -1,11 +1,10 @@
 import { afterEach, expect, it } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Channel, ChannelModel, type LlmEvent } from '@frame-loom/contracts';
+import { Channel, ChannelModel } from '@frame-loom/contracts';
 import type { EngineClient } from '@/lib/engine-client';
 import { ModelServices } from './model-services/model-services';
 import { ModelDefaultsSettings } from './model-services/model-defaults';
-import { ModelLab } from './model-lab/model-lab';
 
 const channelId = '11111111-1111-4111-8111-111111111111';
 const modelId = '22222222-2222-4222-8222-222222222222';
@@ -42,27 +41,19 @@ const model = ChannelModel.parse({
   },
   lastCheck: null,
 });
-const usage = { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15 };
 const clients: QueryClient[] = [];
 afterEach(() => {
   cleanup();
   clients.splice(0).forEach((client) => client.clear());
 });
 
-function setup(view: 'services' | 'defaults' | 'lab', empty = false) {
+function setup(view: 'services' | 'defaults', empty = false) {
   const queries = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(queries);
   let channels = empty ? [] : [channel];
   let models = empty ? [] : [model];
   let defaults = { chat: null as string | null, image: null, video: null, tts: null };
   const calls: { path: string; init: Parameters<EngineClient['request']>[2] }[] = [];
-  let events: (signal?: AbortSignal | null) => AsyncGenerator<LlmEvent> = async function* () {
-    await Promise.resolve();
-    yield { type: 'thinking.delta', delta: '先思考' };
-    yield { type: 'text.delta', delta: '测试' };
-    yield { type: 'text.delta', delta: '成功' };
-    yield { type: 'done', usage, stopReason: 'stop' };
-  };
   const client: EngineClient = {
     request(path, schema, init) {
       calls.push({ path, init });
@@ -98,19 +89,16 @@ function setup(view: 'services' | 'defaults' | 'lab', empty = false) {
       } else throw new Error(`未处理的替身请求：${path}`);
       return Promise.resolve(schema.parse(result));
     },
-    async *stream(path, schema, init) {
-      calls.push({ path, init });
-      for await (const event of events(init?.signal)) yield schema.parse(event);
+    stream() {
+      throw new Error('此测试不订阅事件流');
     },
   };
   const rendered = render(
     <QueryClientProvider client={queries}>
       {view === 'services' ? (
         <ModelServices engineClient={client} />
-      ) : view === 'defaults' ? (
-        <ModelDefaultsSettings engineClient={client} onOpenModels={() => {}} />
       ) : (
-        <ModelLab engineClient={client} />
+        <ModelDefaultsSettings engineClient={client} onOpenModels={() => {}} />
       )}
     </QueryClientProvider>,
   );
@@ -118,17 +106,10 @@ function setup(view: 'services' | 'defaults' | 'lab', empty = false) {
     ...rendered,
     calls,
     queries,
-    setEvents: (value: typeof events) => {
-      events = value;
-    },
   };
 }
 function change(label: string | RegExp, value: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
-}
-function send(text: string) {
-  change('测试消息', text);
-  fireEvent.click(screen.getByRole('button', { name: '发送' }));
 }
 
 it('新建渠道：草稿拉取后勾选模型，协议随类别过滤，渠道与模型一次保存', async () => {
@@ -257,72 +238,4 @@ it('默认模型独立页面只列出已启用模型并写入', async () => {
     ).toEqual({ chat: modelId }),
   );
   expect(within(screen.getByLabelText('图片')).getAllByRole('option')).toHaveLength(1);
-});
-
-it('文本页合并推理和文本增量，展示用量，并将完整上一轮送入下一轮', async () => {
-  const { calls } = setup('lab');
-  await screen.findByRole('option', { name: '本地测试 / 测试文本' });
-  send('你好');
-  await screen.findByText('测试成功');
-  expect(screen.getByText('先思考')).toBeTruthy();
-  expect((await screen.findByRole('status')).textContent).toContain('总计 15');
-  send('继续');
-  await waitFor(() =>
-    expect(calls.filter((call) => call.path === '/llm/test-chat')).toHaveLength(2),
-  );
-  expect(calls.at(-1)?.init?.body).toMatchObject({
-    modelId,
-    messages: [
-      { role: 'user', content: '你好' },
-      { role: 'assistant', content: '测试成功' },
-      { role: 'user', content: '继续' },
-    ],
-  });
-});
-
-it('流式错误显示类别，失败轮不会送入下一轮；模型失效自动清空历史', async () => {
-  const { calls, setEvents, queries } = setup('lab');
-  await screen.findByRole('option', { name: '本地测试 / 测试文本' });
-  setEvents(async function* () {
-    await Promise.resolve();
-    yield { type: 'error', code: 'RATE_LIMITED', message: '稍后重试' };
-  });
-  send('失败轮');
-  expect((await screen.findByRole('alert')).textContent).toContain('RATE_LIMITED');
-  setEvents(async function* () {
-    await Promise.resolve();
-    yield { type: 'text.delta', delta: 'OK' };
-    yield { type: 'done', usage, stopReason: 'stop' };
-  });
-  send('重试');
-  await screen.findByText('OK');
-  expect(calls.at(-1)?.init?.body).toMatchObject({ messages: [{ role: 'user', content: '重试' }] });
-  // 直接使共享查询失效，模拟另一入口删除模型。
-  act(() => {
-    queries.setQueryData(['models', 'list'], []);
-  });
-  await waitFor(() => expect(screen.queryByText('OK')).toBeNull());
-  expect(screen.getByLabelText<HTMLTextAreaElement>('测试消息').disabled).toBe(true);
-});
-
-it('停止及卸载中断客户端流', async () => {
-  const { setEvents, unmount } = setup('lab');
-  await screen.findByRole('option', { name: '本地测试 / 测试文本' });
-  const signals: AbortSignal[] = [];
-  setEvents(async function* (signal) {
-    signals.push(signal!);
-    yield { type: 'text.delta', delta: '处理中' };
-    await new Promise<void>((_, reject) =>
-      signal!.addEventListener('abort', () => reject(new Error('中止')), { once: true }),
-    );
-  });
-  send('停止测试');
-  await screen.findByText('处理中');
-  fireEvent.click(screen.getByRole('button', { name: '停止' }));
-  expect((await screen.findByRole('alert')).textContent).toContain('REQUEST_ABORTED');
-  expect(signals[0].aborted).toBe(true);
-  send('卸载测试');
-  await waitFor(() => expect(signals).toHaveLength(2));
-  unmount();
-  expect(signals[1].aborted).toBe(true);
 });

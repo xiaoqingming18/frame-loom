@@ -16,11 +16,13 @@ import {
   ReactFlowProvider,
   SelectionMode,
   useReactFlow,
+  useStore as useFlowStore,
   type Connection,
   type Edge,
   type EdgeChange,
   type FinalConnectionState,
   type NodeChange,
+  type NodeMouseHandler,
   type NodeProps,
   type OnConnectStartParams,
   type Viewport,
@@ -42,7 +44,6 @@ import type { CanvasHost } from '../host';
 import {
   CanvasCommandError,
   connect,
-  deleteElements,
   moveNodes,
   reconnect,
   reparentAfterDrag,
@@ -52,6 +53,7 @@ import {
 import { checkConnection } from '../registry/connections';
 import type { NodeRegistry, NodeViewProps } from '../registry/registry';
 import { createBuiltinRegistry } from '../nodes/builtin';
+import { GenerationRuntime } from '../nodes/generation-runtime';
 import { UnknownNodeView } from '../nodes/views';
 import { createCanvasStore, type CanvasStore } from '../store/store';
 import { shortcutFor, shouldIgnore } from '../interaction/keys';
@@ -121,6 +123,7 @@ export function CanvasEditor({
   const value = useMemo(() => ({ store, registry, host }), [store, registry, host]);
   return (
     <CanvasContext.Provider value={value}>
+      <GenerationRuntime />
       <ReactFlowProvider>
         <TooltipProvider delayDuration={400}>
           <Editor className={className} />
@@ -160,6 +163,7 @@ function Editor({ className }: { className?: string }) {
   const [width, setWidth] = useState(1024);
   const compact = width < COMPACT_WIDTH;
   const hand = tool === 'hand' || spaceHeld;
+  const readableZoom = useFlowStore((state) => state.transform[2] >= 0.4);
 
   const nodeTypes = useMemo(() => {
     const types: Record<string, ComponentType<NodeProps<FlowNode>>> = {};
@@ -246,9 +250,9 @@ function Editor({ className }: { className?: string }) {
       if (changes.some((change) => change.type === 'dimensions' && change.resizing === false))
         state.commit();
       if (selection) state.select(selection, state.selectedEdges);
-      if (removed.size) state.apply((current) => deleteElements(current, removed));
+      if (removed.size) actions.deleteItems(removed);
     },
-    [store],
+    [actions, store],
   );
 
   const onEdgesChange = useCallback(
@@ -347,6 +351,31 @@ function Editor({ className }: { className?: string }) {
   const onMoveEnd = useCallback(
     (_event: unknown, viewport: Viewport) => store.getState().setView({ viewport }),
     [store],
+  );
+
+  const onNodeMouseEnter = useCallback<NodeMouseHandler<FlowNode>>(
+    (_event, node) => store.getState().setHovered(node.id),
+    [store],
+  );
+  const onNodeMouseLeave = useCallback(() => store.getState().setHovered(null), [store]);
+  const onNodeContextMenu = useCallback<NodeMouseHandler<FlowNode>>(
+    (event, node) => {
+      event.preventDefault();
+      if (!store.getState().selectedNodes.has(node.id)) store.getState().select([node.id]);
+      setMenu({ kind: 'node', screen: { x: event.clientX, y: event.clientY } });
+    },
+    [store],
+  );
+  const minimapNodeClassName = useCallback(
+    (node: { type?: string }) => `canvas-minimap-node canvas-minimap-${node.type}`,
+    [],
+  );
+  const onMinimapNodeClick = useCallback(
+    (_event: unknown, node: { id: string }) => {
+      store.getState().select([node.id]);
+      void flow.fitView({ nodes: [{ id: node.id }], duration: 250, maxZoom: 1 });
+    },
+    [flow, store],
   );
 
   // 快捷键：只在焦点位于画布内时处理，空格临时切换抓手。
@@ -563,13 +592,9 @@ function Editor({ className }: { className?: string }) {
         onNodeDragStop={onNodeDragStop}
         onSelectionDragStart={onNodeDragStart}
         onSelectionDragStop={(event, dragged) => onNodeDragStop(event, dragged[0], dragged)}
-        onNodeMouseEnter={(_event, node) => store.getState().setHovered(node.id)}
-        onNodeMouseLeave={() => store.getState().setHovered(null)}
-        onNodeContextMenu={(event, node) => {
-          event.preventDefault();
-          if (!store.getState().selectedNodes.has(node.id)) store.getState().select([node.id]);
-          setMenu({ kind: 'node', screen: { x: event.clientX, y: event.clientY } });
-        }}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onNodeContextMenu={onNodeContextMenu}
         onSelectionContextMenu={(event) => {
           event.preventDefault();
           setMenu({ kind: 'node', screen: { x: event.clientX, y: event.clientY } });
@@ -612,7 +637,7 @@ function Editor({ className }: { className?: string }) {
         elementsSelectable={!hand}
         nodesConnectable={!hand}
         connectionRadius={32}
-        onlyRenderVisibleElements={document.nodes.length > 50}
+        onlyRenderVisibleElements={document.nodes.length > 50 && readableZoom}
         elevateNodesOnSelect={false}
         disableKeyboardA11y={false}
         ariaLabelConfig={ARIA_LABELS}
@@ -631,13 +656,10 @@ function Editor({ className }: { className?: string }) {
             pannable
             zoomable
             ariaLabel="小地图"
-            nodeClassName={(node) => `canvas-minimap-node canvas-minimap-${node.type}`}
+            nodeClassName={minimapNodeClassName}
             nodeBorderRadius={4}
             className="canvas-minimap"
-            onNodeClick={(_event, node) => {
-              store.getState().select([node.id]);
-              void flow.fitView({ nodes: [{ id: node.id }], duration: 250, maxZoom: 1 });
-            }}
+            onNodeClick={onMinimapNodeClick}
           />
         )}
       </ReactFlow>

@@ -6,8 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对话与重启保留', async ({}, info) => {
-  const bodies: Record<string, unknown>[] = [];
+test('界面配置渠道与默认模型，明暗主题及重启保留', async ({}, info) => {
   const upstream = createServer((request, response) => {
     if (request.method === 'GET') {
       response.setHeader('Content-Type', 'application/json');
@@ -20,22 +19,20 @@ test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对�
       body += chunk;
     });
     request.on('end', () => {
-      const payload = JSON.parse(body) as Record<string, unknown>;
-      bodies.push(payload);
-      const tool = !!payload.tools;
+      const payload = JSON.parse(body) as { tools?: unknown };
       response.writeHead(200, { 'Content-Type': 'text/event-stream' });
       const events = [
         {
           id: 'chat_1',
           choices: [
-            { index: 0, delta: { role: 'assistant', content: '模拟回复：' }, finish_reason: null },
+            {
+              index: 0,
+              delta: { role: 'assistant', content: '文本链路正常。' },
+              finish_reason: null,
+            },
           ],
         },
-        {
-          id: 'chat_1',
-          choices: [{ index: 0, delta: { content: '文本链路正常。' }, finish_reason: null }],
-        },
-        ...(tool
+        ...(payload.tools
           ? [
               {
                 id: 'chat_1',
@@ -60,7 +57,7 @@ test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对�
           : []),
         {
           id: 'chat_1',
-          choices: [{ index: 0, delta: {}, finish_reason: tool ? 'tool_calls' : 'stop' }],
+          choices: [{ index: 0, delta: {}, finish_reason: payload.tools ? 'tool_calls' : 'stop' }],
           usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
         },
       ];
@@ -141,22 +138,10 @@ test('界面配置渠道、拉取及测试模型，明暗模式多轮文本对�
       ).toBe(true);
       await page.getByRole('tab', { name: '模型服务' }).click();
       await page.getByRole('button', { name: '关闭', exact: true }).click();
-      await page.getByRole('link', { name: '模型测试' }).click();
-      await expect(page.getByRole('tab', { name: '文本', exact: true })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      );
-      await expect(page.getByLabel('文本模型')).toHaveValue(/\S+/);
-      await page.getByLabel('测试消息').fill('你好');
-      await page.getByRole('button', { name: '发送', exact: true }).click();
-      await expect(page.getByText('模拟回复：文本链路正常。')).toBeVisible();
-      await expect(page.getByRole('status')).toContainText('总计 15');
-      await page.getByLabel('测试消息').fill('再来一轮');
-      await page.getByRole('button', { name: '发送', exact: true }).click();
-      await expect(page.getByText('模拟回复：文本链路正常。')).toHaveCount(2);
-      const messages = bodies.at(-1)?.messages as { role: string }[];
-      expect(messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
-      await page.screenshot({ path: info.outputPath(`model-lab-${source}.png`) });
+      await expect(page.getByRole('link', { name: '模型测试' })).toHaveCount(0);
+      await page.getByRole('link', { name: '画布测试' }).click();
+      await expect(page.getByRole('region', { name: '画布编辑区' })).toBeVisible();
+      await page.screenshot({ path: info.outputPath(`canvas-lab-${source}.png`) });
       await page.getByRole('button', { name: '设置中心' }).click();
       await page.getByRole('button', { name: '设置', exact: true }).click();
       await page.getByRole('tab', { name: '模型服务' }).click();

@@ -49,6 +49,12 @@ function setup(initialFailure?: Error) {
     request(path, schema, init) {
       calls.push({ path, body: init?.body, method: init?.method });
       if (failure) return Promise.reject(failure);
+      if (path === '/channels') return Promise.resolve(schema.parse([]));
+      if (path === '/channel-models') return Promise.resolve(schema.parse([]));
+      if (path === '/model-defaults')
+        return Promise.resolve(schema.parse({ chat: null, image: null, video: null, tts: null }));
+      if (path === '/model-profiles' || path === '/generation-jobs')
+        return Promise.resolve(schema.parse([]));
       return Promise.resolve(schema.parse(init?.method ? { revision: 1 } : record));
     },
     stream() {

@@ -4,6 +4,7 @@ import {
   NodeResizer,
   Position,
   useConnection,
+  useStore,
   useUpdateNodeInternals,
 } from '@xyflow/react';
 import { Film, ImageIcon, Loader2, Lock } from 'lucide-react';
@@ -20,6 +21,8 @@ import {
 import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
 import { activeVersion, GROUP_COLORS, VIDEO_MODES } from './media';
 import { checkConnection } from '../registry/connections';
+import { GenerationPanel } from './generation-panel';
+import { generationModel } from './generation-inputs';
 
 const portClass: Record<string, string> = {
   image: 'canvas-port-image',
@@ -32,10 +35,12 @@ function Ports({
   nodeId,
   inputs,
   outputs,
+  disabledInputs = [],
 }: {
   nodeId: string;
   inputs: readonly InputPort[];
   outputs: readonly OutputPort[];
+  disabledInputs?: readonly string[];
 }) {
   const update = useUpdateNodeInternals();
   const { registry, store } = useCanvas();
@@ -50,8 +55,13 @@ function Ports({
     }).ok;
   };
   const key = inputs.map((port) => port.id).join();
+  const previousKey = useRef(key);
   // 端口随视频方式增减时，xyflow 需要重新测量端口位置。
-  useEffect(() => update(nodeId), [key, nodeId, update]);
+  useEffect(() => {
+    if (previousKey.current === key) return;
+    previousKey.current = key;
+    update(nodeId);
+  }, [key, nodeId, update]);
   return (
     <>
       {inputs.map((port, index) => (
@@ -59,13 +69,19 @@ function Ports({
           key={port.id}
           id={port.id}
           type="target"
+          isConnectable={!disabledInputs.includes(port.id)}
           position={Position.Left}
-          title={`${port.label}（接受 ${port.accepts.map((kind) => kindName[kind]).join('、')}）`}
+          title={
+            disabledInputs.includes(port.id)
+              ? `${port.label}（当前模型不支持）`
+              : `${port.label}（接受 ${port.accepts.map((kind) => kindName[kind]).join('、')}）`
+          }
           aria-label={port.label}
           className={cn(
             'canvas-port',
             portClass[port.accepts[0]],
-            incompatible(port.id, 'target') && 'canvas-port-incompatible',
+            (disabledInputs.includes(port.id) || incompatible(port.id, 'target')) &&
+              'canvas-port-incompatible',
           )}
           style={{ top: `${((index + 1) / (inputs.length + 1)) * 100}%` }}
         >
@@ -180,6 +196,16 @@ function MediaFrame({
     (state) => state.document.edges.filter((edge) => edge.target === node.id).length,
   );
   const edgeDisplay = useCanvasState((state) => state.view.edgeDisplay);
+  const { host } = useCanvas();
+  const Generation = host.generation?.Panel ?? GenerationPanel;
+  const readable = useStore((state) => state.transform[2] >= 0.4);
+  const profile = useCanvasState(
+    (state) => generationModel(state.generationConfig, kind, node.data.modelId)?.profile,
+  );
+  const disabledInputs =
+    profile?.constraints.flatMap((rule) =>
+      Object.keys(rule.when).length === 0 ? (rule.forbidRoles ?? []) : [],
+    ) ?? [];
   return (
     <div className="flex size-full flex-col">
       <div className="absolute -top-7 right-0 left-0 flex items-center justify-between gap-2">
@@ -206,13 +232,26 @@ function MediaFrame({
       {toolbar}
       <div
         className={cn(
-          'canvas-node-card relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-card',
+          'canvas-node-card relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card',
           selected && 'canvas-node-selected',
         )}
       >
-        {children}
+        <div className="relative min-h-0 flex-1 overflow-hidden">{children}</div>
+        {Generation && (readable || selected) && (
+          <div className="nodrag nopan nowheel max-h-[60%] overflow-y-auto">
+            <Generation nodeId={node.id} kind={kind} data={node.data} />
+          </div>
+        )}
+        {!host.generation && (
+          <div className="p-2 text-xs text-muted-foreground">生成能力尚未接入</div>
+        )}
       </div>
-      <Ports nodeId={node.id} inputs={registry.inputs(node)} outputs={registry.outputs(node)} />
+      <Ports
+        nodeId={node.id}
+        inputs={registry.inputs(node)}
+        outputs={registry.outputs(node)}
+        disabledInputs={disabledInputs}
+      />
     </div>
   );
 }
@@ -276,6 +315,9 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
   // 悬停优先，其次选中的第一个视频；整张画布最多挂载一个预览播放器。
   const play = !!version && active;
   const mode = props.node.data.mode ?? 'text';
+  const profile = useCanvasState(
+    (state) => generationModel(state.generationConfig, 'video', props.node.data.modelId)?.profile,
+  );
   const setMode = (next: CanvasVideoMode) => {
     if (next === mode) return;
     const state = store.getState();
@@ -308,7 +350,9 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
           aria-label="生成方式"
           className="nodrag nopan absolute -bottom-9 left-1/2 flex -translate-x-1/2 gap-0.5 rounded-lg border bg-popover p-0.5 shadow-canvas-panel"
         >
-          {VIDEO_MODES.map((item) => (
+          {VIDEO_MODES.filter(
+            (item) => !profile || profile.modes.some((mode) => mode.id === item.id),
+          ).map((item) => (
             <button
               key={item.id}
               type="button"

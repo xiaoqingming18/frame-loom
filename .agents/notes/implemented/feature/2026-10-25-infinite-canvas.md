@@ -1,14 +1,14 @@
 # Agent Note: 无限画布（独立包、节点注册表、类型化连线）
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
-Frame Loom 的创作流程（参考图 → 图片 → 视频，以及后续的文本、音频、导演台、视频剪辑）需要一个无限画布：节点承载素材和生成位，连线表达"谁是谁的参考"。现在 renderer 只有静态页面和临时的模型测试页，没有任何画布能力。
+Frame Loom 的创作流程（参考图 → 图片 → 视频，以及后续的文本、音频、导演台、视频剪辑）需要一个无限画布：节点承载素材和生成位，连线表达"谁是谁的参考"。引入画布前，renderer 只有静态页面和临时的模型测试页，无法保存和组织这类创作关系。
 
 需求与约束：
 
-- 画布以后与项目管理联动，但项目管理尚未实现。画布功能与界面要放在一个独立 package 中，主工程左栏新增「画布测试」菜单和页面供人工验收。
+- 画布以后与项目管理联动，但项目管理尚未实现。画布功能与界面位于独立 package，主工程左栏提供「画布测试」菜单和页面供人工验收。
 - 首期节点为图片与视频；架构要能低成本新增文本、音频、导演台、视频剪辑等节点。
 - 节点之间可以连线，连线必须做类型校验（图片不能连到只收音频的端口等）。视频节点按三种生成方式（文生视频、首尾帧、参考生视频）决定可用端口，连线本身不带角色。
 - 底部操作栏提供新增节点、指针、框选、抓手等工具；支持按住空格平移、复制粘贴、滚轮缩放等快捷键。
@@ -16,13 +16,13 @@ Frame Loom 的创作流程（参考图 → 图片 → 视频，以及后续的�
 - 画布必须使用现有主题系统：颜色只来自 `apps/desktop/src/renderer/src/styles/theme.css`，跟随 `prefers-color-scheme`，明暗两种模式都要检查（[UI 规范](../../../../docs/ui-guidelines.md)）。
 - 视觉风格参考 `docs/design/canvas-ui-light.html` 快照；其底部操作栏元素与本篇不同时以本篇为准。
 - 现有约束：
-  - engine 退出时主进程调用 `webContents.reload()` 整页重载，这是[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)明确标注的捷径，引入可编辑业务页面时必须改为类型化事件。画布是第一个这样的页面。
-  - 默认应用菜单在生产包中仍保留重载、开发者工具与页面缩放快捷键（[主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)），会与画布快捷键冲突，Ctrl+R 还会丢失未保存内容。
-  - 生产 CSP 的 `img-src`／`media-src` 只允许 `'self'` 与 `frame-media:`，不允许 `blob:`；媒体按 sha256 由 `POST /media` 落盘、经 `frame-media://` 读取（[模型管理](../architecture/2026-10-24-model-management.md)）。
+  - 原有 engine 退出重载页面的捷径会丢失编辑状态；画布作为第一个可编辑业务页面，将其替换为类型化事件，边界见[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)。
+  - 原有默认应用菜单的重载、开发者工具与页面缩放快捷键会与画布冲突；主进程移除默认菜单，保留开发环境专用的开发者工具入口（[主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)）。
+  - 生产 CSP 的 `img-src`／`media-src` 只允许 `'self'` 与 `frame-media:`，不允许 `blob:`；媒体按 sha256 由 `POST /media` 落盘、经 `frame-media://` 读取（[模型管理](../../proposed/architecture/2026-10-24-model-management.md)）。
   - shadcn 组件位于 `apps/desktop/src/renderer/src/components/ui`，独立包不能反向导入 app。
   - 窗口最小 720×560，减去 260px 侧栏后画布最窄约 460px。
 
-## Proposal
+## Decision
 
 ### 调研依据
 
@@ -53,13 +53,13 @@ packages/canvas/                  @frame-loom/canvas
     interaction/  工具状态机、快捷键层、剪贴板、拖入文件
     components/   CanvasEditor、BottomDock、TopRightBar、MiniMap、AddNodeMenu、
                   GroupNode、ContextMenu、EmptyHint
-    nodes/        image/、video/：视图、data schema、端口声明
+    nodes/        图片／视频／分组视图、data schema、端口声明、生成与版本回写
     host.ts       CanvasHost 宿主接口
     styles.css    --xy-* 到主题 token 的映射与画布专用样式
 apps/desktop/src/renderer/src/features/canvas-lab/   宿主实现与测试页
 ```
 
-- **`packages/ui`**：P0 用纯迁移把 `components/ui/*` 与 `lib/utils.ts` 的 `cn` 移入，desktop 改为从 `@frame-loom/ui/...` 导入；包内也用包名自引用，`components.json` 随包迁移，沿用 shadcn monorepo 约定。`theme.css` 留在 desktop：主进程窗口背景测试直接解析它，画布包只使用语义类与 `var(--…)`。
+- **`packages/ui`**：包含从 desktop 纯迁移的 `components/ui/*` 与 `lib/utils.ts` 的 `cn`，desktop 从 `@frame-loom/ui/...` 导入；包内也用包名自引用，`components.json` 随包迁移，沿用 shadcn monorepo 约定。`theme.css` 留在 desktop：主进程窗口背景测试直接解析它，画布包只使用语义类与 `var(--…)`。
 - **以源码形式导出**：两个包的 `exports` 指向 `src`，由 desktop 的 electron-vite 编译 TSX 和 CSS，不单独产出 `dist`；desktop `globals.css` 增加 `@source` 指向两个包的 `src`，并导入 `@frame-loom/canvas/styles.css`。每个包自带 `typecheck`（Bundler、DOM、`react-jsx`）和 vitest（canvas 用 jsdom）。
 - **依赖方向**：`apps/desktop` → `@frame-loom/canvas` → `@frame-loom/ui`、`@frame-loom/contracts`。画布包 never 导入 desktop、engine client、TanStack Router 或 Query；需要的能力由宿主注入：
 
@@ -74,7 +74,7 @@ apps/desktop/src/renderer/src/features/canvas-lab/   宿主实现与测试页
       save(id: string, revision: number, document: CanvasDocument): Promise<{ revision: number }>;
       saveView(id: string, view: CanvasView): Promise<void>;
     };
-    generation?: CanvasGenerationHost; // P5 接入
+    generation?: CanvasGenerationHost; // 由宿主提供模型配置和任务接口
   }
   ```
 
@@ -118,8 +118,8 @@ type CanvasView = { viewport: { x: number; y: number; zoom: number }; minimap: b
     prompt: string;
     mode?: 'text' | 'frames' | 'reference'; // 仅视频
     inputOrder: string[];        // 多参考的顺序，元素为边 id
-    modelId?: string; params?: Record<string, string | number | boolean>; // P5
-    pendingJobId?: string;       // P5
+    modelId?: string; params?: Record<string, string | number | boolean>;
+    pendingJobId?: string;       // 重新打开画布时补查任务
   }
   ```
 
@@ -129,9 +129,9 @@ type CanvasView = { viewport: { x: number; y: number; zoom: number }; minimap: b
 
 ### 节点注册表与连线校验
 
-03 的实现边界：`defineNodeType` 保留数据类型推导，`NodeRegistry` 集中声明与查询端口；未注册、版本不匹配或 data 无效的节点显示占位并禁连线。`migrate` 当前只定义演进接口，尚无旧版本数据迁移。所有编辑提交在 store 检查节点数、边数和 UTF-8 文档体积；命令错误提示并返回 false，保留原文档和历史。剪贴板先校验内置 data、父子顺序与边 id，再按注册表校验内部连线；建节点并自动连线合并为一步撤销。
+注册表的实现边界：`defineNodeType` 保留数据类型推导，`NodeRegistry` 集中声明与查询端口；未注册、版本不匹配或 data 无效的节点显示占位并禁连线。`migrate` 当前只定义演进接口，尚无旧版本数据迁移。所有编辑提交在 store 检查节点数、边数和 UTF-8 文档体积；命令错误提示并返回 false，保留原文档和历史。剪贴板先校验内置 data、父子顺序与边 id，再按注册表校验内部连线；建节点并自动连线合并为一步撤销。
 
-上传任务及取消／重试状态只存在内存，占位节点不进入文档或撤销栈；媒体上传成功才提交一次建节点操作。视频封面通过已上传媒体抽帧，`frame-media` 启用 CORS 并仅返回当前可信 renderer origin，不反射外部 Origin，不放宽生产 CSP。代价是每次编辑需要序列化文档做体积检查，大规模拖拽性能待总体验收；抽帧失败仍可导入无封面的视频节点。
+上传任务及取消／重试状态只存在内存，占位节点不进入文档或撤销栈；媒体上传成功才提交一次建节点操作。视频封面通过已上传媒体抽帧，`frame-media` 启用 CORS 并仅返回当前可信 renderer origin，不反射外部 Origin，不放宽生产 CSP。代价是每次编辑需要序列化文档做体积检查；本机 500 节点性能证据与未覆盖负载见下文，抽帧失败仍可导入无封面的视频节点。
 
 ```ts
 defineNodeType({
@@ -149,17 +149,17 @@ defineNodeType({
 
 | 节点与方式 | 输入端口 | accepts | max |
 | --- | --- | --- | --- |
-| 图片 | `reference` | image | 按档案；P5 前为 16 |
+| 图片 | `reference` | image | 结构上限 16；生成前按档案校验 |
 | 视频 · 文生视频 `text` | 无媒体输入（文本节点出现后增加 `prompt` 口） | — | — |
 | 视频 · 首尾帧 `frames` | `first_frame`、`last_frame` | image | 各 1 |
-| 视频 · 参考生视频 `reference` | `reference` | image、video、audio | 按档案；P5 前为 16 |
+| 视频 · 参考生视频 `reference` | `reference` | image、video、audio | 结构上限 16；生成前按档案校验 |
 
 - 视频方式 id 与现有视频档案的模式 id（`text`／`frames`／`reference`）一致。生成时，连线映射为 `GenerationInput`：`role` 取目标端口 id（`reference`／`first_frame`／`last_frame`），`kind` 取源节点输出的数据类型，`sha256` 取源节点当前版本。图片节点有参考时按参考图模式生成，否则按文生图。
 - 校验分三层：
   1. **数据类型**（连线时阻止）：源输出类型必须在目标端口的 `accepts` 中。逻辑集中在 `<ReactFlow isValidConnection>`；拖线过程中不兼容的端口变灰，松手后给出中文原因。
   2. **结构规则**（连线时阻止）：禁止自连、重复边和成环（沿 source→target 检测），端口条数不得超过 `max`，分组节点不参与连线，空节点（没有版本）可以连线。
   3. **模型能力**（允许连线，生成前拦截）：数量上限、参考视频和音频需要对象存储、首尾帧与全模态参考互斥等，复用 `checkGenerationRequest`，在节点上提示。连线后用户仍可能换模型或模式，因此不在连线时拦截。
-- **切换视频生成方式**：自动删除不再兼容的连线，切换与删除合并为一步撤销，并提示断开了几条。P5 接入模型后，方式切换按档案收窄（只有首帧的档案禁用尾帧端口，不支持的方式隐藏）。
+- **切换视频生成方式**：自动删除不再兼容的连线，切换与删除合并为一步撤销，并提示断开了几条。方式切换按档案收窄（只有首帧的档案禁用尾帧端口，不支持的方式隐藏）。
 - **交互**：拖线到空白处松手，在落点弹出按兼容类型过滤的添加菜单，选中后自动连线；拖动已有连线的端点可重连；选中连线按 Delete 删除。节点的参考栏显示输入并可拖动调整 `inputOrder`。
 - 端口和连线按数据类型着色，同时配图标，不只靠颜色区分。
 
@@ -196,7 +196,7 @@ defineNodeType({
 - **连线显示**：全部／仅选中相关／隐藏。隐藏只影响渲染，不删除参考关系；拖线和悬停时临时显示，节点角标显示参考数量。
 - **小地图**：右上角，xyflow `MiniMap`，可拖动、可缩放、点击定位，节点按类型 token 着色；画布宽度低于阈值时自动收起。节点达到上千时再评估换成 Canvas 绘制。
 
-04 的交付边界：
+组织操作的边界：
 
 - 选中分组或无选区时，先整理作用域内组的直接成员并收紧组框，再整理顶层；选中子节点时仅整理该父级下的选区。锁定组及其成员不参与整理与重新归属。标题排序使用数字感知比较；创建顺序在当前文档中以数组顺序表示，手动置顶置底后随层级顺序变化，未增加创建时间字段。组框始终低于普通节点，同层级顺序由文档数组驱动显式 zIndex。
 - 分组顶部留白 72px，分别容纳组标题和媒体框外标题；颜色单选支持方向键、Home／End，画布快捷键放行单选控件的按键。调整尺寸的结束事件即使不带尺寸也结束事务，尺寸与位置先更新后统一提交，保证一步撤销。
@@ -206,7 +206,7 @@ defineNodeType({
 
 - 只导入 `@xyflow/react/dist/base.css`，在 `packages/canvas/src/styles.css` 中把 `--xy-*` 映射到语义 token：连线 `border-strong`、选中 `brand`、节点底 `card`、选区 `brand` 加透明度、小地图底 `popover`。不使用 `colorMode` 与 `.dark` 类，跟随现有 `prefers-color-scheme`。
 - 画布页铺满主区且不滚动：路由切到画布时，外壳去掉 `<main>` 的 `canvas-grid` 与 `overflow-y-auto`；背景用 xyflow `<Background variant="dots" gap={24}>`，点色取 `--dot`，点阵随平移缩放移动。
-- `theme.css` 新增并明暗成对定义：4 个端口数据类型色、8 个分组色、连线警告色、小地图遮罩，以及参考稿中的浮动栏、右上工具组、节点卡片三组阴影。暗色值按现有暗色 token 推算，实现后需目检确认。
+- `theme.css` 明暗成对定义：4 个端口数据类型色、8 个分组色、连线警告色、小地图遮罩，以及参考稿中的浮动栏、右上工具组、节点卡片三组阴影。暗色值沿用现有暗色 token 的关系，开发版与加固 exe 均已目检。
 - 视觉参照 `docs/design/canvas-ui-light.html`：浮动栏 12px 圆角、6px 内边距，按钮 36×36、8px 圆角、18px 图标，分隔线 1×20；右上工具组 8px 圆角、4px 内边距、12px 文字与 16px 图标；节点卡片 1px 描边、8px 圆角；主按钮用 `primary`，当前工具用 `accent-active`；空画布居中提示「双击画布　自由生成节点」和「按住 Space 拖拽画布，滚轮缩放画布」（键帽样式），有节点后隐藏。主色、底色、点色与间距一律使用项目 token（`brand`、`canvas`、`dot`、24px 点阵），不照搬参考稿色值。
 - 所有按钮使用 `@frame-loom/ui` 的 Button，提供中文可访问名称，Tooltip 写明快捷键；xyflow 的读屏文案经 `ariaLabelConfig` 改成中文。
 
@@ -228,25 +228,30 @@ defineNodeType({
 ### 撤销重做
 
 - 历史保存整份文档快照（不可变更新天然共享未改动的节点），上限 100 步。拖拽、缩放尺寸、批量整理各合并为一步；选择、视口、视图状态、尺寸测量不进历史。
-- 生成任务回写（P5）作为系统事务直接写入当前文档和所有历史快照中的同一节点，不形成撤销步骤；手动切换版本计入撤销。
+- 生成任务回写作为系统事务直接写入当前文档和所有历史快照中的同一节点，不形成撤销步骤；手动切换版本计入撤销。
 - 外部重新加载文档（409 后）清空历史。
 
 ### engine 退出与应用菜单（P0）
 
 - 主进程不再在 engine 退出时重载页面，改为向可信窗口发送 `engine:exited { code }`；preload 暴露 `onEngineExited(callback)` 并返回取消订阅函数，renderer 只经 `lib/desktop-bridge.ts` 订阅。外壳收到事件后使健康查询失效并显示错误圆点；engine client 后续请求得到中文错误。画布保留内存中的文档，保存状态显示失败，可导出 JSON。
-- 移除默认应用菜单，生产包不再响应 Ctrl+R、开发者工具和页面缩放快捷键；开发模式保留开发者工具。页面级缩放（Ctrl+滚轮、触控板捏合）在主进程锁定，具体手段实测后写回本篇。
+- 移除默认应用菜单，生产包不再响应默认菜单的 Ctrl+R、开发者工具和页面缩放快捷键；开发模式保留开发者工具。主进程通过 `setVisualZoomLevelLimits(1, 1)` 锁定页面视觉缩放，画布滚轮与快捷键只更新画布视口。
 
-### 节点内生成（P5）
+### 节点内生成
+
+- 06 实施约束：生成配置由宿主一次加载，整张画布共用一条 SSE 与活动任务轮询；同步运行时挂在编辑器根部，扫描当前文档及历史快照中的任务，不能依赖可见节点组件的生命周期。成功产物使用现有媒体版本结构及系统事务写回，重复事件不重复追加；提交结果不明保留任务引用并显示计费提示，不自动重提。删除、剪切共用确认入口，只有明确选择放弃任务才调用 cancel。参数、版本选择和输入顺序存节点，临时请求状态不落盘。
 
 - 图片和视频节点内置生成区：提示词、模型（按类别筛选已启用模型）、视频生成方式、档案参数；提交 `POST /generation-jobs`，`source: 'canvas'`，`inputs` 由连线按上文映射，`modelId` 与参数保存在节点 `data`。
 - 提交后节点写入 `pendingJobId`；SSE `generation.job.updated` 与活动任务定时查询驱动刷新。任务成功后把产物追加为新版本并设为当前版本，清除 `pendingJobId`。画布未打开时完成的任务，在下次打开时根据 `pendingJobId` 查询并补写。
 - 删除生成中的节点时提示「远端可能仍在运行并计费」，提供同时放弃任务的选项，复用现有 cancel。
-- P5 验收通过后，按[模型管理](../architecture/2026-10-24-model-management.md)约定删除模型测试页的路由、feature 与侧栏入口，engine 接口保留。
+- 按[模型管理](../../proposed/architecture/2026-10-24-model-management.md)约定删除模型测试页的路由、feature 与侧栏入口，engine 接口保留；图片／视频生成由画布节点承接，文本与 TTS 的业务界面不在本次范围内。
 
 ### 视频与图片性能
 
 - 视频节点默认只显示封面图；悬停或选中时才挂载 `<video preload="metadata" muted>`，同一时刻只播放一个。封面由前端抽取：seek 到首帧，绘制到 canvas，toBlob 后上传 `/media`，sha256 存入 `posterSha256`。
-- 图片使用 `decoding="async"`、`loading="lazy"`。节点数超过 50 时开启 `onlyRenderVisibleElements`；节点内一切持久状态放在 store，组件卸载不得丢失数据。
+- 图片使用 `decoding="async"`、`loading="lazy"`。节点数超过 50 且缩放不低于 40% 时开启 `onlyRenderVisibleElements`；全览时保留轻量节点，避免平移与滚轮缩放时反复挂载边缘节点。节点内一切持久状态放在 store，组件卸载不得丢失数据。
+- 缩放低于 40% 时，未选中的节点不挂载生成表单；选中节点仍可编辑。500 节点全览时同时挂载数百份不可读表单会产生长帧，因此低缩放优先展示素材与端口；任务同步仍由编辑器根部负责。
+- 端口首次挂载使用 xyflow 自带测量，仅在端口集合改变时主动重新测量，避免视口裁剪反复挂载节点时触发重复布局。
+- 节点鼠标事件、小地图节点样式与点击事件使用稳定回调，避免视口保存触发父组件更新时使全部可见节点和小地图节点重新渲染；开发模式的 500 节点验收同时观察长帧，不能用生产包结果代替。
 - 缩略图服务暂不实现：大量 4K 原图同时解码会占内存，作为 `shortcut:` 注明，实测出现内存压力时再由 engine 生成缩略图。
 
 ### 其他交互
@@ -255,28 +260,15 @@ defineNodeType({
 - 窄窗口：画布宽度不足时底部操作栏收起次要按钮、小地图自动收起；画布页可以折叠侧栏。
 - 删除节点不删除 media 文件，孤儿媒体清理留给项目管理阶段。
 
-### 实施阶段
-
-P0–P4 已落地；P5 的节点内生成、模型测试页删除与整体人工验收尚未完成，本篇保持 proposed，整体验收后再转 implemented。
-
-| 阶段 | 内容 |
-| --- | --- |
-| P0 预备 | engine 退出改类型化事件；移除默认菜单并锁定页面缩放；抽出 `packages/ui` |
-| P1 骨架 | 画布包、xyflow、token 映射、`/canvas-lab` 路由与侧栏「画布测试」、背景、缩放、小地图、底部操作栏与右上工具组、工具状态机、快捷键层 |
-| P2 节点与连线 | 注册表；图片、视频节点（上传、拖入、粘贴、封面、三种视频方式）；三层校验中的前两层；连线显示；删除；复制粘贴；撤销重做 |
-| P3 组织 | 分组与解组、入组出组、四种整理、右键菜单、锁定与层级、导出导入 |
-| P4 持久化 | engine `modules/canvas`、迁移、409、自动保存、视图状态 |
-| P5 节点内生成 | 生成区、连线映射、版本写回、补写、删除时的任务处理、第三层校验；删除模型测试页 |
-
 ### 相关笔记核对
 
-- [桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)、[应用骨架](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)：部分重叠。engine 退出的重载捷径由本篇 P0 替换为类型化事件，preload 增加一个订阅方法；进程模型与鉴权边界不变。P0 落地时原地同步两篇的退出行为与 preload 方法列表。
-- [engine 与 renderer 基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)：部分重叠。该篇的"renderer 不拆 `packages/ui`"理由是没有第二个使用者，画布包成为第二个使用者；"Zustand、`@xyflow/react` 到首个需要它的功能再引入"由本篇兑现。落地时原地同步目录与延后项事实，不改写其决定。
+- [桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)、[应用骨架](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)：部分重叠。engine 退出的重载捷径由类型化事件替换，preload 增加一个订阅方法；进程模型与鉴权边界不变。两篇的退出行为与 preload 方法列表已原地同步。
+- [engine 与 renderer 基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)：部分重叠。该篇的"renderer 不拆 `packages/ui`"理由是没有第二个使用者，画布包成为第二个使用者；"Zustand、`@xyflow/react` 到首个需要它的功能再引入"由本篇兑现。目录与延后项事实已原地同步，不改写其决定。
 - [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)：部分重叠。新增画布 token、侧栏「画布测试」、默认菜单移除；同步该篇对默认菜单快捷键的后果描述。
-- [lint 与格式化](../../implemented/process/2026-10-24-lint-and-format.md)：部分重叠。renderer 规则扩展到两个新包并增加包级导入边界，落地时原地同步。
-- [模型管理](../architecture/2026-10-24-model-management.md)：部分重叠。复用 `/media`、`frame-media://`、生成任务与档案；模型测试页的删除条件由本篇 P5 触发。
+- [lint 与格式化](../../implemented/process/2026-10-24-lint-and-format.md)：部分重叠。renderer 规则扩展到两个新包并增加包级导入边界，相关事实已原地同步。
+- [模型管理](../../proposed/architecture/2026-10-24-model-management.md)：部分重叠。复用 `/media`、`frame-media://`、生成任务与档案；模型测试页按本篇的迁移边界删除，真实供应商与 NSIS 验收仍由该篇持有。
 - [共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)：部分重叠，新增 `canvas.ts` 与 `engine:exited` 事件载荷，契约约定不变。
-- [Agent 内核选型](../architecture/2026-10-24-agent-runtime-pi.md)：相关但不重叠；本篇只保证画布修改走命名命令，Agent 工具另行设计。
+- [Agent 内核选型](../../proposed/architecture/2026-10-24-agent-runtime-pi.md)：相关但不重叠；本篇只保证画布修改走命名命令，Agent 工具另行设计。
 - 其余流程类笔记无关。
 
 ## Alternatives considered
@@ -298,9 +290,11 @@ P0–P4 已落地；P5 的节点内生成、模型测试页删除与整体人工
 - **导入 JSON 时追加节点并重写 id** — 最强理由：保留当前画布，可以把多个文件拼在一起。不选：这里的整份 JSON 用于备份恢复和保存失败后的救援，替换能保留原 id、分组和层级；通过一步撤销恢复替换前的内容，跨画布追加继续使用已有复制粘贴。
 - **小地图首期用 Canvas 自绘（MiniMax 的做法）** — 最强理由：上万节点时仍流畅。不选：首期上限 2000 节点，xyflow 自带的 SVG `MiniMap` 已支持拖动、缩放和按类型着色；实测卡顿时再换。
 
-## Acceptance criteria
+## Testing
 
-自动测试，进入 `pnpm test` 与 CI：
+自动测试覆盖以下边界，2026-10-26 全仓串行单测 449 项通过（contracts 101、engine 148、canvas 66、desktop 134）：
+
+最终完整桌面 e2e 12 项通过，另检查 51 节点全览保留／高缩放裁剪与参数滚动不缩放画布。类型、lint、格式、构建及笔记／计划校验通过；失败试次与复测结果均留在 `.cache/canvas-06/`。
 
 1. contracts：`CanvasDocument`、`CanvasView` 合法与非法输入，上限与父子顺序校验。
 2. 画布包单测：
@@ -311,9 +305,9 @@ P0–P4 已落地；P5 的节点内生成、模型测试页删除与整体人工
    - 剪贴板：前缀与 MIME 往返、非法与超限内容被拒绝。
 3. engine 集成（真实 SQLite）：创建、读取、revision 递增、409 冲突、上限与内置类型 `data` 校验、视图保存不改 revision。
 4. desktop：`engine:exited` 事件只发往可信窗口、preload 剥离原始事件并可取消订阅；engine 退出后页面不重载、画布内容保留。
-5. 桌面 e2e：打开「画布测试」，上传图片建节点，图片连到视频「首尾帧」的首帧口成功、连到「文生视频」被拒绝；切换方式断开连线并可撤销；保存后重启应用内容与视口保留。P5 另覆盖模拟供应商下的图片生成与图片作首帧生成视频，并写回为新版本。
+5. 桌面 e2e：打开「画布测试」，上传图片建节点，图片连到视频「首尾帧」的首帧口成功、连到「文生视频」被拒绝；切换方式断开连线并可撤销；保存后重启应用内容与视口保留。另覆盖模拟供应商下的图片生成与图片作首帧生成视频，并写回为新版本。
 
-人工验收（开发环境与加固 exe，明暗两种模式）：
+人工验收于 2026-10-26 在开发环境与加固 win-unpacked exe 中完成，明暗两种模式均检查；原生资源管理器拖拽由用户确认两环境成功，其余交互、输入法、剪贴板、最小窗口与引擎故障导出有本机记录。详细截图、JSON 与日志位于 `.cache/canvas-06/acceptance.md`，不把该目录作为分发资源。
 
 1. 底部操作栏、右上工具组、小地图和空画布提示符合参考稿风格，颜色全部跟随主题。
 2. 空格平移、滚轮缩放、三种工具、全部快捷键可用；中文输入法在节点输入框内组字不会误删节点或平移。
@@ -323,13 +317,13 @@ P0–P4 已落地；P5 的节点内生成、模型测试页删除与整体人工
 6. 720×560 最小窗口下操作栏与小地图不遮挡、不溢出；键盘焦点可见。
 7. 结束 engine 进程后页面不重载、提示错误，画布可导出 JSON。
 
-## Risks
+## Consequences
 
-- **xyflow 行为细节**：空格平移在 textarea 中的表现、触控板捏合以 Ctrl+wheel 到达、`onlyRenderVisibleElements` 卸载节点、父节点排序要求，都需要 P1／P2 实测；不符合时调整配置或在快捷键层处理，必要时记入本篇。
-- **页面缩放锁定**：Electron 对 Ctrl+滚轮与捏合缩放的拦截手段需要实测，若只能部分锁定，需在画布内吞掉对应事件并记录残余行为。
-- **抽取 `packages/ui`**：纯迁移会改动 desktop 约 20 处导入、ESLint 与 Tailwind 的扫描路径以及 shadcn CLI 配置；漏扫类名会导致生产样式缺失，需构建后对比页面。
-- **视频资源**：大量视频节点受 Chromium 媒体播放器上限和解码内存约束；按需挂载失效时会黑屏或崩溃，验收第 5 项兜底。
-- **文档体积**：首期整份文档保存，节点多时每次保存都传输完整 JSON；超过上限或保存耗时明显时，再改为命令增量写入。
-- **版本写回与撤销交织**：系统事务改写历史快照，若遗漏会导致撤销后结果"消失"，需要单测覆盖。
-- **暗色阴影与新增 token 值**为推算值，需设计确认。
-- **回滚**：各阶段分开提交，可单独 revert；`canvas_documents` 迁移一旦分发不重写，回退时新增反向迁移。
+- **收益与代价**：独立画布包与共享 UI 避免在项目管理中复制编辑器；代价是宿主接口、主题 token 和包边界需要共同维护。节点参数与版本持久化，SSE 加轮询可补写离屏及历史节点；系统事务必须同时覆盖当前、撤销、重做和进行中的拖拽快照，相关单测防止撤销后产物消失。
+- **性能验证边界**：固定 500 节点（50 视频），复用同一 256×256 PNG 与短视频，每主题 60 次平移／滚轮操作，先 100% 再全览。全新开发进程明暗 P95 为 16.8／16.9ms，采样堆约 35–96MiB 并回落；最终加固 exe 的明暗 P95 均为 16.8ms，采样堆约 17–54MiB 并回落，播放器最多一个。开发版切到全览有 383–450ms 的孤立长帧，加固版最大帧间隔为 83.2／66.7ms；不承诺全程零长帧，也不把结果外推到独立 4K 素材或 2000 节点。
+- **开发会话**：反复热更新和多轮验收的长期开发进程曾出现明显长帧，保留原始失败记录；最终性能数字来自全新进程。后续若正常长时间使用也出现相同停顿，应以连续会话重新剖析，不以重启代替修复。
+- **资源上限**：全览保留轻量节点可避免裁剪反复挂载，但会同时保留所有节点的 DOM。图片仍直读原图，视频按需挂载；大量独立 4K 图片解码的内存压力未验证，出现压力时由 engine 生成缩略图。
+- **文档体积**：整份 JSON 保存、100 步快照和系统事务保持实现简单；文档受 2000 节点、4000 边、8MiB 上限约束，保存或历史补写耗时明显时重访增量写入。
+- **媒体与导出**：删除节点不删除媒体；JSON 只包含 hash 引用，不打包媒体，跨机器恢复需要另行迁移素材。两环境的 engine 进程退出后，页面标记和节点保留，真实导出文件均可解析。
+- **范围边界**：真实供应商、对象存储账号与模型管理 NSIS 整体验收属于[模型管理](../../proposed/architecture/2026-10-24-model-management.md)，不以模拟供应商的画布 e2e 替代。未新增文本／音频业务节点、缩略图服务或 Agent 工具层。
+- **回滚**：代码按独立逻辑变化回退；`canvas_documents` 迁移一旦分发不重写，回退时新增反向迁移。

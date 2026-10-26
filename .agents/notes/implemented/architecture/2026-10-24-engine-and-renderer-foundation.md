@@ -112,7 +112,7 @@ apps/desktop/src/renderer/src/
 ```
 
 - 应用外壳（标题栏、侧栏、主画布、设置中心弹窗）放在 `app/shell/`，由 `app` 层组合多个 feature，避免 feature 互相导入。主题 token、外壳布局和设置中心的具体规则见[主题系统与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
-- shadcn 组件与 `cn()` 位于工作区包 `packages/ui`（`@frame-loom/ui/components/<name>`、`@frame-loom/ui/lib/utils`），以源码导出；拆包取舍见下方备选与[无限画布](../../proposed/feature/2026-10-25-infinite-canvas.md)。工作区包不能导入 `apps/*`。
+- shadcn 组件与 `cn()` 位于工作区包 `packages/ui`（`@frame-loom/ui/components/<name>`、`@frame-loom/ui/lib/utils`），以源码导出；拆包取舍见下方备选与[无限画布](../feature/2026-10-25-infinite-canvas.md)。工作区包不能导入 `apps/*`。
 - 依赖方向固定为 `lib`、`@frame-loom/ui` → `features` → `routes`、`app`。feature 之间不能互相导入，renderer 不能导入 main、preload 或 engine。规则由 ESLint 检查（见 [lint 与格式化](../../implemented/process/2026-10-24-lint-and-format.md)）。
 - 路由使用 `createHashHistory()`。初始化时将空 hash 归一为 `#/`，保留已有 hash 路径与查询参数。路径在 `#` 之后，重载始终请求 `/`，`rendererFile` 和协议处理函数不改。
 - 路由文件只负责：用 zod 校验 params 和 search、在 loader 中调用 `ensureQueryData`、把 `component` 指向 feature。

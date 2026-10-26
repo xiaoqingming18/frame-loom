@@ -6,7 +6,7 @@ import type {
 } from '@frame-loom/contracts';
 import type { InputPort, OutputPort } from '../registry/registry';
 
-/** P5 接入模型档案前的参考数量上限，生成前再按档案收紧。 */
+/** 图结构允许的参考数量上限，生成前再按模型档案收紧。 */
 export const DEFAULT_REFERENCE_MAX = 16;
 
 export const VIDEO_MODES: { id: CanvasVideoMode; label: string }[] = [

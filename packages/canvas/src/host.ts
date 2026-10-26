@@ -4,17 +4,32 @@ import type {
   CanvasMediaData,
   CanvasRecord,
   CanvasView,
+  GenerationJob,
+  GenerationRequest,
   MediaFile,
+  ModelProfile,
 } from '@frame-loom/contracts';
 
-/** 节点内生成需要的宿主能力；P5 由 desktop 用 engine client 实现。 */
+export interface CanvasGenerationModel {
+  id: string;
+  label: string;
+  kind: 'image' | 'video';
+  profile: ModelProfile | null;
+}
+
+export interface CanvasGenerationConfig {
+  models: CanvasGenerationModel[];
+  storageReady: boolean;
+}
+
+/** 宿主负责模型配置与任务通信，画布负责输入映射、编辑与结果写回。 */
 export interface CanvasGenerationHost {
-  /** 渲染节点内生成面板；返回 null 表示该节点暂不支持生成。 */
-  Panel?: ComponentType<{
-    nodeId: string;
-    kind: 'image' | 'video';
-    data: CanvasMediaData;
-  }>;
+  Panel?: ComponentType<{ nodeId: string; kind: 'image' | 'video'; data: CanvasMediaData }>;
+  load(signal: AbortSignal): Promise<CanvasGenerationConfig>;
+  create(request: GenerationRequest): Promise<GenerationJob>;
+  get(id: string, signal: AbortSignal): Promise<GenerationJob>;
+  cancel(id: string): Promise<GenerationJob>;
+  subscribe(changed: (jobId: string) => void, signal: AbortSignal): void;
 }
 
 /** 画布包对外部世界的全部依赖，由宿主注入；画布包不直接访问 engine 或路由。 */

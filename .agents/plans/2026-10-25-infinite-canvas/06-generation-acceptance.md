@@ -1,6 +1,6 @@
 # Plan: 节点内生成与验收
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -15,25 +15,37 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 `CanvasGenerationHost` 与节点生成区 — 验证：组件测试覆盖请求映射与版本写回
-- [ ] T2 e2e：模拟供应商下生成图片、图片作首帧生成视频 — 验证：e2e 通过
-- [ ] T3 删除模型测试页并迁移仍需要的测试 — 验证：`pnpm lint`、`pnpm test` 通过
-- [ ] T4 人工验收 7 项（开发环境与加固 exe，明暗模式）— 验证：截图与记录保存在 `.cache/`
-- [ ] T5 收尾：笔记转入 `implemented/feature/`，同步相关笔记与 `docs/ui-guidelines.md`，计划转 `done` — 验证：`pnpm run verify` 通过
+- [x] T1 `CanvasGenerationHost` 与节点生成区 — 验证：组件测试覆盖请求映射与版本写回
+- [x] T2 e2e：模拟供应商下生成图片、图片作首帧生成视频 — 验证：e2e 通过
+- [x] T3 删除模型测试页并迁移仍需要的测试 — 验证：`pnpm lint`、`pnpm test` 通过
+- [x] T4 人工验收 7 项（开发环境与加固 exe，明暗模式）— 验证：截图与记录保存在 `.cache/canvas-06/`；原生资源管理器拖拽由用户确认两环境成功，性能与未覆盖负载见验证边界
+- [x] T5 收尾：笔记转入 `implemented/feature/`，同步相关笔记与 `docs/ui-guidelines.md`，计划转 `done` — 验证：`pnpm run verify` 通过
 
 ## 验证
 
 - 预期：全仓门禁、e2e 与人工验收通过。
-- 实际：未执行。
+- 实际：
+  - `pnpm -r --workspace-concurrency=1 test --maxWorkers=1`：449 项通过（contracts 101、engine 148、canvas 66、desktop 134）；运行时测试替身修正 lint 后另行重跑通过。
+  - `pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm run verify`、`git diff --check`、desktop production build 与 Windows x64 加固目录构建通过。
+  - `pnpm --filter @frame-loom/desktop test:e2e`：最终完整 12 项通过（1.3 分钟），见 `.cache/canvas-06/e2e-verified.log`。包含图片生成、首帧视频生成、版本重启保留、参数滚动不缩放画布，以及 51 节点低缩放保留／高缩放裁剪回归。
+  - 开发版与加固 exe 的明暗模式均检查：基础界面、快捷键与工具、系统图片与节点剪贴板、分组整理与小地图、原生中文上屏、720×560 与 Tab 焦点、engine 退出后不重载和真实 JSON 导出。资源管理器原生拖拽在 2026-10-26 由用户明确确认两环境成功。
+  - 固定 500 节点（其中 50 视频），复用同一 256×256 PNG 与短视频；每主题重置 100% 后切全览，共 60 次平移／滚轮操作。全新开发进程明暗 P95=16.8／16.9ms，加固版均为 16.8ms；堆内存均回落。开发版切到全览存在 383–450ms 孤立长帧，未验证独立 4K 素材、2000 节点和任意时长会话。
+  - 证据：`.cache/canvas-06/acceptance.md`、`dev-clean-start-performance.json`、`exe-clean-final-performance.json`、`clipboard-results.json`、`minimum-final.json`、`*-ime-final-*.json`、`engine-exited-final.json`、截图与命令日志。
 
 ## 进度
 
 - 2026-10-25：创建子计划草稿。
+- 2026-10-26：完成 T1–T3；生成运行时在编辑器根部维护任务，覆盖历史补写与重复事件；图片／视频生成及重启保留 e2e 通过。T4 正在验收，低缩放时裁剪未选中节点表单以减少全览长帧。
+- 2026-10-26：T4 完成；两环境明暗交互、原生中文输入、剪贴板、最小窗口、故障导出均留证，用户确认原生拖入。固定负载的全新进程复测与最终加固构建通过，孤立长帧与热更新会话的性能偏差如实保留。正在执行最后一轮完整 e2e 并收尾 T5。
+- 2026-10-26：T5 完成；最终完整 12 项 e2e 通过，449 项单测、类型、lint、格式与笔记／计划校验通过。笔记迁入 implemented、相关入站链接与 UI 规范同步，父子计划转 done；未提交、推送或发布。
 
 ## 发现与偏差
 
-无。
+- 低于 40% 缩放时保留轻量节点，仅选中节点挂载表单；放大后恢复表单与视口裁剪，避免全览反复挂载边缘节点。节点与小地图事件回调保持稳定，端口仅在集合改变时主动重测；参数滚动使用 nowheel，与视口缩放分开。
+- 单个失效导入任务不再中断其他历史任务的补写查询；运行时回归覆盖此边界。
+- 保留失败验收记录：热更新和多轮操作的长期开发进程有长帧，最终性能数字只代表全新进程的固定负载；不会把真实供应商、独立 4K、2000 节点或 NSIS 安装验收写成已通过。
+- 完整 e2e 曾有窗口焦点干扰，分组用例也在最终缩放动画尚未结束时进入关闭保护并超时；独立诊断观察到页面已保存但确认弹窗仍在。该用例新增等待 100% 缩放与保存完成，立即关闭行为继续由专门的持久化用例覆盖；最终完整 12 项通过，失败日志保留。
 
 ## 交接
 
-等待 04、05 完成。
+无。

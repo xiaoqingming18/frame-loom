@@ -40,7 +40,7 @@ export type PendingConnection = {
 
 /** 画布编辑动作集合：底部栏、右上工具组、快捷键与右键菜单共用。 */
 export function useCanvasActions() {
-  const { store, registry } = useCanvas();
+  const { store, registry, host } = useCanvas();
   const flow = useReactFlow();
   const imports = useMediaImports();
   const paste = useRef({ count: 0, at: null as Point | null });
@@ -83,10 +83,31 @@ export function useCanvasActions() {
         if (ok) state().select([node.id]);
         return node.id;
       },
+      deleteItems(nodeIds: ReadonlySet<string>, edgeIds: ReadonlySet<string> = new Set()) {
+        const document = state().document;
+        if ([...nodeIds].some((id) => state().generationSubmitting.has(id))) {
+          state().notify('任务正在创建，请稍后删除节点');
+          return;
+        }
+        const jobs = document.nodes
+          .filter((node) => nodeIds.has(node.id) && !isNodeLocked(document, node))
+          .flatMap((node) => {
+            const id = (node.data as { pendingJobId?: string } | null)?.pendingJobId;
+            return id ? [id] : [];
+          });
+        if (jobs.length && window.confirm('远端可能仍在运行并计费，是否同时放弃生成任务？'))
+          for (const id of jobs)
+            void host.generation
+              ?.cancel(id)
+              .catch((error: unknown) =>
+                state().notify(error instanceof Error ? error.message : '放弃任务失败'),
+              );
+        run((current) => deleteElements(current, nodeIds, edgeIds));
+      },
       deleteSelection() {
         const { selectedNodes, selectedEdges } = state();
         if (!selectedNodes.size && !selectedEdges.size) return;
-        run((document) => deleteElements(document, selectedNodes, selectedEdges));
+        actions.deleteItems(selectedNodes, selectedEdges);
       },
       selectAll() {
         state().select(state().document.nodes.map((node) => node.id));
@@ -214,7 +235,7 @@ export function useCanvasActions() {
       },
     };
     return actions;
-  }, [flow, registry, store, imports, arrangeOrder]);
+  }, [flow, host, registry, store, imports, arrangeOrder]);
 }
 
 export type CanvasActionsApi = ReturnType<typeof useCanvasActions>;

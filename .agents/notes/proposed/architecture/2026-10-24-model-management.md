@@ -28,7 +28,7 @@ Status: proposed
 
 ### 当前实现边界
 
-01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型、四种文本协议的两步测试、设置中心的模型服务与模型测试页的文本对话。03 已实现图片档案与三种图片协议、持久化生成任务调度与恢复、sha256 媒体落盘、`frame-media://` 和图片测试页。04 已实现 ffprobe 预检、S3 兼容对象存储、三种视频协议、对象存储设置页和视频测试页；Windows x64 新版 NSIS 安装后 ffprobe 实测通过。05 已实现 OpenAI Speech 与 MiniMax T2A 适配器、音频媒体落盘和配音测试页；真实供应商冒烟、时间戳能力核对及 NSIS 人工验收仍待具备外部账号的环境执行。本篇保持 proposed，整体验收后再转 implemented。
+01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型和四种文本协议的两步测试。03 已实现图片档案与三种图片协议、持久化任务调度与恢复、sha256 媒体落盘和 `frame-media://`。04 已实现 ffprobe 预检、S3 兼容对象存储、三种视频协议和对象存储设置；Windows x64 新版 NSIS 安装后 ffprobe 实测通过。05 已实现 OpenAI Speech 与 MiniMax T2A 适配器和音频落盘。临时模型测试页已删除，图片／视频入口由画布承接，文本与 TTS 暂无业务界面。真实供应商冒烟、时间戳能力核对及 NSIS 人工验收仍待具备外部账号的环境执行，本篇保持 proposed。
 
 ### 调研依据
 
@@ -265,11 +265,10 @@ created_at, updated_at, finished_at
   - "模型服务"：列表只显示渠道；渠道编辑页包含密钥打码显示、测试、拉取后勾选模型，以及模型的类别、协议、档案、测试和覆盖项，渠道与模型一次保存。"默认模型"为独立页签。细节见[以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)。
   - "对象存储"：配置表单、连接测试、生命周期规则建议和隐私说明。
   - 两个页签都扩展 `settings-search.ts` 的页签枚举。
-- **左栏新增临时页面"模型测试"**：
-  - 路由 `/model-lab`，页面放在 `features/model-lab`，分文本、图片、视频、配音四个页签。
-  - 用户选择渠道模型后，页面按档案生成参数表单；上传参考素材并提交后，显示任务列表、实时状态、错误类别和产物预览。
-  - 该页面用于开发自测和人工验收。
-  - 删除条件：画布或首个业务生成入口完成验收后，删除路由、feature 与侧栏入口，engine 接口保留。
+- **生成入口迁移到画布**：
+  - 临时 `/model-lab` 路由、`features/model-lab` 与侧栏入口已按[无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)约定删除。
+  - 图片、视频在画布节点内选择模型、按档案填写参数、提交任务并预览版本；任务接口与媒体服务继续复用。
+  - 文本与 TTS 的临时测试界面随页面删除，engine 接口、适配器和测试保留；文本连接测试仍在模型设置内，尚无新的文本／配音业务界面。
 - 新增界面遵守[UI 规范](../../../../docs/ui-guidelines.md)，并检查明暗两种模式。
 
 ### 本期不做
@@ -346,7 +345,7 @@ created_at, updated_at, finished_at
 4. **密钥**：数据库文件、接口响应、stderr 日志中都搜不到测试用的明文 Key；调换两行的密文后解密失败；主密钥损坏时 engine 照常启动，并把渠道标为"需重新填写"。
 5. **SigV4 签名**：用 AWS 公布的测试向量验证签名实现。
 6. **文本模型**：用模拟的 Responses、Chat Completions、Anthropic Messages 流式服务，测试 `modules/llm` 的连通测试，判断工具调用和用量是否完整。grep 检查 pi-ai 只在 `modules/llm` 中被导入。
-7. **桌面 e2e**：在界面中添加一个指向模拟服务的渠道，测试通过；到"模型测试"页生成一张图片并显示预览。
+7. **桌面 e2e**：在界面中添加指向模拟服务的渠道并测试；在画布节点生成图片，再以图片作首帧生成视频，预览及重启后版本保留。
 
 真实接口冒烟，手动执行，不进 CI：
 
@@ -375,5 +374,5 @@ created_at, updated_at, finished_at
 - **pi API 变动快**：createProvider、compat 字段可能变化。缓解办法是精确锁版本、只在 `modules/llm` 中导入，升级单独提交并跑回归测试。
 - **主密钥的可用性**：safeStorage 依赖操作系统用户凭据。用户迁移系统或重装后，所有密钥都需要重新填写；这是有意的取舍，界面必须给出明确提示。
 - **SSE 推送丢事件**：连接断开期间会错过事件。renderer 重连后要重新拉取进行中的任务，不能只依赖事件。
-- **临时页面的去留**：模型测试页如果在画布完成后没有按约定删除，会成为长期维护负担，删除条件已写入本篇和计划。
+- **临时页面迁移边界**：模型测试页已删除，图片／视频生成由画布承接；真实文本／TTS 冒烟通过 engine 脚本执行，后续业务界面另行设计。
 - **回滚**：各阶段分开提交，可以单独 revert。迁移文件一旦分发，不重写；回退时新增反向迁移。

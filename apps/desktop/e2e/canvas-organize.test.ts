@@ -86,9 +86,9 @@ test('分组与整理：菜单、锁定、层级、JSON 往返与一步撤销', 
       const member = page.locator('.react-flow__node-image[data-id="n0"]');
       await editor.focus();
       await page.keyboard.press('Escape');
-      await member.click();
+      await member.click({ position: { x: 30, y: 25 } });
       const rect = (await member.boundingBox())!;
-      await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      await page.mouse.move(rect.x + rect.width / 2, rect.y + 25);
       await page.mouse.down();
       await page.mouse.move(x, y, { steps: 12 });
       await page.mouse.up();
@@ -230,6 +230,30 @@ test('分组与整理：菜单、锁定、层级、JSON 往返与一步撤销', 
       }
       await page.screenshot({ path: info.outputPath(`canvas-organize-minimum-${theme}.png`) });
     }
+    await input.setInputFiles({
+      name: 'overview.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(
+        JSON.stringify({
+          schemaVersion: 1,
+          nodes: Array.from({ length: 51 }, (_, index) => ({
+            ...imported.nodes[0],
+            id: `overview-${index}`,
+            position: { x: index * 600, y: 0 },
+          })),
+          edges: [],
+        }),
+      ),
+    });
+    await editor.focus();
+    await page.keyboard.press('Shift+1');
+    await expect(page.locator('.react-flow__node-image')).toHaveCount(51);
+    await expect(page.getByLabel('生成提示词')).toHaveCount(0);
+    await page.keyboard.press('Shift+0');
+    await expect.poll(() => page.locator('.react-flow__node-image').count()).toBeLessThan(51);
+    await expect.poll(() => page.getByLabel('生成提示词').count()).toBeGreaterThan(0);
+    await expect(page.locator('.react-flow__viewport')).toHaveAttribute('style', /scale\(1\)/);
+    await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
     expect(errors).toEqual([]);
   } finally {
     await app.close();

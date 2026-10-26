@@ -97,7 +97,7 @@ frame-loom/
 └─ pnpm-workspace.yaml
 ```
 
-- 包名：`@frame-loom/desktop`、`@frame-loom/engine`、`@frame-loom/contracts`、`@frame-loom/ui`。`@frame-loom/ui` 不单独构建，`exports` 指向 `src`，由 desktop 的 electron-vite 编译；拆包原因见[无限画布](../../proposed/feature/2026-10-25-infinite-canvas.md)。
+- 包名：`@frame-loom/desktop`、`@frame-loom/engine`、`@frame-loom/contracts`、`@frame-loom/ui`。`@frame-loom/ui` 不单独构建，`exports` 指向 `src`，由 desktop 的 electron-vite 编译；拆包原因见[无限画布](../feature/2026-10-25-infinite-canvas.md)。
 - 字段、校验边界和构建约定见[共享契约包](../../implemented/architecture/2026-10-24-shared-contracts.md)；服务启动、安全边界与部署见[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)；可信页面、生命周期和真实联调见[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)。本篇汇总整体骨架与分发约定，不取代三篇具体边界。
 - desktop 的运行时依赖全部由 electron-vite 打进产物，`dependencies` 保持为空，这样 electron-builder 不需要收集 pnpm 的 `node_modules`。
 - engine 用 `pnpm deploy --prod` 生成一个独立目录，作为 electron-builder 的 `extraResources` 放进安装包。打包后的路径是 `process.resourcesPath/engine`，开发模式下用 `apps/engine/dist`。
