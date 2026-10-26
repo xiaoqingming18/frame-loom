@@ -1,7 +1,7 @@
 export { HealthResponse } from './health.js';
 export { EngineConnection } from './engine-connection.js';
 export { ErrorResponse } from './error-response.js';
-export { ThemeSource, WindowCommand } from './desktop.js';
+export * from './desktop.js';
 export { EngineEvent } from './events.js';
 export * from './models.js';
 export * from './generation.js';
@@ -9,3 +9,4 @@ export * from './image-params.js';
 export * from './image-references.js';
 export * from './object-storage.js';
 export * from './canvas.js';
+export * from './projects.js';

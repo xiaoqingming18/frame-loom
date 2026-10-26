@@ -31,11 +31,11 @@ function openDatabase() {
 
 it('迁移创建 app_meta、schema 版本和迁移日志，并启用 WAL 与外键', () => {
   const { database } = openDatabase();
-  expect(database.getSchemaVersion()).toBe('1');
+  expect(database.getSchemaVersion()).toBe('2');
   expect(database.db.get(sql`PRAGMA journal_mode`)).toEqual({ journal_mode: 'wal' });
   expect(database.db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 });
   expect(database.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 6,
+    count: 7,
   });
 });
 
@@ -91,8 +91,44 @@ it('重复迁移不丢已有元数据且不重复执行，关闭后连接不可�
     value: '保留数据',
   });
   expect(reopened.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 6,
+    count: 7,
   });
+});
+
+it('从 0005 升级保留画布测试数据，新增注册表、复合视图键和可空任务归属', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'frame-loom-db-'));
+  directories.push(directory);
+  const legacy = join(directory, 'legacy-drizzle');
+  cpSync(fileURLToPath(new URL('drizzle/', packageRoot)), legacy, { recursive: true });
+  const journalPath = join(legacy, 'meta/_journal.json');
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries: unknown[] };
+  journal.entries = journal.entries.slice(0, 6);
+  writeFileSync(journalPath, JSON.stringify(journal));
+  mkdirSync(join(directory, 'data'));
+  const sqlite = new Database(join(directory, 'data/frame-loom.sqlite'));
+  migrate(drizzle(sqlite), { migrationsFolder: legacy });
+  sqlite.exec(`INSERT INTO canvas_documents VALUES ('lab', '画布测试', 1, 1, '{}', NULL, '', '')`);
+  sqlite.close();
+  const database = new DatabaseService(new EngineConfig('a'.repeat(64), directory, []));
+  databases.push(database);
+  expect(database.getSchemaVersion()).toBe('2');
+  expect(database.db.get(sql`SELECT title FROM canvas_documents WHERE id = 'lab'`)).toEqual({
+    title: '画布测试',
+  });
+  expect(
+    database.db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(generation_jobs)`),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: 'project_id', notnull: 0 }),
+      expect.objectContaining({ name: 'page_id', notnull: 0 }),
+    ]),
+  );
+  expect(database.db.all<{ name: string; pk: number }>(sql`PRAGMA table_info(page_views)`)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: 'project_id', pk: 1 }),
+      expect.objectContaining({ name: 'page_id', pk: 2 }),
+    ]),
+  );
 });
 
 it('数据库损坏时拒绝启动，关闭失败连接后仍可清理文件', () => {

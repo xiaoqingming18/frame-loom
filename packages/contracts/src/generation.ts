@@ -27,6 +27,8 @@ export const GenerationInput = z
   .refine((input) => !!input.sha256 !== !!input.dataUrl, '素材必须且只能提供哈希或内联数据');
 export type GenerationInput = z.infer<typeof GenerationInput>;
 export const GenerationRequest = z.strictObject({
+  projectId: z.string().uuid().optional(),
+  pageId: z.string().uuid().optional(),
   modelId: z.string().uuid(),
   mode: z.string().min(1).max(100),
   prompt: z.string().trim().min(1).max(32_000),

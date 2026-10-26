@@ -10,6 +10,8 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 
 ## Decision
 
+- 项目存储阶段新增 `projects.ts`：项目清单／页面文件保留未知顶层字段，版本上限为 1，名称与资产路径规则共用；`desktop.ts` 增加偏好（沿用 `theme`）和目录／项目 IPC 参数，`GenerationRequest` 增加可选项目与页面 id。新契约及现有请求兼容测试通过；资产／IPC 的运行时接入仍属于[项目库方案](../../proposed/feature/2026-10-26-project-library.md)的后续阶段。
+
 - `packages/contracts` 发布为私有 ESM workspace 包 `@frame-loom/contracts`，由 tsc 输出 `dist/index.js` 与 `.d.ts`；入口 `exports` 只有 `types`、`default`，分发文件只含 `dist`。相对导出写 `.js` 后缀。
 - `image-params.ts` 与 `image-references.ts` 提供图片语义参数常量／标签、尺寸换算、模型切换回退和提示词引用解析／替换纯函数；`ModelProfile.params[].notes` 是可选的取值说明，不参与生成请求校验。这些跨 engine 与画布的无 IO 规则仍由 contracts 持有，避免两端维护不同的尺寸或编号算法；完整交互与适配器改造见[画布图片节点](../feature/2026-10-26-canvas-image-node.md)。
 - 用 zod 定义同名的 schema 值和推导类型 `HealthResponse`、`EngineConnection`、`ErrorResponse`、`ThemeSource`、`WindowCommand`、`EngineEvent`。调用方使用 `parse` 检查外部数据，类型直接从 schema 推导。

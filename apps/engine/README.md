@@ -43,6 +43,17 @@ Invoke-RestMethod 'http://127.0.0.1:45678/health' -Headers @{ Authorization = "B
 
 参数校验按需使用 `ZodValidationPipe`，例如 `@Query(new ZodValidationPipe(schema))`；它返回 schema 解析后的值，使用中文默认校验消息。不注册全局 pipe。
 
+## 项目与创作页存储
+
+`modules/projects` 提供鉴权的项目／页面接口，契约见 `packages/contracts/src/projects.ts`，整体设计与尚未实现的阶段见[项目库方案](../../.agents/notes/proposed/feature/2026-10-26-project-library.md)。
+
+- `GET /projects` 返回注册表与 `available | missing | mismatch | unreadable | too_new` 状态；`POST /projects { name, location }` 在已存在的绝对位置下新建项目；`POST /projects/open { rootPath, asCopy?, name? }` 登记已有项目。复制目录的 id 若仍在可用原路径登记，返回 `PROJECT_ALREADY_REGISTERED`，可显式 `asCopy: true` 创建新 id，或用 `name` 解决库内重名。
+- `GET /projects/:id` 读取清单；`POST /projects/:id/relocate { rootPath }` 校验 id 后重新定位；`PATCH /projects/:id { name }` 只改显示名；`DELETE /projects/:id` 只删本机注册行和视图，不删项目目录。
+- `POST /projects/:id/pages { name }` 创建 revision 1 的空画布；页面 `GET`／`PUT`／`PATCH`／`DELETE` 路径为 `/projects/:id/pages/:pageId`。保存传 `{ revision, document }`，成功返回新 revision；过期 revision 或外部修改返回 409 `PAGE_REVISION_CONFLICT`，需重新加载。重命名传 `{ name }`；删除移入 `.frameloom/trash/pages/`。
+- `PUT /projects/:id/pages/:pageId/view` 接受 `CanvasView`，只写 SQLite 的本机视图，页面 GET 返回文件内容与 `view`。文件夹清单、页面 JSON 是事实来源；SQLite 注册表可通过打开项目重建。
+
+内部 JSON 经项目串行队列写入 `.frameloom/tmp/`，fsync 后 rename，遇 EPERM／EBUSY 最多退避重试 2 秒。清单保留未知字段。页面保存先写页面再写清单，下次读页面修复摘要；多文件操作不是事务。媒体／资产接口、30 天回收区清理、系统回收站和桌面界面尚未接入；旧画布测试仍可用。
+
 ## 主进程对接
 
 engine 不导入 Electron。存在 `process.parentPort` 时，通过 `postMessage({ type: 'ready', port })` 上报端口；主进程使用 `child.postMessage({ type: 'shutdown' })` 请求退出。普通 Node 则从 stdout 读取 ready。SIGTERM、SIGINT 与 shutdown 都关闭 HTTP 和数据库。utilityProcess 不会在清空 Node 句柄后自动退出，因此有 parentPort 时在完成资源关闭后显式结束进程，启动失败以 1 退出；普通 Node 维持自然退出。首次骨架不自动重启服务。

@@ -43,6 +43,13 @@
       "when": 1792942927507,
       "tag": "0005_third_the_call",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793026131449,
+      "tag": "0006_same_squirrel_girl",
+      "breakpoints": true
     }
   ]
 }

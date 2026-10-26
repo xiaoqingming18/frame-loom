@@ -12,6 +12,8 @@ export const generationJobs = sqliteTable(
   'generation_jobs',
   {
     id: text('id').primaryKey(),
+    projectId: text('project_id'),
+    pageId: text('page_id'),
     kind: text('kind').$type<'image' | 'video' | 'tts'>().notNull(),
     // 不设级联删除：删除渠道后仍保留任务与产物，恢复时明确报配置不存在。
     channelModelId: text('channel_model_id').notNull(),
@@ -35,7 +37,10 @@ export const generationJobs = sqliteTable(
     updatedAt: text('updated_at').notNull(),
     finishedAt: text('finished_at'),
   },
-  (table) => [index('generation_jobs_schedule').on(table.status, table.nextPollAt)],
+  (table) => [
+    index('generation_jobs_schedule').on(table.status, table.nextPollAt),
+    index('generation_jobs_project_page').on(table.projectId, table.pageId),
+  ],
 );
 
 export const mediaFiles = sqliteTable('media_files', {
