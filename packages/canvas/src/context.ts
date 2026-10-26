@@ -12,6 +12,10 @@ export interface CanvasContextValue {
 
 export const CanvasContext = createContext<CanvasContextValue | null>(null);
 
+export const NodeActionsContext = createContext<{
+  addConnected: (nodeId: string, screen: { x: number; y: number }) => void;
+} | null>(null);
+
 export function useCanvas(): CanvasContextValue {
   const value = useContext(CanvasContext);
   if (!value) throw new Error('画布组件必须位于 CanvasEditor 内');

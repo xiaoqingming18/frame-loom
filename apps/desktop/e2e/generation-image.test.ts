@@ -1,7 +1,7 @@
 import { expect, test, _electron, type ElectronApplication } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -129,13 +129,61 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     );
     await page.getByRole('menuitem', { name: '图片', exact: true }).click();
     await page.getByLabel('生成提示词').fill('一束暖光落在旧电影胶片上');
-    const parameters = page.locator('.react-flow__node-image .nowheel');
+    const composer = page.locator('.react-flow__node-toolbar > div');
+    const screenshots = resolve(desktop, '../../.cache/canvas-image-node');
+    await mkdir(screenshots, { recursive: true });
+    await page.getByRole('button', { name: '生成参数' }).click();
+    const parameters = page.getByRole('dialog', { name: '生成参数' });
     const viewport = await page.locator('.react-flow__viewport').getAttribute('style');
     await parameters.hover();
     await page.mouse.wheel(0, 300);
-    await expect.poll(() => parameters.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
     expect(await page.locator('.react-flow__viewport').getAttribute('style')).toBe(viewport);
-    await page.getByLabel('生成数量').selectOption('3');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: '生成数量' }).click();
+    await page.getByRole('button', { name: '×3', exact: true }).click();
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+      await expect(page.locator('body')).toHaveCSS(
+        'background-color',
+        theme === 'dark' ? 'rgb(13, 13, 15)' : 'rgb(246, 247, 249)',
+      );
+      await expect
+        .poll(async () => {
+          const box = await composer.boundingBox();
+          const viewport =
+            page.viewportSize() ??
+            (await page.evaluate(() => ({ width: innerWidth, height: innerHeight })));
+          const canvasBounds = (await editor.boundingBox())!;
+          return (
+            !!box &&
+            box.x >= canvasBounds.x &&
+            box.y >= canvasBounds.y &&
+            box.x + box.width <= viewport.width &&
+            box.y + box.height <= viewport.height
+          );
+        })
+        .toBe(true);
+      await page.screenshot({
+        path: join(screenshots, `composer-small-${theme}.png`),
+        animations: 'disabled',
+      });
+      await page.getByRole('button', { name: '生成参数' }).click();
+      await expect(parameters).toBeVisible();
+      const bounds = (await parameters.boundingBox())!;
+      const windowSize = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.y).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(windowSize.width);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(windowSize.height);
+      await page.screenshot({
+        path: join(screenshots, `params-small-${theme}.png`),
+        animations: 'disabled',
+      });
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('button', { name: '生成参数' })).toBeFocused();
+    }
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1500, 960));
     await page.getByRole('button', { name: '生成图片', exact: true }).click();
     const preview = page.locator('.react-flow__node-image img');
     await expect(preview).toBeVisible();
@@ -146,9 +194,9 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
           .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
       )
       .toBe(256);
-    await expect(page.getByLabel('当前版本').locator('option')).toHaveCount(2);
+    await expect(page.getByLabel('当前版本')).toContainText('/2');
     await page.getByRole('button', { name: /重试任务/ }).click();
-    await expect(page.getByLabel('当前版本').locator('option')).toHaveCount(3);
+    await expect(page.getByLabel('当前版本')).toContainText('/3');
     expect(imageRequests).toHaveLength(4);
     expect(JSON.parse(imageRequests[0])).toMatchObject({
       model: 'gpt-image-1',
@@ -166,8 +214,9 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       page.locator('.react-flow__node-image [data-handleid="out"]'),
       videoNode.locator('[data-handleid="first_frame"]'),
     );
-    await videoNode.getByLabel('生成提示词').fill('让这束暖光缓慢掠过胶片');
-    await videoNode.getByRole('button', { name: '生成视频', exact: true }).click();
+    await videoNode.click();
+    await page.getByLabel('生成提示词').fill('让这束暖光缓慢掠过胶片');
+    await page.getByRole('button', { name: '生成视频', exact: true }).click();
     const previewVideo = videoNode.locator('video');
     await expect(previewVideo).toBeVisible();
     await expect

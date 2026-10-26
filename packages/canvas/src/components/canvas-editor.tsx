@@ -39,7 +39,7 @@ import {
 } from '@frame-loom/ui/components/dropdown-menu';
 import { TooltipProvider } from '@frame-loom/ui/components/tooltip';
 import { cn } from '@frame-loom/ui/lib/utils';
-import { CanvasContext, useCanvas, useCanvasState } from '../context';
+import { CanvasContext, NodeActionsContext, useCanvas, useCanvasState } from '../context';
 import type { CanvasHost } from '../host';
 import {
   CanvasCommandError,
@@ -530,7 +530,7 @@ function Editor({ className }: { className?: string }) {
     (id) => document.nodes.find((node) => node.id === id)?.locked,
   );
 
-  return (
+  const content = (
     <div
       ref={root}
       role="region"
@@ -780,6 +780,21 @@ function Editor({ className }: { className?: string }) {
         )}
       </PointMenu>
     </div>
+  );
+  return (
+    <NodeActionsContext.Provider
+      value={{
+        addConnected: (nodeId, screen) =>
+          setMenu({
+            kind: 'add',
+            screen,
+            flow: flow.screenToFlowPosition(screen),
+            pending: { nodeId, handleId: 'out', handleType: 'source' },
+          }),
+      }}
+    >
+      {content}
+    </NodeActionsContext.Provider>
   );
 }
 

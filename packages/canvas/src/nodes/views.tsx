@@ -1,17 +1,27 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Handle,
   NodeResizer,
+  NodeToolbar,
   Position,
   useConnection,
   useStore,
   useUpdateNodeInternals,
 } from '@xyflow/react';
-import { Film, ImageIcon, Loader2, Lock } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Film,
+  ImageIcon,
+  Loader2,
+  Lock,
+  Plus,
+  Upload,
+} from 'lucide-react';
 import type { CanvasGroupData, CanvasMediaData, CanvasVideoMode } from '@frame-loom/contracts';
 import { cn } from '@frame-loom/ui/lib/utils';
 import { Button } from '@frame-loom/ui/components/button';
-import { useCanvas, useCanvasState } from '../context';
+import { NodeActionsContext, useCanvas, useCanvasState } from '../context';
 import {
   changeDataDroppingEdges,
   isNodeLocked,
@@ -19,7 +29,9 @@ import {
   updateNode,
 } from '../commands/commands';
 import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
-import { activeVersion, GROUP_COLORS, VIDEO_MODES } from './media';
+import { activeVersion, appendVersion, GROUP_COLORS, VIDEO_MODES } from './media';
+import { importMedia } from '../interaction/media-import';
+import { GenerationStatus } from './generation-status';
 import { checkConnection } from '../registry/connections';
 import { GenerationPanel } from './generation-panel';
 import { generationModel } from './generation-inputs';
@@ -30,6 +42,76 @@ const portClass: Record<string, string> = {
   audio: 'canvas-port-audio',
   text: 'canvas-port-text',
 };
+
+/** NodeToolbar 保持屏幕尺寸；节点靠近边缘时只挪动输入框，不改变画布视口。 */
+function ComposerToolbar({
+  children,
+  offset,
+  nodeId,
+}: {
+  children: ReactNode;
+  offset: number;
+  nodeId: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const transform = useStore((state) => state.transform);
+  const position = useStore((state) => state.nodeLookup?.get(nodeId)?.internals.positionAbsolute);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const place = () => {
+      element.style.translate = '';
+      const canvas = element.closest('[aria-label="画布编辑区"]')?.getBoundingClientRect();
+      // 留出画布右上工具组与底部操作栏，避免它们遮挡输入框控件。
+      const bounds = {
+        left: canvas?.left ?? 0,
+        top: canvas ? canvas.top + 64 : 0,
+        right: canvas?.right ?? window.innerWidth,
+        bottom: canvas ? canvas.bottom - 80 : window.innerHeight,
+        width: canvas?.width ?? window.innerWidth,
+      };
+      element.style.width = `${Math.min(620, bounds.width - 32)}px`;
+      element.style.maxHeight = `${Math.max(120, bounds.bottom - bounds.top - 32)}px`;
+      const rect = element.getBoundingClientRect();
+      const x = Math.max(bounds.left + 16 - rect.left, Math.min(0, bounds.right - 16 - rect.right));
+      const node = window.document.querySelector(
+        `.react-flow__node[data-id="${CSS.escape(nodeId)}"]`,
+      );
+      const nodeTop = node?.getBoundingClientRect().top ?? rect.top;
+      const above = nodeTop - 56 - offset - rect.height;
+      const preferredTop =
+        rect.bottom > bounds.bottom - 16
+          ? above >= bounds.top + 16
+            ? above
+            : Math.max(bounds.top + 16, nodeTop + 16)
+          : rect.top;
+      const y =
+        Math.max(bounds.top + 16, Math.min(preferredTop, bounds.bottom - 16 - rect.height)) -
+        rect.top;
+      element.style.translate = `${x}px ${y}px`;
+    };
+    place();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    observer?.observe(element);
+    const canvas = element.closest('[aria-label="画布编辑区"]');
+    if (canvas) observer?.observe(canvas);
+    window.addEventListener('resize', place);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', place);
+    };
+  }, [transform, position, nodeId, offset]);
+  return (
+    <NodeToolbar isVisible position={Position.Bottom} offset={offset}>
+      <div
+        ref={ref}
+        className="nowheel w-[min(620px,calc(100vw-32px))] overflow-y-auto rounded-2xl"
+      >
+        {children}
+      </div>
+    </NodeToolbar>
+  );
+}
 
 function Ports({
   nodeId,
@@ -189,7 +271,7 @@ function MediaFrame({
   children: ReactNode;
   toolbar?: ReactNode;
 }) {
-  const { registry } = useCanvas();
+  const { registry, store } = useCanvas();
   const definition = registry.get(node.type)!;
   const locked = useCanvasState((state) => isNodeLocked(state.document, node));
   const inputCount = useCanvasState(
@@ -198,7 +280,8 @@ function MediaFrame({
   const edgeDisplay = useCanvasState((state) => state.view.edgeDisplay);
   const { host } = useCanvas();
   const Generation = host.generation?.Panel ?? GenerationPanel;
-  const readable = useStore((state) => state.transform[2] >= 0.4);
+  const single = useCanvasState((state) => state.selectedNodes.size <= 1);
+  const nodeActions = useContext(NodeActionsContext);
   const profile = useCanvasState(
     (state) => generationModel(state.generationConfig, kind, node.data.modelId)?.profile,
   );
@@ -232,20 +315,79 @@ function MediaFrame({
       {toolbar}
       <div
         className={cn(
-          'canvas-node-card relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card',
+          'canvas-node-card group relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-card',
           selected && 'canvas-node-selected',
         )}
       >
-        <div className="relative min-h-0 flex-1 overflow-hidden">{children}</div>
-        {Generation && (readable || selected) && (
-          <div className="nodrag nopan nowheel max-h-[60%] overflow-y-auto">
-            <Generation nodeId={node.id} kind={kind} data={node.data} />
-          </div>
-        )}
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          {children}
+          <GenerationStatus nodeId={node.id} data={node.data} />
+          {node.data.versions.length > 1 && (
+            <div
+              aria-label="当前版本"
+              className="nodrag nopan absolute right-2 bottom-2 left-2 flex items-center justify-center gap-2 rounded-full border bg-card/95 p-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="上一版本"
+                disabled={locked || node.data.activeVersion === 0}
+                onClick={() =>
+                  store.getState().apply((document) =>
+                    updateData<CanvasMediaData>(document, node.id, (data) => ({
+                      ...data,
+                      activeVersion: data.activeVersion - 1,
+                    })),
+                  )
+                }
+              >
+                <ChevronLeft aria-hidden="true" className="size-4" />
+              </Button>
+              <span>
+                {node.data.activeVersion + 1}/{node.data.versions.length}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="下一版本"
+                disabled={locked || node.data.activeVersion === node.data.versions.length - 1}
+                onClick={() =>
+                  store.getState().apply((document) =>
+                    updateData<CanvasMediaData>(document, node.id, (data) => ({
+                      ...data,
+                      activeVersion: data.activeVersion + 1,
+                    })),
+                  )
+                }
+              >
+                <ChevronRight aria-hidden="true" className="size-4" />
+              </Button>
+            </div>
+          )}
+        </div>
         {!host.generation && (
           <div className="p-2 text-xs text-muted-foreground">生成能力尚未接入</div>
         )}
       </div>
+      {selected && single && (
+        <ComposerToolbar nodeId={node.id} offset={kind === 'video' ? 48 : 16}>
+          <Generation nodeId={node.id} kind={kind} data={node.data} />
+        </ComposerToolbar>
+      )}
+      {nodeActions && (
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="添加并连接"
+          disabled={locked}
+          className="nodrag nopan absolute top-1/2 -right-12 -translate-y-1/2 rounded-full bg-card"
+          onClick={(event) =>
+            nodeActions.addConnected(node.id, { x: event.clientX + 24, y: event.clientY })
+          }
+        >
+          <Plus aria-hidden="true" className="size-4" />
+        </Button>
+      )}
       <Ports
         nodeId={node.id}
         inputs={registry.inputs(node)}
@@ -272,11 +414,61 @@ function Empty({ kind, pending }: { kind: 'image' | 'video'; pending: boolean })
 }
 
 export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
-  const { host } = useCanvas();
+  const { host, store } = useCanvas();
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const locked = useCanvasState((state) => isNodeLocked(state.document, props.node));
   const version = activeVersion(props.node.data);
   // shortcut: 直接展示原图，实测出现大量 4K 图片解码内存压力时由 engine 生成缩略图。
   return (
-    <MediaFrame {...props} kind="image">
+    <MediaFrame
+      {...props}
+      kind="image"
+      toolbar={
+        props.selected &&
+        !version && (
+          <div className="nodrag nopan absolute -top-12 left-1/2 -translate-x-1/2">
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              aria-label="选择上传图片"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file || uploading || locked) return;
+                setUploading(true);
+                void importMedia(host, file)
+                  .then(({ version }) => {
+                    const current = store.getState();
+                    if (!current.document.nodes.some((node) => node.id === props.node.id)) return;
+                    current.apply((document) =>
+                      updateData<CanvasMediaData>(document, props.node.id, (data) =>
+                        appendVersion(data, version),
+                      ),
+                    );
+                  })
+                  .catch((error: unknown) =>
+                    store.getState().notify(error instanceof Error ? error.message : '上传失败'),
+                  )
+                  .finally(() => setUploading(false));
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={locked || uploading}
+              onClick={() => fileInput.current?.click()}
+              className="rounded-full bg-card"
+            >
+              <Upload aria-hidden="true" className="size-3.5" />
+              {uploading ? '正在上传…' : '上传图片'}
+            </Button>
+          </div>
+        )
+      }
+    >
       {version ? (
         <img
           src={host.media.url(version.sha256)}

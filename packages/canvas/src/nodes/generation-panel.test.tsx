@@ -6,16 +6,25 @@ import type { CanvasHost } from '../host';
 import { CanvasContext, useCanvasState } from '../context';
 import { createBuiltinRegistry } from './builtin';
 import { GenerationPanel } from './generation-panel';
+import { GenerationStatus } from './generation-status';
 import { createCanvasStore } from '../store/store';
 import { doc, edge, generationJob, media, sha } from '../test-utils';
 import { writeGenerationJob } from './generation-writeback';
 
 function Panel() {
   const data = useCanvasState((state) => state.document.nodes[1].data as CanvasMediaData);
-  return <GenerationPanel nodeId="target" kind="image" data={data} />;
+  return (
+    <>
+      <GenerationPanel nodeId="target" kind="image" data={data} />
+      <GenerationStatus nodeId="target" data={data} />
+    </>
+  );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const modelId = '22222222-2222-4222-8222-222222222222';
 const jobId = '33333333-3333-4333-8333-333333333333';
@@ -110,6 +119,143 @@ it('数量三张创建三个独立任务', async () => {
   expect(test.api.create).toHaveBeenCalledTimes(3);
 });
 
+it('数量弹层写入节点，参数按档案隐藏整组、置灰取值，显示摘要、角标和预计像素', () => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const test = setupPanel();
+  act(() =>
+    test.store.getState().setGenerationConfig({
+      storageReady: true,
+      models: [
+        {
+          id: modelId,
+          label: '图片模型',
+          kind: 'image',
+          profile: {
+            ...profile,
+            params: [
+              {
+                key: 'aspectRatio',
+                name: '比例',
+                type: 'enum',
+                values: ['1:1', '3:2', '2:3'],
+                default: '1:1',
+                mapped: true,
+              },
+              {
+                key: 'quality',
+                name: '画质',
+                type: 'enum',
+                values: ['low', 'medium', 'high'],
+                default: 'medium',
+                mapped: true,
+                notes: { high: '预览' },
+              },
+              {
+                key: 'background',
+                name: '背景',
+                type: 'enum',
+                values: ['auto', 'opaque'],
+                default: 'auto',
+                mapped: true,
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  expect(screen.getByRole('button', { name: '生成参数' }).textContent).toContain(
+    '1:1 · 中 · 自适应',
+  );
+  fireEvent.click(screen.getByRole('button', { name: '生成数量' }));
+  fireEvent.click(screen.getByRole('button', { name: '×4' }));
+  expect(test.data().count).toBe(4);
+  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
+  expect(screen.queryByRole('group', { name: '清晰度' })).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '比例 16:9' }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '背景 透明' }).disabled).toBe(true);
+  expect(screen.getByLabelText('预计像素').textContent).toBe('≈ 1024×1024');
+  expect(screen.getByText('预览')).toBeDefined();
+  fireEvent.click(screen.getByRole('radio', { name: '比例 3:2' }));
+  expect(test.data().params?.aspectRatio).toBe('3:2');
+  expect(screen.getByLabelText('预计像素').textContent).toBe('≈ 1536×1024');
+  fireEvent.keyDown(screen.getByRole('slider', { name: '画质' }), { key: 'End' });
+  expect(test.data().params?.quality).toBe('high');
+});
+
+it('提示词为空时发送按钮提供可读禁用原因，展开和字数同步', () => {
+  const test = setupPanel({ prompt: '' });
+  const send = screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' });
+  expect(send.disabled).toBe(true);
+  expect(document.getElementById(send.getAttribute('aria-describedby')!)?.textContent).toBe(
+    '请填写提示词',
+  );
+  fireEvent.click(screen.getByRole('button', { name: '展开提示词' }));
+  expect(screen.getByRole('button', { name: '收起提示词' }).getAttribute('aria-expanded')).toBe(
+    'true',
+  );
+  fireEvent.change(screen.getByRole('textbox', { name: '生成提示词' }), {
+    target: { value: '暖光' },
+  });
+  expect(test.data().prompt).toBe('暖光');
+  expect(screen.getByLabelText('提示词字数').textContent).toBe('2 字');
+  expect(send.disabled).toBe(false);
+});
+
+it('Gemini 清晰度分段禁用未声明的档位，不出现画质背景与虚构像素', () => {
+  const test = setupPanel();
+  act(() =>
+    test.store.getState().setGenerationConfig({
+      storageReady: true,
+      models: [
+        {
+          id: modelId,
+          label: 'Gemini',
+          kind: 'image',
+          profile: {
+            ...profile,
+            protocol: 'gemini-image',
+            params: [
+              {
+                key: 'aspectRatio',
+                name: '比例',
+                type: 'enum',
+                values: ['1:1', '16:9'],
+                default: '1:1',
+                mapped: true,
+              },
+              {
+                key: 'resolution',
+                name: '清晰度',
+                type: 'enum',
+                values: ['2K', '4K'],
+                default: '2K',
+                mapped: true,
+                notes: { '4K': '实验' },
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
+  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '清晰度 1K' }).disabled).toBe(true);
+  expect(screen.queryByRole('group', { name: '画质' })).toBeNull();
+  expect(screen.queryByRole('group', { name: '背景' })).toBeNull();
+  expect(screen.queryByLabelText('预计像素')).toBeNull();
+  expect(screen.getByText('实验')).toBeDefined();
+  fireEvent.click(screen.getByRole('radio', { name: '清晰度 4K' }));
+  expect(test.data().params?.resolution).toBe('4K');
+});
+
 it('失败单张重试只替换对应 id，同步历史；重试失败保留引用，放弃后可再次生成', async () => {
   const failed = generationJob({ status: 'failed', errorMessage: '供应商失败' });
   const pending = generationJob({ id: jobId, status: 'running' });
@@ -178,7 +324,8 @@ it.each([true, false])('切换模型按目标档案是否支持 21:9（%s）保�
       ],
     }),
   );
-  fireEvent.change(screen.getByLabelText('生成模型'), { target: { value: gemini } });
+  fireEvent.click(screen.getByRole('button', { name: '生成模型' }));
+  fireEvent.click(screen.getByRole('button', { name: /Gemini 2.5/ }));
   expect(test.data().params).toEqual({ aspectRatio: supported ? '21:9' : '16:9' });
   if (supported) expect(test.store.getState().notice).toBeNull();
   else expect(test.store.getState().notice?.text).toContain('21:9 → 16:9');

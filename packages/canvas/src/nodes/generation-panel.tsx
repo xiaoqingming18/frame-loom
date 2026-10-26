@@ -1,14 +1,11 @@
 import { useMemo } from 'react';
+import { GenerationComposer } from './generation-composer';
 import {
   checkGenerationRequest,
   resolveImageParams,
   type CanvasMediaData,
   type GenerationRequest,
 } from '@frame-loom/contracts';
-import { Button } from '@frame-loom/ui/components/button';
-import { Input } from '@frame-loom/ui/components/input';
-import { NativeSelect } from '@frame-loom/ui/components/native-select';
-import { Textarea } from '@frame-loom/ui/components/textarea';
 import { isNodeLocked, updateData } from '../commands/commands';
 import { useCanvas, useCanvasState } from '../context';
 import { generationInputs, generationModel } from './generation-inputs';
@@ -28,7 +25,6 @@ export function GenerationPanel({
   const configError = useCanvasState((state) => state.generationError);
   const document = useCanvasState((state) => state.document);
   const generating = useCanvasState((state) => state.generationSubmitting.has(nodeId));
-  const jobs = useCanvasState((state) => state.generationJobs);
   const pendingIds = data.pendingJobIds ?? [];
   const locked = useCanvasState((state) => {
     const node = state.document.nodes.find((item) => item.id === nodeId);
@@ -113,259 +109,53 @@ export function GenerationPanel({
     }
   }
 
-  async function retry(id: string) {
-    if (!api || locked || store.getState().generationSubmitting.has(nodeId)) return;
-    store.getState().setGenerationSubmitting(nodeId, true);
-    try {
-      const created = await api.resubmit(id);
-      store.getState().setGenerationJob(created);
-      store.getState().applySystem((document) =>
-        updateData<CanvasMediaData>(document, nodeId, (current) => ({
-          ...current,
-          pendingJobIds: current.pendingJobIds?.map((jobId) => (jobId === id ? created.id : jobId)),
-        })),
-      );
-      store.getState().applySystem((document) => writeGenerationJob(document, created));
-    } catch (error) {
-      store.getState().notify(error instanceof Error ? error.message : '重试任务失败');
-    } finally {
-      store.getState().setGenerationSubmitting(nodeId, false);
-    }
-  }
-
+  const disabledReason = [
+    locked && '节点已锁定',
+    generating && '正在提交任务',
+    pendingIds.length > 0 && '请等待当前任务结束或放弃任务',
+    !config && (configError ?? '正在读取模型档案…'),
+    !model &&
+      (data.modelId ? '原模型已不可用，请重新选择生成模型' : '请先在模型服务中启用生成模型'),
+    model && !profile && '此模型没有匹配的生成档案，无法提交任务',
+    !prompt.trim() && '请填写提示词',
+    storageMissing && '当前参考素材需要先配置对象存储',
+    missingInputs && '连线来源尚无可用媒体，请先生成或上传素材',
+    issues[0]?.message,
+  ].find((reason) => typeof reason === 'string');
   return (
-    <div className="nodrag nopan space-y-2 border-t bg-card p-2 text-xs">
-      {config ? (
-        <>
-          <NativeSelect
-            aria-label="生成模型"
-            disabled={locked}
-            value={model?.id ?? ''}
-            onChange={(event) => {
-              const next = options.find((item) => item.id === event.target.value);
-              const resolved =
-                kind === 'image' && next?.profile
-                  ? resolveImageParams(next.profile, {
-                      ...request?.params,
-                      ...data.params,
-                    })
-                  : { params: {}, changes: [] };
-              if (
-                setData((current) => ({
-                  ...current,
-                  modelId: event.target.value,
-                  params: resolved.params,
-                })) &&
-                resolved.changes.length
-              )
-                store
-                  .getState()
-                  .notify(
-                    `已按新模型调整：${resolved.changes.map((change) => change.message).join('；')}`,
-                  );
-            }}
-          >
-            <option value="">选择{kind === 'image' ? '图片' : '视频'}模型</option>
-            {options.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </NativeSelect>
-          <Textarea
-            aria-label="生成提示词"
-            disabled={locked}
-            value={prompt}
-            maxLength={profile?.protocol === 'minimax-video-v2' ? 7000 : 32000}
-            placeholder="描述画面…"
-            onChange={(event) => setData((current) => ({ ...current, prompt: event.target.value }))}
-          />
-          {profile?.params.map((param) => {
-            const value = data.params?.[param.key] ?? param.default;
-            return (
-              <label key={param.key} className="flex items-center justify-between gap-2">
-                <span className="shrink-0">{param.name}</span>
-                {param.type === 'enum' ? (
-                  <NativeSelect
-                    aria-label={param.name}
-                    className="w-auto min-w-0 flex-1"
-                    disabled={locked}
-                    value={String(value)}
-                    onChange={(event) => {
-                      const next =
-                        param.values?.find((item) => String(item) === event.target.value) ?? value;
-                      setData((current) => ({
-                        ...current,
-                        params: { ...current.params, [param.key]: next },
-                      }));
-                    }}
-                  >
-                    {param.values?.map((choice) => (
-                      <option key={String(choice)} value={String(choice)}>
-                        {String(choice)}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                ) : param.type === 'boolean' ? (
-                  <input
-                    aria-label={param.name}
-                    disabled={locked}
-                    type="checkbox"
-                    checked={value === true}
-                    onChange={(event) =>
-                      setData((current) => ({
-                        ...current,
-                        params: { ...current.params, [param.key]: event.target.checked },
-                      }))
-                    }
-                  />
-                ) : (
-                  <Input
-                    aria-label={param.name}
-                    className="w-auto min-w-0 flex-1"
-                    disabled={locked}
-                    type={param.type === 'number' ? 'number' : 'text'}
-                    min={param.min}
-                    max={param.max}
-                    value={String(value)}
-                    onChange={(event) =>
-                      setData((current) => ({
-                        ...current,
-                        params: {
-                          ...current.params,
-                          [param.key]:
-                            param.type === 'number'
-                              ? Number(event.target.value)
-                              : event.target.value,
-                        },
-                      }))
-                    }
-                  />
-                )}
-              </label>
+    <GenerationComposer
+      nodeId={nodeId}
+      kind={kind}
+      data={data}
+      model={model}
+      options={options}
+      params={request?.params ?? {}}
+      inputs={inputs}
+      locked={locked}
+      countDisabled={locked || generating || !!pendingIds.length}
+      disabledReason={disabledReason}
+      onGenerate={() => void generate()}
+      onPrompt={(prompt) => setData((current) => ({ ...current, prompt }))}
+      onCount={(count) => setData((current) => ({ ...current, count }))}
+      onParam={(key, value) =>
+        setData((current) => ({ ...current, params: { ...request?.params, [key]: value } }))
+      }
+      onModel={(id) => {
+        const next = options.find((item) => item.id === id);
+        const resolved =
+          kind === 'image' && next?.profile
+            ? resolveImageParams(next.profile, { ...request?.params, ...data.params })
+            : { params: {}, changes: [] };
+        if (
+          setData((current) => ({ ...current, modelId: id, params: resolved.params })) &&
+          resolved.changes.length
+        )
+          store
+            .getState()
+            .notify(
+              `已按新模型调整：${resolved.changes.map((change) => change.message).join('；')}`,
             );
-          })}
-          {issues.map((issue, index) => (
-            <p key={`${issue.field}-${index}`} className="text-muted-foreground">
-              {issue.message}
-            </p>
-          ))}
-          {model && !profile && <p>此模型没有匹配的生成档案，无法提交任务</p>}
-          {data.modelId && !model && <p>原模型已不可用，请重新选择生成模型</p>}
-          {config && options.length === 0 && (
-            <p>请先在模型服务中启用{kind === 'image' ? '图片' : '视频'}模型</p>
-          )}
-          {storageMissing && <p>当前参考素材需要先配置对象存储</p>}
-          {missingInputs && <p>连线来源尚无可用媒体，请先生成或上传素材</p>}
-          {pendingIds.map((id, index) => {
-            const job = jobs.get(id);
-            return (
-              <div key={id} className="space-y-1">
-                {job?.errorMessage && (
-                  <p role="alert" className="text-destructive">
-                    {job.errorMessage}
-                  </p>
-                )}
-                <p role="status">
-                  任务 {index + 1}：
-                  {job?.status === 'submit_unknown'
-                    ? '提交结果不明：远端可能已受理并计费'
-                    : (job?.status ?? '正在查询生成任务…')}
-                </p>
-                {job?.status === 'failed' && (
-                  <Button size="sm" disabled={locked || generating} onClick={() => void retry(id)}>
-                    重试任务 {index + 1}
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={locked || generating}
-                  onClick={() =>
-                    void api
-                      .cancel(id)
-                      .then((next) => {
-                        store.getState().setGenerationJob(next);
-                        if (next.status === 'failed')
-                          store.getState().applySystem((document) =>
-                            updateData<CanvasMediaData>(document, nodeId, (current) => ({
-                              ...current,
-                              pendingJobIds: current.pendingJobIds?.filter((jobId) => jobId !== id),
-                            })),
-                          );
-                        store
-                          .getState()
-                          .applySystem((document) => writeGenerationJob(document, next));
-                        store.getState().notify(next.errorMessage ?? '生成任务已结束');
-                      })
-                      .catch((error: unknown) =>
-                        store
-                          .getState()
-                          .notify(error instanceof Error ? error.message : '放弃任务失败'),
-                      )
-                  }
-                >
-                  放弃任务
-                </Button>
-              </div>
-            );
-          })}
-          {kind === 'image' && (
-            <NativeSelect
-              aria-label="生成数量"
-              disabled={locked || generating || !!pendingIds.length}
-              value={String(data.count ?? 1)}
-              onChange={(event) =>
-                setData((current) => ({ ...current, count: Number(event.target.value) }))
-              }
-            >
-              {[1, 2, 3, 4].map((count) => (
-                <option key={count} value={count}>
-                  ×{count}
-                </option>
-              ))}
-            </NativeSelect>
-          )}
-          {!pendingIds.length && (
-            <Button
-              size="sm"
-              disabled={
-                !request ||
-                !!issues.length ||
-                storageMissing ||
-                missingInputs ||
-                locked ||
-                generating ||
-                !prompt.trim()
-              }
-              onClick={() => void generate()}
-            >
-              生成{kind === 'image' ? '图片' : '视频'}
-            </Button>
-          )}
-          {data.versions.length > 1 && (
-            <NativeSelect
-              aria-label="当前版本"
-              disabled={locked}
-              value={String(data.activeVersion)}
-              onChange={(event) =>
-                setData((current) => ({
-                  ...current,
-                  activeVersion: Number(event.target.value),
-                }))
-              }
-            >
-              {data.versions.map((version, index) => (
-                <option key={`${version.sha256}-${index}`} value={index}>
-                  版本 {index + 1}
-                </option>
-              ))}
-            </NativeSelect>
-          )}
-        </>
-      ) : (
-        <p role={configError ? 'alert' : 'status'}>{configError ?? '正在读取模型档案…'}</p>
-      )}
-    </div>
+      }}
+    />
   );
 }
