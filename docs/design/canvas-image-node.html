@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>无限画布复刻 - 完整交互版</title>
+    <style>
+        :root {
+            --bg-color: #fbfbfb;
+            --dot-color: #e0e0e0;
+            --border-color: #eaeaea;
+            --text-main: #333333;
+            --text-secondary: #888888;
+            --text-light: #b3b3b3;
+            --primary-color: #5c5cff;
+            --blue-tag: #6a5cff;
+            --box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04);
+            --popup-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+        }
+
+        /* 画布背景（带点阵） */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+            cursor: default;
+            z-index: 1;
+        }
+
+        #canvas-container.space-pressed {
+            cursor: grab;
+        }
+
+        #canvas-container.dragging {
+            cursor: grabbing;
+        }
+
+        /* 画布内部的节点容器 */
+        #nodes-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+        }
+
+        /* ---------------- 中央图片节点与输入框组件 ---------------- */
+        .image-node-wrapper {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* 上传图片按钮 */
+        .upload-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 6px 16px;
+            font-size: 13px;
+            color: var(--text-main);
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            align-self: center;
+        }
+        .upload-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+        }
+
+        /* 图片节点区域 */
+        .image-node-container {
+            position: relative;
+            width: 260px;
+            height: 260px;
+        }
+
+        /* 图片小标签 */
+        .image-tag {
+            position: absolute;
+            top: -24px;
+            left: 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: var(--text-main);
+        }
+        .image-tag svg {
+            width: 12px;
+            height: 12px;
+            fill: var(--text-main);
+        }
+
+        /* 图片占位框 */
+        .image-box {
+            width: 100%;
+            height: 100%;
+            background: white;
+            border: 1.5px solid #111;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .image-box svg.placeholder-icon {
+            width: 48px;
+            height: 48px;
+            fill: none;
+            stroke: #d9d9d9;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* 右侧+号按钮 */
+        .image-add-btn {
+            position: absolute;
+            right: -40px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .image-add-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+        }
+
+        /* 底部输入框大组件 */
+        .prompt-box {
+            width: 620px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--box-shadow);
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            cursor: auto;
+            transition: all 0.3s ease; /* 添加整体过渡效果 */
+        }
+
+        .prompt-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .prompt-add-btn {
+            width: 32px;
+            height: 32px;
+            border: 1px dashed #d9d9d9;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        .prompt-add-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+        }
+
+        /* 展开/收缩按钮 */
+        .prompt-expand-btn {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: transform 0.3s ease; /* 图标旋转过渡 */
+        }
+        .prompt-expand-btn:hover {
+            color: var(--text-main);
+        }
+        .prompt-expand-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+        }
+
+        /* 文本输入区域 */
+        .prompt-textarea {
+            width: 100%;
+            height: 80px; /* 默认高度 */
+            min-height: 80px;
+            border: none;
+            outline: none;
+            resize: none;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 0;
+            background: transparent;
+            transition: height 0.3s ease; /* 高度过渡效果 */
+        }
+        .prompt-textarea::placeholder {
+            color: #bfbfbf;
+        }
+
+        /* 展开状态下的样式 */
+        .prompt-box.expanded .prompt-textarea {
+            height: 260px; /* 展开后的高度 */
+        }
+        .prompt-box.expanded .prompt-expand-btn {
+            transform: rotate(180deg); /* 图标旋转表示收缩 */
+        }
+
+        .prompt-sub-tools {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-light);
+            font-size: 12px;
+        }
+        .prompt-sub-tools svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            cursor: pointer;
+        }
+
+        /* 底部主工具栏 */
+        .prompt-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid transparent; 
+            margin-top: 4px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .prompt-footer-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-main);
+        }
+
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            position: relative;
+            padding: 4px 6px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        .tool-item:hover {
+            background: #f5f5f5;
+        }
+        
+        .tool-item svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+        }
+
+        .footer-divider {
+            width: 1px;
+            height: 12px;
+            background: var(--border-color);
+        }
+
+        .prompt-footer-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-main);
+        }
+
+        .send-btn {
+            width: 28px;
+            height: 28px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .send-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+        }
+
+        /* ---------------- 各种弹出菜单样式 ---------------- */
+        .popup-menu {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--popup-shadow);
+            padding: 8px;
+            display: none;
+            flex-direction: column;
+            z-index: 100;
+            cursor: default;
+            animation: fadeIn 0.15s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .popup-menu.show {
+            display: flex;
+        }
+
+        .popup-title {
+            font-size: 12px;
+            color: var(--text-secondary);
+            padding: 4px 12px 8px;
+        }
+
+        /* 模型列表弹窗 */
+        .model-popup { width: 260px; }
+        .popup-item {
+            display: flex; align-items: center; padding: 8px 12px; border-radius: 8px;
+            cursor: pointer; gap: 12px; transition: background 0.2s;
+        }
+        .popup-item:hover { background: #f5f5f5; }
+        .model-icon {
+            width: 24px; height: 24px; border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #fff, #444);
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+        }
+        .model-info { flex: 1; display: flex; flex-direction: column; }
+        .model-name { font-size: 13px; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
+        .model-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        .tag-discount {
+            background: #5c5cff; color: white; font-size: 10px;
+            padding: 1px 4px; border-radius: 4px;
+            transform: scale(0.9); transform-origin: left center;
+        }
+        .check-icon { width: 16px; height: 16px; fill: none; stroke: #111; stroke-width: 2; visibility: hidden; }
+        .popup-item.selected .check-icon { visibility: visible; }
+
+        /* 数量设置弹窗 */
+        .count-popup { width: 100px; }
+        .count-popup .popup-item { justify-content: flex-start; padding: 8px 12px; }
+        .count-popup .popup-item.selected { background: #f0f0f0; }
+
+        /* 参数设置弹窗 (大面板) */
+        .params-popup {
+            width: 420px; padding: 16px; gap: 16px;
+            bottom: calc(100% + 12px); left: -20px;
+        }
+        .params-group { display: flex; flex-direction: column; gap: 10px; }
+        .params-group-title { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; }
+        
+        /* 比例网格 */
+        .ratio-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+        .ratio-btn {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 48px; border: 1px solid var(--border-color); border-radius: 8px;
+            gap: 4px; cursor: pointer; transition: all 0.2s;
+        }
+        .ratio-btn:hover { border-color: #999; }
+        .ratio-btn.selected { border-color: #111; box-shadow: 0 0 0 1px #111; }
+        .ratio-icon { border: 1.5px solid #666; border-radius: 2px; }
+        .ratio-btn.selected .ratio-icon { border-color: #111; }
+        .ratio-text { font-size: 11px; color: var(--text-main); }
+
+        /* 清晰度按钮组 */
+        .resolution-group { display: flex; gap: 8px; }
+        .res-btn {
+            flex: 1; height: 32px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border-color); border-radius: 6px;
+            font-size: 13px; color: var(--text-main); cursor: pointer; transition: all 0.2s;
+        }
+        .res-btn:hover { border-color: #999; }
+        .res-btn.selected { border-color: #111; box-shadow: 0 0 0 1px #111; }
+
+        /* 画质滑块模拟 */
+        .quality-slider-container { height: 24px; display: flex; align-items: center; position: relative; }
+        .quality-track { width: 100%; height: 6px; background: #f0f0f0; border-radius: 3px; position: relative; }
+        .quality-fill { position: absolute; left: 0; top: 0; height: 100%; width: 50%; background: #d9d9d9; border-radius: 3px; }
+        .quality-thumb {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 14px; height: 14px; background: white; border: 1px solid #ccc;
+            border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .quality-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+        .quality-labels span { cursor: pointer; }
+        .quality-labels span.active { color: var(--text-main); }
+
+        /* 背景按钮组 */
+        .bg-group { display: flex; gap: 8px; }
+        .bg-btn {
+            padding: 6px 16px; border: 1px solid var(--border-color); border-radius: 20px;
+            font-size: 12px; color: var(--text-main); cursor: pointer; transition: all 0.2s;
+        }
+        .bg-btn:hover { border-color: #999; }
+        .bg-btn.selected { border-color: #111; box-shadow: 0 0 0 1px #111; }
+
+        /* ---------------- UI 悬浮层 (全局) ---------------- */
+        .ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+        .ui-layer > * { pointer-events: auto; }
+
+        /* 右上角工具栏 */
+        .top-right {
+            position: absolute; top: 16px; right: 16px;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+        }
+        .right-toolbar-group {
+            display: flex; background: white; border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+            padding: 4px; align-items: center; gap: 2px;
+        }
+        .toolbar-item {
+            display: flex; align-items: center; justify-content: center;
+            padding: 4px 8px; border-radius: 6px; color: var(--text-main);
+            font-size: 12px; cursor: pointer; transition: background 0.2s;
+        }
+        .toolbar-item:hover { background: #f5f5f5; }
+        .toolbar-item svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+        .toolbar-item.active { background: #f0f0f0; }
+
+        .divider { width: 1px; height: 16px; background: var(--border-color); margin: 0 4px; }
+
+        /* 小地图 */
+        .minimap {
+            width: 180px; height: 120px; background: #f2f2f2; border-radius: 8px;
+            position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
+        }
+        .minimap-inner { width: 160px; height: 100px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; position: relative; }
+        .minimap-content { position: absolute; top: 20px; left: 40px; width: 80px; height: 50px; background: #dcdcdc; border-radius: 2px; }
+
+        /* --- 底部操作栏 (一比一复刻) --- */
+        .bottom-toolbar {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+            padding: 4px;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .bottom-btn {
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #555;
+            transition: all 0.2s;
+        }
+
+        .bottom-btn:hover:not(.disabled) {
+            background: #f5f5f5;
+        }
+
+        .bottom-btn.active {
+            background: #e8eaed;
+            color: #111;
+        }
+
+        .bottom-btn.primary {
+            background: #222;
+            color: #fff;
+        }
+
+        .bottom-btn.primary:hover {
+            background: #333;
+        }
+
+        .bottom-btn.disabled {
+            color: #d1d5db;
+            cursor: default;
+        }
+
+        .bottom-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        
+        .bottom-btn.primary svg {
+            stroke-width: 2.5;
+        }
+
+        .bottom-divider {
+            width: 1px;
+            height: 18px;
+            background: #eee;
+            margin: 0 6px;
+        }
+
+        .icon-select-area path.fill-part { fill: currentColor; stroke: none; }
+    </style>
+</head>
+<body>
+
+    <!-- 画布层 -->
+    <div id="canvas-container">
+        <div id="nodes-layer">
+            
+            <!-- 图片节点与输入框整体 -->
+            <div class="image-node-wrapper">
+                
+                <!-- 上传图片按钮 -->
+                <div class="upload-btn">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    上传图片
+                </div>
+
+                <!-- 图片预览框 -->
+                <div class="image-node-container">
+                    <div class="image-tag">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        图片
+                    </div>
+                    <div class="image-box">
+                        <svg class="placeholder-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    </div>
+                    <div class="image-add-btn">
+                        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </div>
+                </div>
+
+                <!-- 输入框大组件 -->
+                <div class="prompt-box" id="prompt-box">
+                    <div class="prompt-header">
+                        <div class="prompt-add-btn">
+                            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </div>
+                        <!-- 动态调整高度的展开/收缩按钮 -->
+                        <div class="prompt-expand-btn" id="btn-expand" title="展开/收缩">
+                            <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+                        </div>
+                    </div>
+                    
+                    <textarea class="prompt-textarea" placeholder="描述你想要生成的内容，点击 @ 添加参考内容。"></textarea>
+                    
+                    <div class="prompt-sub-tools">
+                        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+                        <span>0 / 7500</span>
+                    </div>
+
+                    <div class="prompt-footer">
+                        <div class="prompt-footer-left">
+                            
+                            <!-- 模型选择触发按钮 -->
+                            <div class="tool-item" id="trigger-model">
+                                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                                <span id="model-text">Design Image 2.5 Pro</span>
+                                
+                                <!-- 模型列表弹窗 -->
+                                <div class="popup-menu model-popup" id="popup-model">
+                                    <div class="popup-title">模型</div>
+                                    <div class="popup-item selected" onclick="selectModel(this, 'Design Image 2.5 Pro')">
+                                        <div class="model-icon"></div>
+                                        <div class="model-info">
+                                            <div class="model-name">Design Image 2.5 Pro <span class="tag-discount">年卡8折</span></div>
+                                            <div class="model-desc">1k-4k</div>
+                                        </div>
+                                        <svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </div>
+                                    <div class="popup-item" onclick="selectModel(this, 'Design Image 2.5 Fast')">
+                                        <div class="model-icon"></div>
+                                        <div class="model-info">
+                                            <div class="model-name">Design Image 2.5 Fast <span class="tag-discount">年卡8折</span></div>
+                                            <div class="model-desc">1k-4k</div>
+                                        </div>
+                                        <svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </div>
+                                    <div class="popup-item" onclick="selectModel(this, 'Design Image 2')">
+                                        <div class="model-icon"></div>
+                                        <div class="model-info">
+                                            <div class="model-name">Design Image 2 <span class="tag-discount">年卡8折</span></div>
+                                            <div class="model-desc">1k-4k</div>
+                                        </div>
+                                        <svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </div>
+                                    <div class="popup-item" onclick="selectModel(this, 'General Image 2')">
+                                        <div class="model-icon"></div>
+                                        <div class="model-info">
+                                            <div class="model-name">General Image 2 <span class="tag-discount">年卡8折</span></div>
+                                            <div class="model-desc">auto-4K</div>
+                                        </div>
+                                        <svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </div>
+                                    <div class="popup-item" onclick="selectModel(this, 'General Image Pro')">
+                                        <div class="model-icon"></div>
+                                        <div class="model-info">
+                                            <div class="model-name">General Image Pro <span class="tag-discount">年卡8折</span></div>
+                                            <div class="model-desc">auto-4K</div>
+                                        </div>
+                                        <svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="footer-divider"></div>
+                            
+                            <!-- 参数设置触发按钮 -->
+                            <div class="tool-item" id="trigger-params">
+                                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                                <span id="params-text">1:1 · 2k · 高 · 自适应</span>
+
+                                <!-- 参数设置大面板 -->
+                                <div class="popup-menu params-popup" id="popup-params">
+                                    <div class="params-group">
+                                        <div class="params-group-title">比例</div>
+                                        <div class="ratio-grid">
+                                            <div class="ratio-btn selected" onclick="selectRatio(this, '1:1')">
+                                                <div class="ratio-icon" style="width: 14px; height: 14px;"></div>
+                                                <div class="ratio-text">1:1</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '16:9')">
+                                                <div class="ratio-icon" style="width: 20px; height: 11px;"></div>
+                                                <div class="ratio-text">16:9</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '9:16')">
+                                                <div class="ratio-icon" style="width: 11px; height: 20px;"></div>
+                                                <div class="ratio-text">9:16</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '3:4')">
+                                                <div class="ratio-icon" style="width: 12px; height: 16px;"></div>
+                                                <div class="ratio-text">3:4</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '4:3')">
+                                                <div class="ratio-icon" style="width: 16px; height: 12px;"></div>
+                                                <div class="ratio-text">4:3</div>
+                                            </div>
+                                            
+                                            <div class="ratio-btn" onclick="selectRatio(this, '3:2')">
+                                                <div class="ratio-icon" style="width: 18px; height: 12px;"></div>
+                                                <div class="ratio-text">3:2</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '2:3')">
+                                                <div class="ratio-icon" style="width: 12px; height: 18px;"></div>
+                                                <div class="ratio-text">2:3</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '5:4')">
+                                                <div class="ratio-icon" style="width: 16px; height: 13px;"></div>
+                                                <div class="ratio-text">5:4</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '4:5')">
+                                                <div class="ratio-icon" style="width: 13px; height: 16px;"></div>
+                                                <div class="ratio-text">4:5</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '21:9')">
+                                                <div class="ratio-icon" style="width: 22px; height: 9px;"></div>
+                                                <div class="ratio-text">21:9</div>
+                                            </div>
+                                            
+                                            <div class="ratio-btn" onclick="selectRatio(this, '2:1')">
+                                                <div class="ratio-icon" style="width: 20px; height: 10px;"></div>
+                                                <div class="ratio-text">2:1</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '1:2')">
+                                                <div class="ratio-icon" style="width: 10px; height: 20px;"></div>
+                                                <div class="ratio-text">1:2</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '3:1')">
+                                                <div class="ratio-icon" style="width: 22px; height: 7px;"></div>
+                                                <div class="ratio-text">3:1</div>
+                                            </div>
+                                            <div class="ratio-btn" onclick="selectRatio(this, '1:3')">
+                                                <div class="ratio-icon" style="width: 7px; height: 22px;"></div>
+                                                <div class="ratio-text">1:3</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="params-group">
+                                        <div class="params-group-title">清晰度</div>
+                                        <div class="resolution-group">
+                                            <div class="res-btn" onclick="selectRes(this, '1k')">1k</div>
+                                            <div class="res-btn selected" onclick="selectRes(this, '2k')">2k</div>
+                                            <div class="res-btn" onclick="selectRes(this, '4K')">4K</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="params-group">
+                                        <div class="params-group-title">
+                                            <span>画质</span>
+                                            <span id="quality-text" style="color: var(--text-main);">高</span>
+                                        </div>
+                                        <div class="quality-slider-container">
+                                            <div class="quality-track">
+                                                <div class="quality-fill" id="quality-fill" style="width: 50%;"></div>
+                                                <div class="quality-thumb" id="quality-thumb" style="left: 50%;"></div>
+                                            </div>
+                                        </div>
+                                        <div class="quality-labels">
+                                            <span onclick="selectQuality(0, '低', this)">低</span>
+                                            <span onclick="selectQuality(25, '中', this)">中</span>
+                                            <span class="active" onclick="selectQuality(50, '高', this)">高</span>
+                                            <span onclick="selectQuality(75, '超高', this)">超高</span>
+                                            <span onclick="selectQuality(100, '极致', this)">极致</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="params-group">
+                                        <div class="params-group-title">背景</div>
+                                        <div class="bg-group">
+                                            <div class="bg-btn selected" onclick="selectBg(this, '自适应')">自适应</div>
+                                            <div class="bg-btn" onclick="selectBg(this, '透明')">透明</div>
+                                            <div class="bg-btn" onclick="selectBg(this, '不透明')">不透明</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="footer-divider"></div>
+                            
+                            <!-- 数量选择触发按钮 -->
+                            <div class="tool-item" id="trigger-count">
+                                <span id="count-text">× 1</span>
+
+                                <!-- 生成数量菜单 -->
+                                <div class="popup-menu count-popup" id="popup-count">
+                                    <div class="popup-title">生成数量</div>
+                                    <div class="popup-item selected" onclick="selectCount(this, '× 1')">× 1</div>
+                                    <div class="popup-item" onclick="selectCount(this, '× 2')">× 2</div>
+                                    <div class="popup-item" onclick="selectCount(this, '× 3')">× 3</div>
+                                    <div class="popup-item" onclick="selectCount(this, '× 4')">× 4</div>
+                                </div>
+                            </div>
+
+                        </div>
+                        
+                        <div class="prompt-footer-right">
+                            <div class="send-btn">
+                                <svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+
+        </div>
+    </div>
+
+    <!-- UI 层 (全局元素) -->
+    <div class="ui-layer">
+        <div class="top-right">
+            <div class="right-toolbar-group">
+                <div class="toolbar-item">41%</div>
+                <div class="divider"></div>
+                <div class="toolbar-item">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                </div>
+                <div class="toolbar-item">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                </div>
+                <div class="toolbar-item">
+                    <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                </div>
+                <div class="toolbar-item active">
+                    <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    小地图
+                </div>
+            </div>
+            
+            <div class="minimap">
+                <div class="minimap-inner">
+                    <div class="minimap-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部操作栏 -->
+        <div class="bottom-toolbar">
+            <div class="bottom-btn primary" id="btn-add">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
+            <div class="bottom-btn active">
+                <svg viewBox="0 0 24 24"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path></svg>
+            </div>
+            <div class="bottom-btn">
+                <svg viewBox="0 0 24 24" class="icon-select-area">
+                    <path d="M4 6V4h2M11 4h2M18 4h2v2M20 11v2M20 18v2h-2M13 20h-2M6 20H4v-2M4 13v-2" stroke-dasharray="2 3"></path>
+                    <path d="M9 9l5 5-2 1-1 2z" class="fill-part"></path>
+                </svg>
+            </div>
+            <div class="bottom-btn">
+                <svg viewBox="0 0 24 24">
+                    <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"></path>
+                    <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6"></path>
+                    <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path>
+                    <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path>
+                </svg>
+            </div>
+            <div class="bottom-divider"></div>
+            <div class="bottom-btn">
+                <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>
+            </div>
+            <div class="bottom-btn disabled">
+                <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"></path></svg>
+            </div>
+            <div class="bottom-divider"></div>
+            <div class="bottom-btn">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('canvas-container');
+        const nodesLayer = document.getElementById('nodes-layer');
+        
+        // --- 输入框高度动态调整逻辑 ---
+        const btnExpand = document.getElementById('btn-expand');
+        const promptBox = document.getElementById('prompt-box');
+
+        btnExpand.addEventListener('click', (e) => {
+            e.stopPropagation(); // 阻止事件冒泡到画布
+            promptBox.classList.toggle('expanded');
+        });
+
+
+        // --- 画布拖拽与缩放逻辑 ---
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        let isSpacePressed = false;
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+
+        function updateTransform() {
+            nodesLayer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !isSpacePressed) {
+                if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+                isSpacePressed = true;
+                container.classList.add('space-pressed');
+                if (e.target === document.body) e.preventDefault();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                isSpacePressed = false;
+                isDragging = false;
+                container.classList.remove('space-pressed', 'dragging');
+            }
+        });
+
+        container.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.popup-menu') || e.target.closest('.prompt-box')) return;
+            if (isSpacePressed) {
+                isDragging = true;
+                container.classList.add('dragging');
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                updateTransform();
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            container.classList.remove('dragging');
+        });
+
+        container.addEventListener('wheel', (e) => {
+            if (e.target.closest('.popup-menu') || e.target.closest('.prompt-box')) return;
+            e.preventDefault();
+            
+            const rect = container.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const canvasX = (mouseX - translateX) / scale;
+            const canvasY = (mouseY - translateY) / scale;
+            const delta = -e.deltaY * 0.001;
+            const newScale = Math.min(Math.max(0.1, scale + delta), 4);
+            translateX = mouseX - canvasX * newScale;
+            translateY = mouseY - canvasY * newScale;
+            scale = newScale;
+            updateTransform();
+        }, { passive: false });
+
+
+        // --- 弹窗交互逻辑 ---
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.tool-item')) {
+                document.querySelectorAll('.popup-menu').forEach(menu => {
+                    menu.classList.remove('show');
+                });
+            }
+        });
+
+        ['model', 'params', 'count'].forEach(type => {
+            const trigger = document.getElementById(`trigger-${type}`);
+            const popup = document.getElementById(`popup-${type}`);
+            
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.querySelectorAll('.popup-menu').forEach(menu => {
+                    if (menu !== popup) menu.classList.remove('show');
+                });
+                popup.classList.toggle('show');
+            });
+            
+            popup.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        });
+
+        function selectModel(element, modelName) {
+            document.querySelectorAll('#popup-model .popup-item').forEach(item => item.classList.remove('selected'));
+            element.classList.add('selected');
+            document.getElementById('model-text').innerText = modelName;
+            document.getElementById('popup-model').classList.remove('show');
+        }
+
+        function selectCount(element, countText) {
+            document.querySelectorAll('#popup-count .popup-item').forEach(item => item.classList.remove('selected'));
+            element.classList.add('selected');
+            document.getElementById('count-text').innerText = countText;
+            document.getElementById('popup-count').classList.remove('show');
+        }
+
+        let currentParams = { ratio: '1:1', res: '2k', quality: '高', bg: '自适应' };
+
+        function updateParamsText() {
+            document.getElementById('params-text').innerText = 
+                `${currentParams.ratio} · ${currentParams.res} · ${currentParams.quality} · ${currentParams.bg}`;
+        }
+
+        function selectRatio(element, ratio) {
+            document.querySelectorAll('.ratio-btn').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+            currentParams.ratio = ratio;
+            updateParamsText();
+        }
+
+        function selectRes(element, res) {
+            document.querySelectorAll('.res-btn').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+            currentParams.res = res;
+            updateParamsText();
+        }
+
+        function selectBg(element, bg) {
+            document.querySelectorAll('.bg-btn').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+            currentParams.bg = bg;
+            updateParamsText();
+        }
+
+        function selectQuality(percent, label, element) {
+            document.querySelectorAll('.quality-labels span').forEach(el => el.classList.remove('active'));
+            element.classList.add('active');
+            
+            document.getElementById('quality-text').innerText = label;
+            document.getElementById('quality-fill').style.width = `${percent}%`;
+            document.getElementById('quality-thumb').style.left = `${percent}%`;
+            
+            currentParams.quality = label;
+            updateParamsText();
+        }
+    </script>
+</body>
+</html>
