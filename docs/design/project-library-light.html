@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frame Loom</title>
+    <style>
+        :root {
+            /* 亮色模式配色变量 */
+            --bg-app: #f6f7f9; 
+            --bg-main: #ffffff; 
+            --bg-hover: #eef0f3;
+            --bg-active: #e4e6e9;
+            --bg-search: #f5f6f8;
+            --bg-menu-hover: #f4f4f5;
+            
+            --text-primary: #1a1a1a;
+            --text-secondary: #8c8c8c;
+            --text-tertiary: #b3b3b3;
+            --text-danger: #e53935;
+            
+            --border-color: #eaeaea;
+            --border-light: #d1d5db;
+            --blue-accent: #1c64f2;
+            
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background-color: var(--bg-app);
+            font-size: 13px;
+        }
+
+        /* ================= 全局顶部标题栏 ================= */
+        .global-titlebar {
+            height: 42px;
+            background-color: transparent; 
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            flex-shrink: 0;
+        }
+
+        .titlebar-left {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .titlebar-brand {
+            font-weight: 500;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .titlebar-menu {
+            display: flex;
+            gap: 16px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .titlebar-menu span {
+            cursor: pointer;
+        }
+
+        .titlebar-menu span:hover {
+            color: var(--text-primary);
+        }
+
+        .titlebar-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .titlebar-controls svg {
+            width: 12px;
+            height: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        /* ================= 主体布局 ================= */
+        .app-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ================= 左侧边栏 ================= */
+        .sidebar {
+            width: 240px;
+            background-color: transparent;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 12px 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-serif);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--text-primary);
+        }
+
+        .sidebar-brand svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .sidebar-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-secondary);
+        }
+
+        .sidebar-header-actions svg {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+
+        .nav-list {
+            list-style: none;
+            padding: 0 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            transition: background 0.2s;
+        }
+
+        .nav-item:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .nav-item.active {
+            background-color: var(--bg-active);
+            font-weight: 500;
+        }
+
+        .nav-item svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-secondary);
+        }
+
+        .nav-item.active svg {
+            color: var(--text-primary);
+        }
+
+        .section-title {
+            padding: 20px 24px 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title svg {
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
+
+        /* 侧边栏二级菜单项 */
+        .sub-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 24px;
+            cursor: pointer;
+            color: var(--text-primary);
+            font-size: 13px;
+            border-radius: 6px;
+            margin: 0 12px 2px;
+        }
+        .sub-nav-item:hover {
+            background-color: var(--bg-hover);
+        }
+        .sub-nav-item.active {
+            background-color: var(--bg-active);
+            font-weight: 500;
+        }
+        .sub-nav-item svg {
+            width: 14px;
+            height: 14px;
+            color: var(--text-secondary);
+        }
+        /* 无创作页等灰色文字 */
+        .sub-nav-text {
+            color: var(--text-tertiary);
+            font-size: 12px;
+            padding: 4px 24px 4px 48px;
+            pointer-events: none;
+        }
+
+        /* 底部用户信息 */
+        .sidebar-bottom {
+            margin-top: auto;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+
+        .user-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: #e0e7ff;
+            color: #4f46e5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .bottom-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .bottom-actions svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        /* ================= 主内容区 ================= */
+        .main-content {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-main);
+            background-image: radial-gradient(circle, #e5e7eb 1px, transparent 1px);
+            background-size: 24px 24px;
+            background-position: top left;
+            overflow-y: auto;
+            
+            border-top-left-radius: 16px;
+            border-top: 1px solid var(--border-color);
+            border-left: 1px solid var(--border-color);
+            box-shadow: -4px -4px 16px rgba(0, 0, 0, 0.015);
+            padding: 40px 48px;
+        }
+
+        /* 页面视图切换控制 */
+        .page-view {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+        }
+        .page-view.active {
+            display: flex;
+        }
+
+        /* ================= 视图 1: 项目库列表 ================= */
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .page-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+            transition: opacity 0.2s;
+        }
+        
+        .btn:hover {
+            opacity: 0.85;
+        }
+
+        .btn-primary {
+            background-color: var(--text-primary);
+            color: white;
+        }
+        
+        .btn-pill {
+            border-radius: 20px;
+            padding: 8px 20px;
+        }
+
+        .btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* 过滤和搜索栏 */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; 
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 12px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background-color: var(--bg-search);
+            border-radius: 6px;
+            padding: 0 12px;
+            height: 32px;
+            width: 240px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .search-box:focus-within {
+            border-color: var(--border-light);
+            background-color: white;
+        }
+
+        .search-box svg {
+            width: 14px;
+            height: 14px;
+            color: var(--text-tertiary);
+            margin-right: 8px;
+        }
+
+        .search-box input {
+            border: none;
+            background: transparent;
+            outline: none;
+            font-size: 13px;
+            width: 100%;
+            color: var(--text-primary);
+        }
+        
+        .search-box input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        /* 排序下拉组件 */
+        .sort-wrapper {
+            position: relative;
+        }
+
+        .sort-dropdown-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background-color: var(--bg-search);
+            padding: 0 12px;
+            border-radius: 6px;
+            height: 32px;
+            font-size: 13px;
+            color: var(--text-primary);
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .sort-dropdown-btn:hover, .sort-dropdown-btn.active {
+            border-color: var(--border-color);
+            background-color: white;
+        }
+
+        .sort-dropdown-btn svg {
+            width: 12px;
+            height: 12px;
+            color: var(--text-secondary);
+            transition: transform 0.2s;
+        }
+        
+        .sort-dropdown-btn.active svg {
+            transform: rotate(180deg);
+        }
+
+        /* 排列顺序下拉菜单 */
+        .sort-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: #ffffff;
+            border-radius: 16px; 
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.03);
+            width: 184px; 
+            padding: 16px 8px; 
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+        }
+
+        .sort-dropdown-menu.show {
+            display: flex;
+        }
+
+        .dropdown-header {
+            font-size: 12px;
+            color: #a1a1a1;
+            padding: 0 12px; 
+            margin-bottom: 8px; 
+            font-weight: 400;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px; 
+            border-radius: 8px; 
+            font-size: 14px;
+            color: var(--text-primary);
+            cursor: pointer;
+            margin-bottom: 2px; 
+            transition: background-color 0.2s;
+        }
+
+        .dropdown-item:hover {
+            background-color: var(--bg-menu-hover);
+        }
+
+        .check-icon {
+            width: 16px;
+            height: 16px;
+            color: var(--text-primary);
+            stroke-width: 2.5px; 
+            display: none;
+        }
+        
+        .dropdown-item.active .check-icon {
+            display: block;
+        }
+
+        /* 项目卡片网格 */
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 24px;
+        }
+
+        .project-card {
+            background-color: #f5f5f7;
+            border-radius: 20px; 
+            height: 210px; 
+            position: relative;
+            cursor: pointer;
+            transition: box-shadow 0.2s, background-color 0.2s;
+            z-index: 1;
+        }
+
+        .project-card:hover {
+            background-color: #f0f0f2;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.04);
+        }
+        
+        .project-card.menu-open {
+            z-index: 100;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        /* 文件夹特殊图形 */
+        .card-paper {
+            position: absolute;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 170px;
+            height: 110px;
+            background-color: #d8d4fa; 
+            border: 5px solid #ffffff; 
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+            z-index: 1;
+            pointer-events: none;
+        }
+        
+        .paper-icon {
+            width: 28px;
+            height: 28px;
+            color: #ada7d1; 
+        }
+
+        .card-cover {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100px;
+            z-index: 2;
+            border-bottom-left-radius: 20px; 
+            border-bottom-right-radius: 20px;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        
+        .card-cover svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .card-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 3;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #2c2c2c; 
+        }
+
+        .card-date {
+            font-size: 12px;
+            color: #999999; 
+        }
+
+        .card-actions {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            z-index: 5; 
+        }
+
+        .card-more {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            color: #666;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            opacity: 0; 
+            transition: opacity 0.2s, background-color 0.2s;
+        }
+        
+        .project-card:hover .card-more,
+        .card-more.active {
+            opacity: 1;
+        }
+        
+        .card-more:hover, .card-more.active {
+            background-color: rgba(0,0,0,0.06);
+            color: #1a1a1a;
+        }
+        
+        .card-more svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .context-menu {
+            position: absolute;
+            top: calc(100% + 4px); 
+            right: 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05);
+            width: 120px;
+            padding: 4px;
+            z-index: 10;
+            display: none; 
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .context-menu.show {
+            display: flex;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .menu-item:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .menu-item.danger {
+            color: var(--text-danger);
+        }
+
+        .menu-item svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* ================= 视图 2: 项目详情页 ================= */
+        /* 面包屑 */
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            margin-bottom: 24px;
+            color: var(--text-secondary);
+        }
+
+        .breadcrumb-item {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .breadcrumb-item:hover {
+            color: var(--text-primary);
+        }
+
+        .breadcrumb-item.current {
+            color: var(--text-primary);
+            font-weight: 500;
+            cursor: default;
+        }
+
+        .breadcrumb-separator {
+            color: var(--text-tertiary);
+            font-size: 12px;
+        }
+
+        /* 详情页头部 Tab 和 按钮 */
+        .detail-header {
+            display: flex;
+            align-items: flex-end; /* 底部对齐，为了对齐下划线 */
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .detail-tabs {
+            display: flex;
+            gap: 24px;
+        }
+
+        .detail-tab {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 4px 12px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            margin-bottom: -1px; 
+        }
+
+        .detail-tab:hover {
+            color: var(--text-primary);
+        }
+
+        .detail-tab.active {
+            color: var(--text-primary);
+            font-weight: 600;
+            border-bottom-color: var(--text-primary);
+        }
+
+        .detail-tab svg {
+            width: 14px;
+            height: 14px;
+            color: var(--text-tertiary);
+        }
+
+        /* Tab 内容容器 */
+        .tab-content {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .tab-content.active {
+            display: flex;
+        }
+
+        /* --- Tab 1: 创作页空状态 --- */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding-bottom: 10vh; /* 视觉居中稍微偏上 */
+        }
+
+        .empty-illustration {
+            margin-bottom: 24px;
+        }
+
+        .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .empty-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* --- Tab 2: 项目资产 --- */
+        .assets-actions {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .action-card {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background-color: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+
+        .action-card:hover {
+            border-color: var(--border-light);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        .action-icon {
+            width: 40px;
+            height: 40px;
+            background-color: #f5f6f8;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+        }
+
+        .action-text {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .action-title {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .action-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* 资产工具栏 */
+        .assets-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .assets-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .assets-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .assets-search {
+            display: flex;
+            align-items: center;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 0 12px;
+            height: 32px;
+            width: 200px;
+            background: white;
+        }
+
+        .assets-search svg {
+            width: 14px;
+            height: 14px;
+            color: var(--text-tertiary);
+            margin-right: 8px;
+        }
+
+        .assets-search input {
+            border: none;
+            outline: none;
+            font-size: 13px;
+            width: 100%;
+            background: transparent;
+        }
+
+        .view-toggles {
+            display: flex;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .view-btn {
+            padding: 6px 10px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .view-btn.active {
+            background: #f0f1f3;
+            color: var(--text-primary);
+        }
+
+        .view-btn + .view-btn {
+            border-left: 1px solid var(--border-color);
+        }
+
+        .refresh-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        
+        .refresh-btn:hover, .view-btn:hover {
+            color: var(--text-primary);
+        }
+
+        /* 拖拽上传区 */
+        .drop-zone {
+            flex: 1;
+            border: 1.5px dashed var(--border-light);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s, border-color 0.2s;
+            min-height: 400px;
+            cursor: pointer;
+        }
+
+        .drop-zone:hover {
+            background-color: #fafafa;
+            border-color: #a1a1a1;
+        }
+
+        .drop-icon {
+            width: 48px;
+            height: 48px;
+            color: var(--text-tertiary);
+            margin-bottom: 16px;
+        }
+
+        .drop-title {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .drop-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+
+        /* ================= 新建项目弹窗 ================= */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(2px);
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-container {
+            background: white;
+            width: 480px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            animation: modalSlideIn 0.2s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .modal-title-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-title-wrapper svg {
+            width: 18px;
+            height: 18px;
+            color: var(--text-primary);
+        }
+
+        .modal-close {
+            cursor: pointer;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+        }
+        
+        .modal-close:hover {
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .modal-close svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .modal-input {
+            width: 100%;
+            height: 44px;
+            border: 1px solid var(--text-primary); 
+            border-radius: 8px;
+            padding: 0 16px;
+            font-size: 14px;
+            color: var(--text-primary);
+            outline: none;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        
+        .modal-input:focus {
+            box-shadow: 0 0 0 1px var(--text-primary); 
+        }
+
+        .modal-input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        .location-bar {
+            display: flex;
+            align-items: center;
+            background-color: var(--bg-search);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            gap: 8px;
+        }
+
+        .location-bar svg.folder-icon {
+            width: 16px;
+            height: 16px;
+            color: #1c64f2; 
+        }
+
+        .location-label {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .location-path {
+            color: var(--text-secondary);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .btn-change {
+            color: var(--blue-accent);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            padding: 0;
+            font-family: inherit;
+        }
+        
+        .btn-change:hover {
+            text-decoration: underline;
+        }
+
+        .info-bar {
+            display: flex;
+            align-items: flex-start;
+            background-color: #f8f9fa;
+            padding: 12px 16px;
+            border-radius: 8px;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .info-bar svg {
+            width: 14px;
+            height: 14px;
+            color: var(--text-tertiary);
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .modal-btn {
+            padding: 8px 24px;
+            border-radius: 20px; 
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .modal-btn-cancel {
+            background-color: #f0f0f2;
+            color: var(--text-primary);
+        }
+        
+        .modal-btn-cancel:hover {
+            background-color: #e4e6e9;
+        }
+
+        .modal-btn-create {
+            background-color: #888888; 
+            color: white;
+        }
+        
+        .modal-btn-create.active {
+            background-color: #444444;
+        }
+        
+        .modal-btn-create.active:hover {
+            background-color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+
+    <header class="global-titlebar">
+        <div class="titlebar-left">
+            <div class="titlebar-brand">
+                Frame Loom
+            </div>
+            <div class="titlebar-menu">
+                <span>文件</span>
+                <span>窗口</span>
+                <span>帮助</span>
+            </div>
+        </div>
+        <div class="titlebar-controls">
+            <svg viewBox="0 0 12 12" fill="none"><path d="M2 6H10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+            <svg viewBox="0 0 12 12" fill="none"><path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </div>
+    </header>
+
+    <div class="app-body">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-brand">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="24" height="24" rx="4" fill="#1a1a1a"/>
+                        <path d="M7 16V8H10L12 12L14 8H17V16H15V11L12 16L9 11V16H7Z" fill="white"/>
+                    </svg>
+                    Frame Loom
+                </div>
+                <div class="sidebar-header-actions">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
+            </div>
+
+            <ul class="nav-list">
+                <li class="nav-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    开始创作
+                </li>
+                <li class="nav-item active" id="navProjectLibrary" onclick="switchView('list')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    项目库
+                </li>
+            </ul>
+
+            <div class="section-title">
+                项目
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+            </div>
+
+            <div class="sub-nav-item" id="navTestProject" onclick="switchView('detail')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                测试项目
+            </div>
+            <div class="sub-nav-text">无创作页</div>
+
+            <div class="sidebar-bottom">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </div>
+                    <span>探索者1441</span>
+                </div>
+                <div class="bottom-actions">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            
+            <!-- ================= 视图 1: 项目库列表 ================= -->
+            <div class="page-view active" id="viewProjectList">
+                <div class="page-header">
+                    <h1 class="page-title">项目库</h1>
+                    <div class="page-subtitle">整理创作页面、管理项目资产，集中呈现项目内容</div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="openModal()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            新建项目
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="toolbar-right">
+                        <div class="search-box">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <input type="text" placeholder="搜索项目">
+                        </div>
+                        
+                        <div class="sort-wrapper">
+                            <div class="sort-dropdown-btn" id="sortBtn" onclick="toggleSortDropdown(event)">
+                                <span id="sortLabel">最近更新</span>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            
+                            <div class="sort-dropdown-menu" id="sortDropdown">
+                                <div class="dropdown-header">排列顺序</div>
+                                <div class="dropdown-item active" onclick="selectSort(this, '最近更新')">
+                                    最近更新
+                                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <div class="dropdown-item" onclick="selectSort(this, '最近创建')">
+                                    最近创建
+                                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <div class="dropdown-item" onclick="selectSort(this, '字母顺序')">
+                                    字母顺序
+                                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-grid">
+                    <div class="project-card" onclick="switchView('detail')">
+                        <div class="card-paper">
+                            <svg class="paper-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+
+                        <div class="card-cover">
+                            <svg viewBox="0 0 200 100" preserveAspectRatio="none">
+                                <path d="M 0 100 L 0 35 C 0 15, 15 0, 35 0 L 200 0 L 200 100 Z" fill="#ffffff" />
+                            </svg>
+                        </div>
+                        
+                        <div class="card-info">
+                            <div class="card-title">测试项目</div>
+                            <div class="card-date">2026.10.26</div>
+                        </div>
+
+                        <div class="card-actions">
+                            <button class="card-more" onclick="toggleCardMenu(event, this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                            </button>
+                            
+                            <div class="context-menu" onclick="event.stopPropagation()">
+                                <div class="menu-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                    重命名
+                                </div>
+                                <div class="menu-item danger">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    删除
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= 视图 2: 项目详情页 ================= -->
+            <div class="page-view" id="viewProjectDetail">
+                <div class="breadcrumb">
+                    <span class="breadcrumb-item" onclick="switchView('list')">项目库</span>
+                    <span class="breadcrumb-separator">/</span>
+                    <span class="breadcrumb-item current">测试项目</span>
+                </div>
+
+                <div class="detail-header">
+                    <div class="detail-tabs">
+                        <div class="detail-tab active" id="tabCreative" onclick="switchDetailTab('creative')">
+                            创作页
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        </div>
+                        <div class="detail-tab" id="tabAssets" onclick="switchDetailTab('assets')">
+                            项目资产
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary btn-pill" id="btnNewPage">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        新建创作页
+                    </button>
+                </div>
+
+                <!-- Tab 1: 创作页 (空状态) -->
+                <div class="tab-content active" id="contentCreative">
+                    <div class="empty-state">
+                        <div class="empty-illustration">
+                            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <ellipse cx="60" cy="105" rx="40" ry="8" fill="#f0f0f0" />
+                                <path d="M20 55 L 45 55 L 55 65 L 100 65 L 100 100 L 20 100 Z" fill="#e5e1ff"/>
+                                <path d="M20 65 L 100 65 L 100 100 L 20 100 Z" fill="#dcd6ff" rx="8"/>
+                                <rect x="20" y="65" width="80" height="35" rx="6" fill="#dcd6ff"/>
+                                <circle cx="65" cy="55" r="12" fill="#fff" stroke="#666" stroke-width="2"/>
+                                <path d="M 73 63 L 82 72" stroke="#666" stroke-width="3" stroke-linecap="round"/>
+                                <path d="M 65 50 C 62 50 60 52 60 55" stroke="#666" stroke-width="1.5" stroke-linecap="round"/>
+                                <path d="M 45 40 Q 45 30 55 30 Q 60 30 60 38 Q 60 45 50 45" stroke="#a5a1ff" stroke-width="3" stroke-linecap="round" fill="none"/>
+                                <circle cx="50" cy="50" r="1.5" fill="#a5a1ff"/>
+                            </svg>
+                        </div>
+                        <div class="empty-title">暂无创作页</div>
+                        <div class="empty-subtitle">创建创作页即可开始。</div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: 项目资产 -->
+                <div class="tab-content" id="contentAssets">
+                    <div class="assets-actions">
+                        <div class="action-card">
+                            <div class="action-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </div>
+                            <div class="action-text">
+                                <div class="action-title">新建文件夹</div>
+                                <div class="action-desc">在当前目录新建</div>
+                            </div>
+                        </div>
+                        <div class="action-card">
+                            <div class="action-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            </div>
+                            <div class="action-text">
+                                <div class="action-title">上传文件</div>
+                                <div class="action-desc">支持批量上传</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="assets-toolbar">
+                        <div class="assets-title">全部文件</div>
+                        <div class="assets-controls">
+                            <div class="assets-search">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <input type="text" placeholder="搜索文件名">
+                            </div>
+                            <div class="view-toggles">
+                                <button class="view-btn active">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                                </button>
+                                <button class="view-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                </button>
+                            </div>
+                            <button class="refresh-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="drop-zone">
+                        <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <div class="drop-title">拖拽文件到此处，或点击上传</div>
+                        <div class="drop-desc">支持多个文件同时上传</div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- ================= 新建项目弹窗 ================= -->
+    <div class="modal-overlay" id="createProjectModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title-wrapper">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    新建本地项目
+                </div>
+                <div class="modal-close" onclick="closeModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+            </div>
+
+            <div class="modal-body">
+                <input type="text" class="modal-input" id="projectNameInput" placeholder="例如：Frame Loom宣传片" oninput="checkInput()">
+                
+                <div class="location-bar">
+                    <svg class="folder-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                        <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                    </svg>
+                    <span class="location-label">保存位置</span>
+                    <span class="location-path">D:\Programs\Frame Loom Data\Projects</span>
+                    <button class="btn-change">更改</button>
+                </div>
+
+                <div class="info-bar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span>本地项目用于整理本地创作页面。可以按作品、主题或任务创建项目，将相关页面归入其中，集中查看和管理项目页面与资产（项目内容不会自动与其他设备或用户共享）</span>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">取消</button>
+                <button class="modal-btn modal-btn-create" id="createBtn">创建项目</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ================== 视图切换逻辑 ================== */
+        function switchView(viewName) {
+            const viewList = document.getElementById('viewProjectList');
+            const viewDetail = document.getElementById('viewProjectDetail');
+            const navProjectLibrary = document.getElementById('navProjectLibrary');
+            const navTestProject = document.getElementById('navTestProject');
+
+            closeAllCardMenus();
+            document.getElementById('sortDropdown').classList.remove('show');
+            document.getElementById('sortBtn').classList.remove('active');
+
+            if (viewName === 'list') {
+                viewList.classList.add('active');
+                viewDetail.classList.remove('active');
+                
+                navProjectLibrary.classList.add('active');
+                navTestProject.classList.remove('active');
+            } else if (viewName === 'detail') {
+                viewList.classList.remove('active');
+                viewDetail.classList.add('active');
+                
+                navProjectLibrary.classList.remove('active');
+                navTestProject.classList.add('active');
+                
+                // 每次进入详情页，默认回到“创作页”Tab
+                switchDetailTab('creative');
+            }
+        }
+
+        /* ================== 详情页 Tab 切换逻辑 ================== */
+        function switchDetailTab(tabName) {
+            const tabCreative = document.getElementById('tabCreative');
+            const tabAssets = document.getElementById('tabAssets');
+            const contentCreative = document.getElementById('contentCreative');
+            const contentAssets = document.getElementById('contentAssets');
+            const btnNewPage = document.getElementById('btnNewPage');
+
+            if (tabName === 'creative') {
+                tabCreative.classList.add('active');
+                tabAssets.classList.remove('active');
+                contentCreative.classList.add('active');
+                contentAssets.classList.remove('active');
+                btnNewPage.style.display = 'flex'; // 显示“新建创作页”按钮
+            } else if (tabName === 'assets') {
+                tabCreative.classList.remove('active');
+                tabAssets.classList.add('active');
+                contentCreative.classList.remove('active');
+                contentAssets.classList.add('active');
+                btnNewPage.style.display = 'none'; // 资产页隐藏按钮
+            }
+        }
+
+        /* ================== 弹窗逻辑 ================== */
+        const modal = document.getElementById('createProjectModal');
+        const input = document.getElementById('projectNameInput');
+        const createBtn = document.getElementById('createBtn');
+
+        function openModal() {
+            modal.classList.add('show');
+            input.value = ''; 
+            createBtn.classList.remove('active'); 
+            setTimeout(() => input.focus(), 100); 
+        }
+
+        function closeModal() {
+            modal.classList.remove('show');
+        }
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+
+        function checkInput() {
+            if (input.value.trim().length > 0) {
+                createBtn.classList.add('active');
+            } else {
+                createBtn.classList.remove('active');
+            }
+        }
+
+        /* ================== 排序下拉菜单逻辑 ================== */
+        function toggleSortDropdown(event) {
+            event.stopPropagation();
+            const menu = document.getElementById('sortDropdown');
+            const btn = document.getElementById('sortBtn');
+            
+            menu.classList.toggle('show');
+            btn.classList.toggle('active');
+            
+            closeAllCardMenus();
+        }
+
+        function selectSort(element, text) {
+            document.querySelectorAll('.dropdown-item').forEach(item => item.classList.remove('active'));
+            element.classList.add('active');
+            document.getElementById('sortLabel').textContent = text;
+            document.getElementById('sortDropdown').classList.remove('show');
+            document.getElementById('sortBtn').classList.remove('active');
+        }
+
+        /* ================== 项目卡片操作菜单逻辑 ================== */
+        function toggleCardMenu(event, btnElement) {
+            event.stopPropagation();
+            const card = btnElement.closest('.project-card');
+            const menu = card.querySelector('.context-menu');
+            
+            if (menu.classList.contains('show')) {
+                closeAllCardMenus();
+            } else {
+                closeAllCardMenus();
+                document.getElementById('sortDropdown').classList.remove('show');
+                document.getElementById('sortBtn').classList.remove('active');
+                
+                menu.classList.add('show');
+                card.classList.add('menu-open');
+                btnElement.classList.add('active');
+            }
+        }
+
+        function closeAllCardMenus() {
+            document.querySelectorAll('.context-menu').forEach(menu => {
+                menu.classList.remove('show');
+            });
+            document.querySelectorAll('.project-card').forEach(card => {
+                card.classList.remove('menu-open');
+            });
+            document.querySelectorAll('.card-more').forEach(btn => {
+                btn.classList.remove('active');
+            });
+        }
+
+        /* ================== 全局点击关闭面板 ================== */
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.sort-wrapper')) {
+                document.getElementById('sortDropdown').classList.remove('show');
+                document.getElementById('sortBtn').classList.remove('active');
+            }
+            
+            if (!e.target.closest('.card-actions')) {
+                closeAllCardMenus();
+            }
+        });
+    </script>
+</body>
+</html>
