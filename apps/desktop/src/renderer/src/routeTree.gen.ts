@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CanvasLabRouteImport } from './routes/canvas-lab'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as ProjectsProjectIdRouteImport } from './routes/projects_.$projectId'
+import { Route as ProjectsProjectIdPagesPageIdRouteImport } from './routes/projects_.$projectId_.pages.$pageId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +30,70 @@ const ProjectsRoute = ProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
+  id: '/projects_/$projectId',
+  path: '/projects/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsProjectIdPagesPageIdRoute =
+  ProjectsProjectIdPagesPageIdRouteImport.update({
+    id: '/projects_/$projectId_/pages/$pageId',
+    path: '/projects/$projectId/pages/$pageId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/canvas-lab': typeof CanvasLabRoute
   '/projects': typeof ProjectsRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/projects/$projectId/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/canvas-lab': typeof CanvasLabRoute
   '/projects': typeof ProjectsRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/projects/$projectId/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/canvas-lab': typeof CanvasLabRoute
   '/projects': typeof ProjectsRoute
+  '/projects_/$projectId': typeof ProjectsProjectIdRoute
+  '/projects_/$projectId_/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/canvas-lab' | '/projects'
+  fullPaths:
+    | '/'
+    | '/canvas-lab'
+    | '/projects'
+    | '/projects/$projectId'
+    | '/projects/$projectId/pages/$pageId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/canvas-lab' | '/projects'
-  id: '__root__' | '/' | '/canvas-lab' | '/projects'
+  to:
+    | '/'
+    | '/canvas-lab'
+    | '/projects'
+    | '/projects/$projectId'
+    | '/projects/$projectId/pages/$pageId'
+  id:
+    | '__root__'
+    | '/'
+    | '/canvas-lab'
+    | '/projects'
+    | '/projects_/$projectId'
+    | '/projects_/$projectId_/pages/$pageId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CanvasLabRoute: typeof CanvasLabRoute
   ProjectsRoute: typeof ProjectsRoute
+  ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
+  ProjectsProjectIdPagesPageIdRoute: typeof ProjectsProjectIdPagesPageIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +119,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects_/$projectId': {
+      id: '/projects_/$projectId'
+      path: '/projects/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof ProjectsProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects_/$projectId_/pages/$pageId': {
+      id: '/projects_/$projectId_/pages/$pageId'
+      path: '/projects/$projectId/pages/$pageId'
+      fullPath: '/projects/$projectId/pages/$pageId'
+      preLoaderRoute: typeof ProjectsProjectIdPagesPageIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +140,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CanvasLabRoute: CanvasLabRoute,
   ProjectsRoute: ProjectsRoute,
+  ProjectsProjectIdRoute: ProjectsProjectIdRoute,
+  ProjectsProjectIdPagesPageIdRoute: ProjectsProjectIdPagesPageIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

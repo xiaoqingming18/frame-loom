@@ -26,6 +26,7 @@ import { readTheme } from './preferences.js';
 import { WINDOW_BACKGROUNDS, updateWindowTheme } from './theme.js';
 import { loadSecretKey } from './secret-key.js';
 import { serveMedia } from './media-protocol.js';
+import { serveProjectFile } from './project-protocol.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 app.setName('Frame Loom');
@@ -39,6 +40,16 @@ if (!hasLock) {
   app.quit();
 } else {
   protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'frame-project',
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        stream: true,
+        corsEnabled: true,
+      },
+    },
     {
       scheme: 'frame-media',
       privileges: {
@@ -84,6 +95,11 @@ async function start(): Promise<void> {
   try {
     const devUrl = !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined;
     const origin = devUrl ? new URL(devUrl).origin : APP_ORIGIN;
+    const getConnection = async () => {
+      if (!engine) throw new Error('本地服务不可用');
+      return engine.getConnection();
+    };
+    protocol.handle('frame-project', (request) => serveProjectFile(request, getConnection, origin));
     protocol.handle('frame-media', (request) =>
       serveMedia(join(app.getPath('userData'), 'media'), request, origin),
     );
@@ -181,7 +197,7 @@ async function start(): Promise<void> {
         )
           contents.toggleDevTools();
       });
-    registerDesktopIpc(window, origin);
+    registerDesktopIpc(window, origin, getConnection);
     nativeTheme.on('updated', () => {
       if (window && !window.isDestroyed()) updateWindowTheme(window);
     });

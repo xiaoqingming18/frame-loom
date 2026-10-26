@@ -11,6 +11,8 @@ import {
 it('生产 CSP 允许组件内联样式，脚本仍只允许同源', () => {
   expect(PRODUCTION_CSP.split('; ')).toContain("style-src 'self' 'unsafe-inline'");
   expect(PRODUCTION_CSP.split('; ')).toContain("script-src 'self'");
+  expect(PRODUCTION_CSP.split('; ')).toContain("img-src 'self' frame-media: frame-project:");
+  expect(PRODUCTION_CSP.split('; ')).toContain("media-src 'self' frame-media: frame-project:");
 });
 
 describe('可信页面边界', () => {

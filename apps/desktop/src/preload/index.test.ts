@@ -1,5 +1,11 @@
 import { expect, it, vi } from 'vitest';
-import type { ThemeSource, WindowCommand } from '@frame-loom/contracts';
+import type {
+  DesktopPreferencesUpdate,
+  PickDirectoryRequest,
+  ProjectRevealRequest,
+  ThemeSource,
+  WindowCommand,
+} from '@frame-loom/contracts';
 
 const mocks = vi.hoisted(() => ({
   expose: vi.fn(),
@@ -17,6 +23,15 @@ it('只暴露固定频道的桌面桥接方法', async () => {
   const [name, api] = mocks.expose.mock.calls[0] as [
     string,
     {
+      preferences: {
+        get(): Promise<unknown>;
+        set(value: DesktopPreferencesUpdate): Promise<unknown>;
+      };
+      pickDirectory(value: PickDirectoryRequest): Promise<unknown>;
+      project: {
+        reveal(value: ProjectRevealRequest): Promise<void>;
+        trash(value: ProjectRevealRequest): Promise<void>;
+      };
       getEngineConnection(): Promise<unknown>;
       onEngineExited(callback: (value: unknown) => void): () => void;
       theme: { get(): Promise<unknown>; set(source: ThemeSource): Promise<unknown> };
@@ -28,18 +43,37 @@ it('只暴露固定频道的桌面桥接方法', async () => {
     },
   ];
   expect(name).toBe('frameLoom');
-  expect(Object.keys(api)).toEqual(['getEngineConnection', 'onEngineExited', 'theme', 'window']);
+  expect(Object.keys(api)).toEqual([
+    'preferences',
+    'pickDirectory',
+    'project',
+    'getEngineConnection',
+    'onEngineExited',
+    'theme',
+    'window',
+  ]);
   await api.getEngineConnection();
   await api.theme.get();
   await api.theme.set('dark');
   await api.window.command('quit');
   await api.window.isMaximized();
+  await api.preferences.get();
+  await api.preferences.set({ projectSort: 'name' });
+  await api.pickDirectory({});
+  const target = { projectId: '00000000-0000-4000-8000-000000000001' };
+  await api.project.reveal(target);
+  await api.project.trash(target);
   expect(mocks.invoke.mock.calls).toEqual([
     ['engine:connection'],
     ['theme:get'],
     ['theme:set', 'dark'],
     ['window:command', 'quit'],
     ['window:is-maximized'],
+    ['preferences:get'],
+    ['preferences:set', { projectSort: 'name' }],
+    ['dialog:pick-directory', {}],
+    ['project:reveal', target],
+    ['project:trash', target],
   ]);
   const callback = vi.fn();
   const unsubscribe = api.window.onMaximizedChanged(callback);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Folder, PanelLeft, Plus, Search, SquarePen, Waypoints } from 'lucide-react';
+import { Folder, PanelLeft, Search, SquarePen, Waypoints } from 'lucide-react';
+import { ProjectTree } from '@/features/projects/project-tree';
 import logo from '@/assets/logo.png';
 import { Button } from '@frame-loom/ui/components/button';
 import { cn } from '@frame-loom/ui/lib/utils';
@@ -11,7 +12,7 @@ export function Sidebar({ hasError, onSettings }: { hasError: boolean; onSetting
   return (
     <aside
       aria-label="侧栏"
-      className={cn('flex shrink-0 flex-col', collapsed ? 'w-16' : 'w-[260px]')}
+      className={cn('flex min-h-0 shrink-0 flex-col', collapsed ? 'w-16' : 'w-[260px]')}
     >
       <div
         className={cn('flex items-center justify-between pt-3 pb-5', collapsed ? 'px-3' : 'px-4')}
@@ -65,14 +66,7 @@ export function Sidebar({ hasError, onSettings }: { hasError: boolean; onSetting
           </Link>
         ))}
       </nav>
-      {!collapsed && (
-        <div className="flex items-center justify-between pt-5 pr-4 pb-2.5 pl-6 text-xs text-muted-foreground">
-          <span>项目</span>
-          <Button size="icon-sm" variant="ghost" aria-label="新建项目（尚未开放）" disabled>
-            <Plus className="size-3.5" />
-          </Button>
-        </div>
-      )}
+      {!collapsed && <ProjectTree />}
       <div className="mt-auto px-3 py-3">
         <SettingsMenu collapsed={collapsed} hasError={hasError} onSettings={onSettings} />
       </div>

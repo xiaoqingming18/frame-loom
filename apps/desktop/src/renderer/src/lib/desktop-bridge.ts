@@ -1,5 +1,35 @@
-import { ThemeSource, type WindowCommand } from '@frame-loom/contracts';
+import {
+  DesktopPreferences,
+  DesktopPreferencesUpdate,
+  PickDirectoryRequest,
+  ProjectRevealRequest,
+  ProjectTrashRequest,
+  ThemeSource,
+  type WindowCommand,
+} from '@frame-loom/contracts';
 import { z } from 'zod';
+
+export async function getPreferences(): Promise<DesktopPreferences> {
+  return DesktopPreferences.parse(await window.frameLoom.preferences.get());
+}
+export async function setPreferences(value: DesktopPreferencesUpdate): Promise<DesktopPreferences> {
+  return DesktopPreferences.parse(
+    await window.frameLoom.preferences.set(DesktopPreferencesUpdate.parse(value)),
+  );
+}
+export async function pickDirectory(value: PickDirectoryRequest = {}): Promise<string | null> {
+  return z
+    .string()
+    .min(1)
+    .nullable()
+    .parse(await window.frameLoom.pickDirectory(PickDirectoryRequest.parse(value)));
+}
+export function revealProject(value: ProjectRevealRequest): Promise<void> {
+  return window.frameLoom.project.reveal(ProjectRevealRequest.parse(value));
+}
+export function trashProject(value: ProjectTrashRequest): Promise<void> {
+  return window.frameLoom.project.trash(ProjectTrashRequest.parse(value));
+}
 
 export function getEngineConnection(): Promise<unknown> {
   return window.frameLoom.getEngineConnection();

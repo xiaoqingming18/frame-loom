@@ -1,7 +1,27 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ThemeSource, WindowCommand } from '@frame-loom/contracts';
+import type {
+  DesktopPreferencesUpdate,
+  PickDirectoryRequest,
+  ProjectRevealRequest,
+  ProjectTrashRequest,
+  ThemeSource,
+  WindowCommand,
+} from '@frame-loom/contracts';
 
 contextBridge.exposeInMainWorld('frameLoom', {
+  preferences: {
+    get: (): Promise<unknown> => ipcRenderer.invoke('preferences:get'),
+    set: (value: DesktopPreferencesUpdate): Promise<unknown> =>
+      ipcRenderer.invoke('preferences:set', value),
+  },
+  pickDirectory: (value: PickDirectoryRequest): Promise<unknown> =>
+    ipcRenderer.invoke('dialog:pick-directory', value),
+  project: {
+    reveal: (value: ProjectRevealRequest): Promise<void> =>
+      ipcRenderer.invoke('project:reveal', value),
+    trash: (value: ProjectTrashRequest): Promise<void> =>
+      ipcRenderer.invoke('project:trash', value),
+  },
   getEngineConnection: (): Promise<unknown> => ipcRenderer.invoke('engine:connection'),
   onEngineExited: (callback: (code: unknown) => void): (() => void) => {
     const listener = (_event: unknown, code: unknown) => callback(code);

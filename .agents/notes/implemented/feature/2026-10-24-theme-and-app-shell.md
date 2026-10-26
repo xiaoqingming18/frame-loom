@@ -61,7 +61,7 @@ Status: implemented
 ### 主题模式与持久化
 
 - `packages/contracts` 新增 `ThemeSource = z.enum(['system', 'light', 'dark'])`，默认 `system`。
-- 主进程在 `<userData>/preferences.json` 保存 `{ "version": 1, "theme": "system" }`：
+- 主进程在 `<userData>/preferences.json` 保存 `version: 1`、`theme` 及可选的项目保存位置、排序、资产布局；主题与项目偏好共享读取、合并、原子替换流程，避免互相覆盖。项目字段与桥接见[项目库方案](../../proposed/feature/2026-10-26-project-library.md)：
   - 启动时、创建窗口之前同步读取。文件不存在、JSON 损坏或校验失败时使用默认值，不阻止启动。
   - 写入时先写临时文件再重命名。
   - 读取后立即设置 `nativeTheme.themeSource`，再根据 `nativeTheme.shouldUseDarkColors` 选窗口 `backgroundColor`：明亮 `#f6f7f9`，暗黑 `#0d0d0f`。这样窗口第一帧就和页面一致。
@@ -131,7 +131,7 @@ Status: implemented
 
 ### CSP
 
-- 生产 CSP 的 `style-src` 改为 `'self' 'unsafe-inline'`，`img-src` 与 `media-src` 加入 `frame-media:`，其余指令不变，`script-src` 仍是 `'self'`。
+- 生产 CSP 的 `style-src` 为 `'self' 'unsafe-inline'`，`img-src` 与 `media-src` 允许 `frame-media:`、`frame-project:`，其余指令不变，`script-src` 仍是 `'self'`。项目协议只代理 engine 的项目文件接口，携带主进程令牌，限制 CORS 源；开发 CSP 同步允许该协议。
 - 原因：Radix Dialog 的滚动锁依赖 `react-remove-scroll`，它通过 `react-style-singleton` 动态插入 `<style>`，`style-src 'self'` 会拦截它。用 nonce 的话，需要在协议处理函数里改写 `index.html` 注入 nonce，并在 renderer 调用 `get-nonce` 的 `setNonce`，改动落在安全相关代码里。
 - 内联样式只能改变外观，不能执行脚本；React 会转义文本，页面中也没有拼接 HTML 的地方。
 

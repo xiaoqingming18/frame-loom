@@ -12,6 +12,7 @@ import {
   getWindowMaximized,
   onWindowMaximizedChanged,
   onEngineExited,
+  getPreferences,
 } from '@/lib/desktop-bridge';
 
 vi.mock('@/lib/desktop-bridge', () => ({
@@ -21,12 +22,19 @@ vi.mock('@/lib/desktop-bridge', () => ({
   getWindowMaximized: vi.fn(),
   onWindowMaximizedChanged: vi.fn(),
   onEngineExited: vi.fn(),
+  getPreferences: vi.fn(),
 }));
 
 const clients: QueryClient[] = [];
 const histories: ReturnType<typeof createMemoryHistory>[] = [];
 
 beforeEach(() => {
+  vi.mocked(getPreferences).mockResolvedValue({
+    version: 1,
+    theme: 'system',
+    projectSort: 'updated',
+    projectLocation: 'D:\\Projects',
+  });
   vi.mocked(getWindowMaximized).mockResolvedValue(false);
   vi.mocked(onWindowMaximizedChanged).mockReturnValue(vi.fn());
   vi.mocked(onEngineExited).mockReturnValue(vi.fn());
@@ -68,6 +76,7 @@ async function renderPage(
           throw new Error('当前路由测试不应订阅事件');
         },
         async request(path, schema, init) {
+          if (path === '/projects') return schema.parse([]);
           return schema.parse(await request(path, schema, init));
         },
       },

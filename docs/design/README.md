@@ -8,4 +8,5 @@
 - `canvas-image-node.html` 是 2026-10-26 收到的图片节点与输入框快照，只参考图片节点、提示词输入框、模型／参数／数量弹层的 UI/UX；画布背景、工具栏、小地图等公共元素保持现状，取舍见[画布图片节点参数与输入框](../../.agents/notes/implemented/feature/2026-10-26-canvas-image-node.md)。
 - `project-library-light.html` 是 2026-10-26 收到的项目库明亮快照，只参考项目库列表、排序菜单、卡片菜单、新建项目弹窗、项目详情两个 Tab 与资产页的 UI/UX；标题栏、侧栏、用户栏、图标与颜色保持现状，取舍见[项目库方案](../../.agents/notes/proposed/feature/2026-10-26-project-library.md)。
 - 新设计稿使用新文件名入库，不覆盖旧快照；同时同步决策笔记和实现。
+- 项目库的列表、操作弹窗、详情创作页 Tab 和侧栏项目树已实现；明暗纸张 token 为 `project-paper`／`project-paper-icon`，菜单使用现有 shadcn，图标使用 lucide。项目资产内容与实际项目画布由后续阶段接入，未打包 Electron 的明暗及最小窗口截图位于忽略的 `.cache/project-library/`，加固 exe 验收尚未执行。
 - 后续界面遵守[UI 规范](../ui-guidelines.md)，实现后检查明暗两种模式。

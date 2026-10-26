@@ -1,11 +1,74 @@
-import { app, ipcMain, nativeTheme, type BrowserWindow } from 'electron';
-import { ThemeSource, WindowCommand } from '@frame-loom/contracts';
-import { writeTheme } from './preferences.js';
+import { app, dialog, ipcMain, nativeTheme, shell, type BrowserWindow } from 'electron';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  DesktopPreferencesUpdate,
+  EngineConnection,
+  PickDirectoryRequest,
+  ProjectRevealRequest,
+  ProjectTrashRequest,
+  ThemeSource,
+  WindowCommand,
+} from '@frame-loom/contracts';
+import { readPreferences, writePreferences, writeTheme } from './preferences.js';
+import { projectTarget } from './project-files.js';
 import { isTrustedSender } from './security.js';
 import { updateWindowTheme } from './theme.js';
 
-export function registerDesktopIpc(window: BrowserWindow, origin: string): void {
+export function registerDesktopIpc(
+  window: BrowserWindow,
+  origin: string,
+  getConnection: () => Promise<unknown> = () => Promise.reject(new Error('本地服务不可用')),
+): void {
   const contents = window.webContents;
+  const preferences = () => {
+    const value = readPreferences(app.getPath('userData'));
+    return {
+      projectLocation: join(app.getPath('documents'), 'Frame Loom', 'Projects'),
+      projectSort: 'updated' as const,
+      assetView: 'grid' as const,
+      ...value,
+    };
+  };
+  ipcMain.handle('preferences:get', (event) => {
+    if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的偏好请求');
+    const value = preferences();
+    if (!readPreferences(app.getPath('userData')).projectLocation)
+      mkdirSync(value.projectLocation, { recursive: true });
+    return value;
+  });
+  ipcMain.handle('preferences:set', (event, input: unknown) => {
+    if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的偏好请求');
+    const update = DesktopPreferencesUpdate.parse(input);
+    writePreferences(app.getPath('userData'), update);
+    if (update.theme) {
+      nativeTheme.themeSource = update.theme;
+      updateWindowTheme(window);
+    }
+    return preferences();
+  });
+  ipcMain.handle('dialog:pick-directory', (event, input: unknown) => {
+    if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的目录请求');
+    const options = PickDirectoryRequest.parse(input);
+    return dialog
+      .showOpenDialog(window, { ...options, properties: ['openDirectory'] })
+      .then((result) => (result.canceled ? null : (result.filePaths[0] ?? null)));
+  });
+  for (const channel of ['project:reveal', 'project:trash'] as const) {
+    ipcMain.handle(channel, (event, input: unknown) => {
+      if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的项目请求');
+      const value = (
+        channel === 'project:trash' ? ProjectTrashRequest : ProjectRevealRequest
+      ).parse(input);
+      return getConnection()
+        .then((value) => EngineConnection.parse(value))
+        .then((connection) => projectTarget(value, connection))
+        .then(async (target) => {
+          if (channel === 'project:trash') await shell.trashItem(target);
+          else shell.showItemInFolder(target);
+        });
+    });
+  }
   ipcMain.handle('window:is-maximized', (event) => {
     if (!isTrustedSender(event, contents, origin)) throw new Error('拒绝不可信页面的窗口请求');
     return window.isMaximized();

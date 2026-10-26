@@ -2,7 +2,27 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { readTheme, writeTheme } from './preferences.js';
+import { readPreferences, writePreferences, readTheme, writeTheme } from './preferences.js';
+
+it('排序、布局、位置与主题合并保存，非法更新不破坏文件', () => {
+  writeTheme(directory, 'dark');
+  writePreferences(directory, {
+    projectSort: 'name',
+    projectLocation: 'D:\\Projects',
+    assetView: 'list',
+  });
+  writeTheme(directory, 'light');
+  expect(readPreferences(directory)).toEqual({
+    version: 1,
+    theme: 'light',
+    projectSort: 'name',
+    projectLocation: 'D:\\Projects',
+    assetView: 'list',
+  });
+  const before = readFileSync(join(directory, 'preferences.json'), 'utf8');
+  expect(() => writePreferences(directory, { projectSort: 'invalid' } as never)).toThrow();
+  expect(readFileSync(join(directory, 'preferences.json'), 'utf8')).toBe(before);
+});
 
 let directory: string;
 beforeEach(() => {
