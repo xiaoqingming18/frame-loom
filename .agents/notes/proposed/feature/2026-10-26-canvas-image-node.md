@@ -79,6 +79,10 @@ Status: proposed
 
 ### 尺寸换算：contracts 中的共享纯函数
 
+01 契约子计划已落地；其余 engine 与画布行为仍为本篇提案。共享入口使用 `imageRequestSize(profile, params)`、`resolveImageParams(profile, current)`、`parseImageReferences(prompt)` 与 `resolveImagePrompt(prompt, inputNodeIds)`。引用函数接收与实际 `inputs` 一一对应的已排序源节点 id，不直接读取画布连线或 `inputOrder`（后者存的是边 id）。失效引用保留原标记并返回 `missingNodeIds`，调用方据此阻止提交。
+
+尺寸换算按档案能力区分版本，不再维护第二份模型 id 匹配：OpenAI 是否声明 `resolution` 区分固定尺寸与任意尺寸；Seedream 是否允许 `1K` 区分 4.0 与 4.5／通用档案的面积下限。入参先按同一档案回退，未提供参数使用档案默认值；非图片档案拒绝换算，Gemini 返回 `undefined`。`changes` 记录显式传入值的调整／移除（含中文文案），首次填充默认值不产生模型切换提示。数量属于节点 `data.count`，不进入此函数，由 03／04 处理。
+
 `packages/contracts` 新增 `imageRequestSize(profile, params)` 一类纯函数，engine 适配器用它组装请求，界面用它显示"≈ W×H"，两边结果一致。
 
 - **GPT Image 1**：查表，1:1 → `1024x1024`，3:2 → `1536x1024`，2:3 → `1024x1536`。
@@ -91,7 +95,7 @@ Status: proposed
   | 21:9 | 1568×672 | 2928×1264 | 3840×1648 |
   | 3:1 | 1776×592 | 3312×1104 | 3840×1280 |
 
-  单测断言每个比例 × 档位都满足官方四条约束，并且实际比例与目标比例误差 < 1%。
+  单测断言每个比例 × 档位都满足官方四条约束，并且实际比例与目标比例误差 < 1%。独立取整在 1K 的 5:4、4:5、2:1、1:2 上会略超 1%；仅在误差超限时检查宽高各 ±16 的邻近组合，取满足面积、长边、长短边比及误差约束且离取整前目标最近的一组。不扩大搜索范围，也不改变上表已满足约束的示例。
 - **Gemini**：不换算，发 `imageConfig: { aspectRatio, imageSize }`；档案没有 `resolution` 时不发 `imageSize`。
 - **Seedream**：一律发像素 `size`，不用"档位 + 提示词描述比例"（比例不可控）。官方表中的 8 个比例直接取表值（如 2K 16:9 = 2848×1600）；其余比例按档位面积 1024²／2048²／4096² 计算，16 对齐，再夹到对应版本的总像素范围（4.5 的 2K 至少 3,686,400）。
 - 背景为透明时 OpenAI 适配器同时发送 `output_format: 'png'`。

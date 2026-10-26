@@ -1,6 +1,6 @@
 # Plan: 画布图片节点参数与输入框
 
-Status: draft
+Status: active
 Note: ../../notes/proposed/feature/2026-10-26-canvas-image-node.md
 
 ## 目标
@@ -22,7 +22,7 @@ Note: ../../notes/proposed/feature/2026-10-26-canvas-image-node.md
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [统一参数契约](01-param-contracts.md) | draft | — | contracts 中的语义参数、`notes`、尺寸换算、参数回退、引用替换纯函数与单测 |
+| 01 | [统一参数契约](01-param-contracts.md) | done | — | contracts 中的语义参数、`notes`、尺寸换算、参数回退、引用替换纯函数与单测 |
 | 02 | [图片档案与适配器](02-engine-profiles.md) | draft | 01 | 模型族档案、前缀匹配、三个适配器请求体、产物 mime、请求固件 |
 | 03 | [多任务数据与运行时](03-multi-job.md) | draft | 01 | `pendingJobIds`、`count`、节点迁移、多任务提交／写回／删除确认 |
 | 04 | [节点与输入框界面](04-node-composer.md) | draft | 02、03 | 节点本体、输入框、模型／参数／数量弹层、Slider、视频节点复用外壳 |
@@ -43,4 +43,4 @@ Note: ../../notes/proposed/feature/2026-10-26-canvas-image-node.md
 
 ## 发现与偏差
 
-无。
+- 01 已完成；OpenAI 1K 独立 16 对齐在四个比例上略超 1% 误差，改为误差超限时局部选择相邻合法尺寸，详见 01 的发现与偏差及关联笔记。其余子计划保持 draft。

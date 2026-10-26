@@ -49,6 +49,7 @@ export const ModelProfile = z.strictObject({
       name: z.string(),
       type: z.enum(['enum', 'number', 'string', 'boolean']),
       values: z.array(Value).optional(),
+      notes: z.record(z.string(), z.string()).optional(),
       min: z.number().optional(),
       max: z.number().optional(),
       default: Value,
