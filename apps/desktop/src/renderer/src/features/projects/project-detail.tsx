@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@frame-loom/ui/compone
 import { Tooltip, TooltipContent, TooltipTrigger } from '@frame-loom/ui/components/tooltip';
 import { projectQuery } from '@/lib/project-queries';
 import { ProjectDialog, type ProjectAction } from './project-dialog';
+import { ProjectAssets } from './project-assets';
 
 export function ProjectDetail({
   projectId,
@@ -156,13 +157,19 @@ export function ProjectDetail({
                   </div>
                 )}
               </TabsContent>
-              <TabsContent value="assets">
-                <div
-                  aria-label="项目资产内容"
-                  className="rounded-xl border border-dashed p-8 text-center text-muted-foreground"
-                >
-                  项目资产浏览即将接入。
-                </div>
+              <TabsContent value="assets" forceMount hidden={tab !== 'assets'}>
+                <ProjectAssets
+                  client={engineClient}
+                  projectId={projectId}
+                  path={path}
+                  onPathChange={(nextPath) =>
+                    void navigate({
+                      to: '/projects/$projectId',
+                      params: { projectId },
+                      search: (previous) => ({ ...previous, tab: 'assets', path: nextPath }),
+                    })
+                  }
+                />
               </TabsContent>
             </Tabs>
           </>

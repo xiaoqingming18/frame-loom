@@ -40,7 +40,7 @@ export function createCanvasPersistence(
     return state.document !== savedDocument || state.view !== savedView;
   }
   function fail(error: unknown) {
-    if (error instanceof EngineRequestError && error.code === 'CANVAS_REVISION_CONFLICT')
+    if (error instanceof EngineRequestError && error.code === 'PAGE_REVISION_CONFLICT')
       conflicted = true;
     update({
       ...snapshot,

@@ -189,7 +189,7 @@ created_at, updated_at, finished_at
 - **并发**：按渠道模型限制同时处于 submitting、running、downloading 状态的任务数。默认值来自档案，用户可以在渠道模型上覆盖。
 - **取消**：适配器支持取消、且远端状态允许时，调用远端取消；否则只在本地标为 `cancelled` 并停止轮询，界面提示"远端可能仍在运行并计费"。
 - **错误类别**：`auth | quota | rate_limit | moderation | invalid_params | input_unreachable | timeout | upstream | network | unknown`。界面按类别给出中文提示，原始错误码和消息保留在任务记录里。
-- **结果落盘**：成功后立即下载远程结果，或直接写入返回的字节。带项目归属时写 `.frameloom/media/<sha256>.<ext>`；无项目或项目离线时写 `<userData>/media/<sha256>.<ext>`。离线产物另记 `staged_outputs_json`，项目恢复后复制并清除待复制标记；媒体服务按项目媒体、回收区、全局顺序解析，对象存储也复用此路径。写入 `media_files` 元数据，图片读取尺寸，音视频用 ffprobe 读时长和尺寸。`outputs_json` 只引用 sha256；远程 URL 只作为临时字段，不能作为结果使用。项目宿主与桌面协议仍待[项目库方案](../../proposed/feature/2026-10-26-project-library.md)后续阶段。
+- **结果落盘**：成功后立即下载远程结果，或直接写入返回的字节。带项目归属时写 `.frameloom/media/<sha256>.<ext>`；无项目或项目离线时写 `<userData>/media/<sha256>.<ext>`。离线产物另记 `staged_outputs_json`，项目恢复后复制并清除待复制标记；媒体服务按项目媒体、回收区、全局顺序解析，对象存储也复用此路径。写入 `media_files` 元数据，图片读取尺寸，音视频用 ffprobe 读时长和尺寸。`outputs_json` 只引用 sha256；远程 URL 只作为临时字段，不能作为结果使用。项目宿主与桌面协议已按[项目库方案](../../implemented/feature/2026-10-26-project-library.md)接入。
 - **请求记录**：`request_json` 中内联的 base64 素材替换为 sha256 引用，避免数据库膨胀，也便于审计。
 - 上述行为包装成 `GenerationService` 供手动界面、画布和 Agent 共用。Agent 工具提交后立即返回任务 ID，完成事件再通过 `followUp` 交回 Agent，与 pi 选型的耗时任务约定一致。
 

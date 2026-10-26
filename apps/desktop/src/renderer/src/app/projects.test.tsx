@@ -82,6 +82,7 @@ async function mount(
       return { status: 'ok', engineVersion: '0.1.0', schemaVersion: '3', startedAt: time };
     if (path === '/projects') return [project];
     if (path === `/projects/${id}`) return manifest;
+    if (path.includes('/assets?')) return [];
     if (path === '/generation-jobs') return [];
     throw new Error(`未模拟 ${path}`);
   });
@@ -94,7 +95,7 @@ async function mount(
   const engineClient: EngineClient = {
     stream: vi.fn(),
     request(path, schema, init) {
-      return Promise.resolve().then(() => schema.parse(request(path, init as never)));
+      return Promise.resolve(request(path, init as never)).then((value) => schema.parse(value));
     },
   };
   const router = createAppRouter({ engineClient, queryClient }, history);
@@ -150,6 +151,103 @@ it('删除提示未结束任务，勾选后先放弃任务再移到回收站', a
   fireEvent.click(dialog.getByRole('button', { name: '确认' }));
   await vi.waitFor(() => expect(trashProject).toHaveBeenCalledOnce());
   await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+it('资产目录与后退同步 search，布局持久化；全项目搜索显示路径与上限且非媒体不预览', async () => {
+  const folder = {
+    name: '角色',
+    path: '角色',
+    type: 'directory',
+    bytes: 0,
+    updatedAt: time,
+    mediaKind: null,
+  };
+  const file = { ...folder, name: '说明.txt', path: '角色/说明.txt', type: 'file', bytes: 20 };
+  const { router } = await mount(`/projects/${id}?tab=assets`, (path) => {
+    if (path.endsWith('/assets?path=')) return [folder];
+    if (path.includes('/assets?path=')) return [file];
+    if (path.includes('/assets/search?')) return { entries: [file], truncated: true };
+  });
+  fireEvent.click(await screen.findByRole('button', { name: '角色' }));
+  await vi.waitFor(() => expect(router.state.location.search.path).toBe('角色'));
+  expect(await screen.findByRole('button', { name: '说明.txt' })).toBeDefined();
+  router.history.back();
+  await vi.waitFor(() => expect(router.state.location.search.path).toBe(''));
+  fireEvent.click(screen.getByRole('radio', { name: '宫格视图' }));
+  await vi.waitFor(() => expect(setPreferences).toHaveBeenCalledWith({ assetView: 'grid' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '搜索项目资产' }), {
+    target: { value: '说明' },
+  });
+  await screen.findByText('结果超过上限，请缩小搜索范围。');
+  expect(screen.getByText('角色/说明.txt')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: '说明.txt' }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('资产文件夹重名显示错误，删除明确移到回收站并传非空 path', async () => {
+  const entry = {
+    name: '角色',
+    path: '角色',
+    type: 'directory',
+    bytes: 0,
+    updatedAt: time,
+    mediaKind: null,
+  };
+  await mount(`/projects/${id}?tab=assets`, (path, init) => {
+    if (path.includes('/assets?')) return [entry];
+    if (path.endsWith('/assets/folders') && init?.method === 'POST')
+      throw new Error('已存在同名文件夹');
+  });
+  fireEvent.click(await screen.findByRole('button', { name: '新建文件夹' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '资产名称' }), {
+    target: { value: '角色' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  await screen.findByText('已存在同名文件夹');
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  fireEvent.keyDown(screen.getByRole('button', { name: '角色 的菜单' }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: '删除' }));
+  expect(screen.getByText('「角色」将移到回收站。')).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: '移到回收站' }));
+  await vi.waitFor(() =>
+    expect(trashProject).toHaveBeenCalledWith({ projectId: id, path: '角色' }),
+  );
+});
+it('文件夹拖放被跳过，上传未结束时离开确认，确认离开中止请求', async () => {
+  let uploadSignal: AbortSignal | undefined;
+  const { router, request } = await mount(`/projects/${id}?tab=assets`, (path, init) => {
+    if (path.includes('/assets/files?')) {
+      uploadSignal = init?.signal ?? undefined;
+      return new Promise(() => {});
+    }
+  });
+  const content = await screen.findByLabelText('项目资产内容');
+  const target = content.querySelector('[role="list"]')!.parentElement!.parentElement!;
+  fireEvent.drop(target, {
+    dataTransfer: {
+      items: [{ webkitGetAsEntry: () => ({ isDirectory: true }), getAsFile: () => null }],
+      files: [],
+    },
+  });
+  await screen.findByText('暂不支持上传文件夹');
+  expect(request.mock.calls.some(([path]) => path.includes('/assets/files?'))).toBe(false);
+  fireEvent.change(screen.getByLabelText('上传项目文件'), {
+    target: { files: [new File(['x'], '图片.png')] },
+  });
+  await vi.waitFor(() => expect(uploadSignal).toBeDefined());
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const assetsTab = screen.getByRole('tab', { name: '项目资产' });
+  assetsTab.focus();
+  fireEvent.keyDown(assetsTab, { key: 'ArrowLeft' });
+  await vi.waitFor(() => expect(router.state.location.search.tab).toBe('pages'));
+  expect(uploadSignal!.aborted).toBe(false);
+  fireEvent.click(screen.getAllByRole('link', { name: '项目库' })[0]);
+  await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+  expect(router.state.location.pathname).toBe(`/projects/${id}`);
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getAllByRole('link', { name: '项目库' })[0]);
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe('/projects'));
+  expect(uploadSignal!.aborted).toBe(true);
+  confirm.mockRestore();
 });
 
 it('打开已有项目支持副本及重名修改，取消选择不会提交', async () => {
@@ -313,7 +411,7 @@ it('详情非法 search 回退、侧栏展开空项目；新建创作页跳转�
   await vi.waitFor(() =>
     expect(router.state.location.pathname).toBe(`/projects/${id}/pages/${pageId}`),
   );
-  expect(await screen.findByText('创作页已保存，项目画布正在接入。')).toBeDefined();
+  expect(await screen.findByRole('region', { name: '项目画布' })).toBeDefined();
 });
 it('详情封面与纯色卡片、侧栏页面高亮，Tab 支持键盘导航', async () => {
   const page = {

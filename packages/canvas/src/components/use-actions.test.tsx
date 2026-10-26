@@ -7,12 +7,48 @@ import { createCanvasStore } from '../store/store';
 import { createBuiltinRegistry } from '../nodes/builtin';
 import { doc, generationJob, media } from '../test-utils';
 import { useCanvasActions } from './use-actions';
+import { serialize } from '../interaction/clipboard';
+import { toVersion } from '../interaction/media-import';
 
 vi.mock('@xyflow/react', () => ({ useReactFlow: () => ({}) }));
 vi.mock('./use-media-imports', () => ({ useMediaImports: () => ({ tasks: [] }) }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+it('粘贴和导入先等待 adopt，缺失媒体保留数据；补齐失败不覆盖现有文档', async () => {
+  const versions = [toVersion(generationJob().outputs[0])];
+  const node = media('one', 'image', {
+    data: { versions, activeVersion: 0, prompt: '', inputOrder: [] },
+  });
+  const store = createCanvasStore();
+  const adopt = vi.fn().mockResolvedValue({ missing: [] });
+  const host: CanvasHost = { media: { upload: vi.fn(), url: (hash) => hash, adopt } };
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <CanvasContext.Provider value={{ store, registry: createBuiltinRegistry(), host }}>
+      {children}
+    </CanvasContext.Provider>
+  );
+  const { result } = renderHook(useCanvasActions, { wrapper });
+  await act(async () => {
+    expect(result.current.paste(serialize({ nodes: [node], edges: [] }), { x: 0, y: 0 })).toBe(
+      true,
+    );
+    await Promise.resolve();
+  });
+  expect(adopt).toHaveBeenCalledOnce();
+  expect(store.getState().document.nodes).toHaveLength(1);
+  adopt.mockResolvedValueOnce({ missing: ['a'.repeat(64)] });
+  const json = { size: 1, text: () => Promise.resolve(JSON.stringify(doc([node]))) } as File;
+  await act(() => result.current.importDocument(json));
+  expect(adopt).toHaveBeenCalledTimes(2);
+  expect(store.getState().document.nodes[0].data).toMatchObject({ versions });
+  expect(store.getState().notice?.text).toContain('素材缺失');
+  const before = store.getState().document;
+  adopt.mockRejectedValueOnce(new Error('补齐失败'));
+  await act(() => result.current.importDocument(json));
+  expect(store.getState().document).toBe(before);
 });
 
 it.each([true, false])(

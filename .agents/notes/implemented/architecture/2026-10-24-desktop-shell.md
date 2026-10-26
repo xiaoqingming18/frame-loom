@@ -35,7 +35,7 @@ Status: implemented
 
 ## 相关笔记核对
 
-- [项目库](../../proposed/feature/2026-10-26-project-library.md)的 05、06 已落地：主进程增加目录选择、注册项目显示／回收站、偏好合并和 `frame-project:` 文件代理；全部 IPC 仍核对可信主框架，目录从主进程连接查询并验证磁盘 id。原 `frame-media:` 和画布测试页保留，实际项目画布尚未接入。
+- [项目库](../../implemented/feature/2026-10-26-project-library.md)的 05–09 已落地：主进程增加目录选择、注册项目显示／回收站、偏好合并和 `frame-project:` 文件代理；全部 IPC 仍核对可信主框架，目录从主进程连接查询并验证磁盘 id。项目画布已接入项目页面路由，旧画布测试页已删除。
 
 - 完整应用骨架提案部分重叠：继续跟踪安装包和整体架构，本篇记录 04 的具体安全与生命周期实现，并互链。
 - [engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)部分重叠：复用其 ready/shutdown 与环境配置，不改变服务契约。

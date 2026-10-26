@@ -27,6 +27,28 @@ afterEach(() => {
   cleanup();
   zoom.value = 1;
 });
+it('媒体加载失败显示缺失占位且保留原始版本', () => {
+  const node = media('missing', 'image', {
+    data: { versions: generationJob().outputs, activeVersion: 0, prompt: '', inputOrder: [] },
+  });
+  const store = createCanvasStore(doc([node]));
+  render(
+    <CanvasContext.Provider
+      value={{
+        store,
+        registry: createBuiltinRegistry(),
+        host: { media: { upload: vi.fn(), url: (hash) => hash } },
+      }}
+    >
+      <ImageNodeView node={{ ...node, data: node.data as CanvasMediaData }} selected={false} />
+    </CanvasContext.Provider>,
+  );
+  fireEvent.error(screen.getByRole('img'));
+  expect(screen.getByText('素材缺失')).toBeDefined();
+  expect(store.getState().document.nodes[0].data).toMatchObject({
+    versions: generationJob().outputs,
+  });
+});
 
 it('低缩放省略未选中节点的表单，选中后仍可编辑', () => {
   const node = media('video', 'video');

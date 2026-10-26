@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type {
   CanvasDocument,
   CanvasMediaData,
+  CanvasMediaVersion,
   CanvasRecord,
   CanvasView,
   GenerationJob,
@@ -38,11 +39,18 @@ export interface CanvasHost {
   media: {
     upload(file: Blob, signal?: AbortSignal): Promise<MediaFile>;
     url(sha256: string): string;
+    adopt?(sha256: string[]): Promise<{ missing: string[] }>;
   };
   documents?: {
-    load(id: string): Promise<CanvasRecord | null>;
+    load(id: string): Promise<Pick<CanvasRecord, 'id' | 'revision' | 'document' | 'view'> | null>;
     save(id: string, revision: number, document: CanvasDocument): Promise<{ revision: number }>;
     saveView(id: string, view: CanvasView): Promise<void>;
   };
   generation?: CanvasGenerationHost;
+  assets?: {
+    pick(
+      kind?: 'image' | 'video',
+    ): Promise<{ kind: 'image' | 'video'; version: CanvasMediaVersion; name: string } | null>;
+    save(version: CanvasMediaVersion, name?: string): Promise<void>;
+  };
 }

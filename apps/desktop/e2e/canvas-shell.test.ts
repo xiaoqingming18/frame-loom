@@ -1,3 +1,4 @@
+import { openProjectCanvas } from './project-canvas.fixture';
 import { expect, test, _electron, type ElectronApplication, type Page } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -38,14 +39,11 @@ test('画布骨架：主题、最小窗口、工具焦点与视口快捷键', as
       if (/Content Security Policy|Refused to|\[React Flow\]/.test(message.text()))
         errors.push(message.text());
     });
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     const editor = page.getByRole('region', { name: '画布编辑区' });
     const pane = page.locator('.react-flow__pane');
     await expect(editor).toBeVisible();
-    await expect(page.getByRole('link', { name: '画布测试' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    await expect(page.getByRole('region', { name: '项目画布' })).toBeVisible();
     await expect(page.locator('main')).toHaveClass(/overflow-hidden/);
     await expect(page.locator('main')).not.toHaveClass(/canvas-grid/);
 
@@ -148,7 +146,7 @@ test('画布骨架：主题、最小窗口、工具焦点与视口快捷键', as
       }
       await page.screenshot({ path: info.outputPath(`canvas-shell-minimum-${theme}.png`) });
     }
-    await page.getByRole('link', { name: '项目库', exact: true }).click();
+    await page.getByRole('link', { name: '项目库', exact: true }).first().click();
     await expect(page.locator('main')).toHaveClass(/canvas-grid/);
     await expect(page.locator('main')).toHaveClass(/overflow-y-auto/);
     expect(errors).toEqual([]);

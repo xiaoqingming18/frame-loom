@@ -1,3 +1,4 @@
+import { openProjectCanvas, canvasFixture } from './project-canvas.fixture';
 import { expect, test, _electron, type ElectronApplication } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -121,7 +122,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       .getByRole('combobox', { name: '视频', exact: true })
       .selectOption({ label: '图片模拟渠道 / 本地视频模型' });
     await page.getByRole('button', { name: '关闭', exact: true }).click();
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     const editor = page.getByRole('region', { name: '画布编辑区' });
     await page.mouse.dblclick(
       (await editor.boundingBox())!.x + 300,
@@ -325,7 +326,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
         ),
     ).toBe(true);
     await page.screenshot({ path: info.outputPath('canvas-generation-small.png') });
-    expect(await readdir(join(userData, 'media'))).toEqual(
+    expect(await readdir(join((await canvasFixture(page)).rootPath, '.frameloom/media'))).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/^[a-f0-9]{64}\.png$/),
         expect.stringMatching(/^[a-f0-9]{64}\.mp4$/),
@@ -336,7 +337,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     app = undefined;
     app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     page = await app.firstWindow();
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     await expect(page.locator('.react-flow__node-image img')).toHaveCount(2);
     await expect
       .poll(() =>

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { useBlocker } from '@tanstack/react-router';
+import { Link, useBlocker } from '@tanstack/react-router';
 import { z } from 'zod';
 import {
-  CanvasRecord,
-  CanvasSaveResult,
+  ProjectPageRecord,
+  ProjectPageSaveResult,
+  ProjectMutationResult,
   ChannelList,
   ChannelModelList,
   EngineEvent,
@@ -26,23 +27,69 @@ import {
 import { EngineRequestError, type EngineClient } from '@/lib/engine-client';
 import { commandWindow, onEngineExited } from '@/lib/desktop-bridge';
 import { createCanvasPersistence } from './canvas-persistence';
+import { useQuery } from '@tanstack/react-query';
+import { projectQuery } from '@/lib/project-queries';
+import { useCanvasAssets } from './use-canvas-assets';
 
 const ViewSaved = z.strictObject({ saved: z.literal(true) });
 
-/** 画布测试页：用 engine client 实现画布宿主接口，供人工验收。 */
-export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
+/** 项目宿主注入媒体、页面保存与资产选择能力。 */
+export function ProjectCanvas({
+  engineClient,
+  projectId,
+  pageId,
+}: {
+  engineClient: EngineClient;
+  projectId: string;
+  pageId: string;
+}) {
+  const project = useQuery(projectQuery(engineClient, projectId));
+  const assets = useCanvasAssets(engineClient, projectId);
+  const session = useMemo(() => {
+    let opening: Promise<unknown> | undefined;
+    let closing: Promise<unknown> | undefined;
+    return {
+      open: () =>
+        (opening ??= engineClient
+          .request(`/projects/${projectId}/sessions/open`, ProjectMutationResult, {
+            method: 'POST',
+          })
+          .catch((error: unknown) => {
+            opening = undefined;
+            throw error;
+          })),
+      close: () =>
+        (closing ??= (async () => {
+          if (opening) await opening;
+          await engineClient.request(
+            `/projects/${projectId}/sessions/close`,
+            ProjectMutationResult,
+            { method: 'POST' },
+          );
+        })().catch((error: unknown) => {
+          closing = undefined;
+          throw error;
+        })),
+    };
+  }, [engineClient, projectId]);
   const host = useMemo(
     () =>
       ({
         media: {
           upload: (file: Blob, signal?: AbortSignal) =>
-            engineClient.request('/media', MediaFile, {
+            engineClient.request(`/projects/${projectId}/media`, MediaFile, {
               method: 'POST',
               body: file,
               signal,
               timeoutMs: 120_000,
             }),
-          url: (sha256: string) => `frame-media://${sha256}`,
+          url: (sha256: string) => `frame-project://${projectId}/media/${sha256}`,
+          adopt: (sha256) =>
+            engineClient.request(
+              `/projects/${projectId}/media/adopt`,
+              z.object({ missing: z.array(z.string()) }),
+              { method: 'POST', body: { sha256 } },
+            ),
         },
         generation: {
           load: async (signal) => {
@@ -113,7 +160,7 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
           create: (request) =>
             engineClient.request('/generation-jobs', GenerationJob, {
               method: 'POST',
-              body: request,
+              body: { ...request, projectId, pageId },
             }),
           get: (id, signal) =>
             engineClient.request('/generation-jobs/' + id, GenerationJob, { signal }),
@@ -137,31 +184,47 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
           },
         },
         documents: {
-          load: (id) => engineClient.request(`/canvases/${id}`, CanvasRecord.nullable()),
+          load: async (id) => {
+            await session.open();
+            return engineClient.request(`/projects/${projectId}/pages/${id}`, ProjectPageRecord);
+          },
           save: (id, revision, document) =>
-            engineClient.request(`/canvases/${id}`, CanvasSaveResult, {
+            engineClient.request(`/projects/${projectId}/pages/${id}`, ProjectPageSaveResult, {
               method: 'PUT',
               body: { revision, document },
             }),
           saveView: async (id, view) => {
-            await engineClient.request(`/canvases/${id}/view`, ViewSaved, {
+            await engineClient.request(`/projects/${projectId}/pages/${id}/view`, ViewSaved, {
               method: 'PUT',
               body: view,
             });
           },
         },
+        assets: assets.host,
       }) satisfies CanvasHost,
-    [engineClient],
+    [engineClient, projectId, pageId, assets.host, session],
   );
-  const persistence = useMemo(() => createCanvasPersistence(host.documents, 'lab'), [host]);
+  const persistence = useMemo(
+    () => createCanvasPersistence(host.documents, pageId),
+    [host, pageId],
+  );
   const state = useSyncExternalStore(persistence.subscribe, persistence.getSnapshot);
   const [closeBlocked, setCloseBlocked] = useState(false);
   const allowClose = useRef(false);
   const blocker = useBlocker({
     shouldBlockFn: useCallback(
-      async ({ current, next }) =>
-        current.pathname !== next.pathname && !(await persistence.flush()),
-      [persistence],
+      async ({ current, next }) => {
+        if (current.pathname === next.pathname) return false;
+        if (!(await persistence.flush())) return true;
+        try {
+          await session.close();
+          return false;
+        } catch (error) {
+          persistence.fail(error);
+          return true;
+        }
+      },
+      [persistence, session],
     ),
     enableBeforeUnload: false,
     withResolver: true,
@@ -174,7 +237,11 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (window.document.activeElement instanceof HTMLElement)
         window.document.activeElement.blur();
-      if (allowClose.current || !persistence.hasPendingChanges()) return;
+      if (allowClose.current) return;
+      if (!persistence.hasPendingChanges()) {
+        void session.close().catch(persistence.fail);
+        return;
+      }
       event.preventDefault();
       event.returnValue = '画布正在保存';
       if (closing) return;
@@ -183,10 +250,17 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
         .flush()
         .then(async (saved) => {
           closing = false;
-          if (saved) await commandWindow('close');
-          else setCloseBlocked(true);
+          if (saved) {
+            await session.close();
+            allowClose.current = true;
+            await commandWindow('close');
+          } else setCloseBlocked(true);
         })
-        .catch(persistence.fail);
+        .catch((error: unknown) => {
+          closing = false;
+          persistence.fail(error);
+          setCloseBlocked(true);
+        });
     };
     window.addEventListener('beforeunload', beforeUnload);
     const unsubscribe = onEngineExited(() =>
@@ -202,8 +276,14 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
       window.removeEventListener('beforeunload', beforeUnload);
       unsubscribe();
       persistence.stop();
+      void persistence
+        .flush()
+        .then((saved) => {
+          if (saved) return session.close();
+        })
+        .catch(persistence.fail);
     };
-  }, [persistence]);
+  }, [persistence, session]);
 
   function stay() {
     setCloseBlocked(false);
@@ -212,21 +292,51 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
   async function leave(discard = false) {
     if (!discard && !(await persistence.flush())) return;
     if (closeBlocked) {
-      allowClose.current = discard;
+      allowClose.current = true;
       try {
+        try {
+          await session.close();
+        } catch (error) {
+          if (!discard) throw error;
+        }
         await commandWindow('close');
       } catch (error) {
         allowClose.current = false;
         persistence.fail(error);
       }
-    } else if (blocker.status === 'blocked') blocker.proceed();
+    } else if (blocker.status === 'blocked') {
+      try {
+        await session.close();
+        blocker.proceed();
+      } catch (error) {
+        if (discard) blocker.proceed();
+        else persistence.fail(error);
+      }
+    }
   }
 
   const failed = state.status === 'error' || state.status === 'conflict';
   return (
-    <section aria-label="画布测试" className="flex size-full flex-col">
+    <section aria-label="项目画布" className="flex size-full flex-col">
       <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-1.5 text-xs">
-        <h1 className="font-medium">画布测试</h1>
+        <nav aria-label="画布面包屑" className="flex min-w-0 items-center gap-2">
+          <Link to="/projects" search={{}}>
+            项目库
+          </Link>
+          <span aria-hidden>/</span>
+          <Link
+            to="/projects/$projectId"
+            params={{ projectId }}
+            search={{ tab: 'pages', path: '' }}
+            className="max-w-32 truncate"
+          >
+            {project.data?.name ?? '项目'}
+          </Link>
+          <span aria-hidden>/</span>
+          <h1 className="max-w-32 truncate font-medium">
+            {project.data?.pages.find((page) => page.id === pageId)?.name ?? '创作页'}
+          </h1>
+        </nav>
         <span role="status" aria-label="画布保存状态" className="text-muted-foreground">
           {state.status === 'loading'
             ? '正在加载画布…'
@@ -263,6 +373,7 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
       <div className="min-h-0 flex-1">
         {state.ready && <CanvasEditor host={host} store={persistence.store} />}
       </div>
+      {assets.dialog}
       <Dialog
         open={closeBlocked || blocker.status === 'blocked'}
         onOpenChange={(open) => {

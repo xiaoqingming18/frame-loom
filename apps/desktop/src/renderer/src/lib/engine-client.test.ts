@@ -9,6 +9,80 @@ const health = {
   schemaVersion: '1',
   startedAt: '2026-10-24T00:00:00Z',
 };
+it('带进度上传使用可信连接与鉴权，透传进度、服务端错误及取消', async () => {
+  const requests: UploadRequest[] = [];
+  class UploadRequest {
+    status = 200;
+    responseText = JSON.stringify(health);
+    headers = new Headers();
+    upload = {
+      onprogress:
+        vi.fn<(event: { lengthComputable: boolean; loaded: number; total: number }) => void>(),
+    };
+    onload = () => {};
+    onerror = () => {};
+    onabort = () => {};
+    onloadend = () => {};
+    open = vi.fn();
+    setRequestHeader(name: string, value: string) {
+      this.headers.set(name, value);
+    }
+    getResponseHeader() {
+      return 'application/json';
+    }
+    send = vi.fn(() => requests.push(this));
+    abort() {
+      this.onabort();
+      this.onloadend();
+    }
+  }
+  vi.stubGlobal('XMLHttpRequest', UploadRequest);
+  const { client, fetch } = setup();
+  const progress = vi.fn();
+  const controller = new AbortController();
+  const pending = client.request('/projects/id/assets/files', HealthResponse, {
+    method: 'POST',
+    body: new Blob(['x']),
+    onUploadProgress: progress,
+    signal: controller.signal,
+  });
+  await vi.waitFor(() => expect(requests).toHaveLength(1));
+  const xhr = requests[0];
+  expect(xhr.open).toHaveBeenCalledWith('POST', `${connection.baseUrl}/projects/id/assets/files`);
+  expect(xhr.headers.get('Authorization')).toBe('Bearer secret');
+  expect(xhr.headers.get('Content-Type')).toBe('application/octet-stream');
+  xhr.upload.onprogress({ lengthComputable: true, loaded: 1, total: 2 });
+  expect(progress).toHaveBeenCalledWith(50);
+  xhr.onload();
+  xhr.onloadend();
+  await expect(pending).resolves.toEqual(health);
+  expect(fetch).not.toHaveBeenCalled();
+  const failed = client.request('/upload', HealthResponse, {
+    method: 'POST',
+    body: new Blob(['x']),
+    onUploadProgress: progress,
+  });
+  const assertion = expect(failed).rejects.toMatchObject({
+    code: 'ASSET_NAME_CONFLICT',
+    message: '同名文件',
+  });
+  await vi.waitFor(() => expect(requests).toHaveLength(2));
+  requests[1].status = 409;
+  requests[1].responseText = JSON.stringify({ code: 'ASSET_NAME_CONFLICT', message: '同名文件' });
+  requests[1].onload();
+  requests[1].onloadend();
+  await assertion;
+  const cancelled = client.request('/upload', HealthResponse, {
+    method: 'POST',
+    body: new Blob(['x']),
+    onUploadProgress: progress,
+    signal: controller.signal,
+  });
+  const cancellation = expect(cancelled).rejects.toMatchObject({ code: 'REQUEST_ABORTED' });
+  await vi.waitFor(() => expect(requests).toHaveLength(3));
+  controller.abort();
+  await cancellation;
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

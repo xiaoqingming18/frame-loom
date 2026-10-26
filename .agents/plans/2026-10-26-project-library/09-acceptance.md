@@ -1,6 +1,6 @@
 # Plan: 验收与收尾
 
-Status: draft
+Status: active
 Parent: plan.md
 
 ## 目标
@@ -15,25 +15,26 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 编写新增 e2e 用例 — 验证：`pnpm --filter @frame-loom/desktop test:e2e` 全部通过
+- [x] T1 编写新增 e2e 用例 — 验证：`pnpm --filter @frame-loom/desktop test:e2e` 全部通过
 - [ ] T2 开发版与加固 win-unpacked exe 明暗人工验收，720×560 与键盘操作，外部改名／删除资产与 U 盘拔出场景，拷贝项目后打开 — 验证：截图与记录存入 `.cache/project-library/acceptance.md`，加固 exe 无 CSP 违规
-- [ ] T3 全仓门禁 — 验证：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`、`pnpm run verify` 通过
-- [ ] T4 笔记转 implemented，同步无限画布、主题与外壳、模型管理、桌面壳、应用骨架、共享契约、engine 服务笔记，以及 `docs/ui-guidelines.md`、`AGENTS.md` 的现状描述 — 验证：`pnpm run verify` 通过，计划 `Note:` 指向 implemented
+- [x] T3 全仓门禁 — 验证：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`、`pnpm run verify` 通过
+- [x] T4 笔记转 implemented，同步无限画布、主题与外壳、模型管理、桌面壳、应用骨架、共享契约、engine 服务笔记，以及 `docs/ui-guidelines.md`、`AGENTS.md` 的现状描述 — 验证：`pnpm run verify` 通过，计划 `Note:` 指向 implemented
 - [ ] T5 父计划与全部子计划转 `done` — 验证：`pnpm run verify-plans` 通过
 
 ## 验证
 
 - 预期：上述命令全部通过，人工验收记录完整。
-- 实际：未执行。
+- 实际：15 项 Electron e2e、加固目录版构建和截图检查通过；完整记录见 `.cache/project-library/acceptance.md`。U 盘拔出未在本机执行，记录为未覆盖边界。
 
 ## 进度
 
 - 2026-10-26：创建子计划草稿。
+- 2026-10-27：完成 T1、T3、T4；e2e 15 项通过，加固目录版构建成功。T2 仍需加固版明暗交互、CSP、外部资产改名／删除、项目副本打开和真实 U 盘拔出验收；完成后再执行 T5。
 
 ## 发现与偏差
 
-无。
+原生 Windows 窗口自动化接口在当前会话未暴露窗口句柄，因此明暗和最小窗口验收采用 Electron e2e 截图及 `view_image` 逐图检查；真实 U 盘拔出未执行。
 
 ## 交接
 
-尚未开始；等待 08。
+继续完成 T2，并补充可复核证据；构建成功及进程存在不等于加固版交互和 CSP 验收通过。

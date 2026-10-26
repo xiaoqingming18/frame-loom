@@ -20,7 +20,7 @@ Status: implemented
 
 ### 仓库布局
 
-- engine 已从 `services/engine` 移到 `apps/engine`，并完成下述 `core/`、`modules/health/`、包根定位、错误契约与 stderr 日志。renderer 文件路由、统一客户端、feature 与测试骨架已落地，健康页保持原样，主题与设置中心尚未实现。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。本篇包含设置中心中的健康检查验收，随外壳完成后整体转入 implemented；已有事实同步于[服务笔记](../../implemented/architecture/2026-10-24-engine-service.md)与[桌面壳笔记](../../implemented/architecture/2026-10-24-desktop-shell.md)。
+- engine 已从 `services/engine` 移到 `apps/engine`，并完成下述 `core/`、`modules/health/`、包根定位、错误契约与 stderr 日志。renderer 文件路由、统一客户端、feature 与测试骨架已落地，健康页、主题、设置中心和项目库已接入。包名 `@frame-loom/engine`、utilityProcess 的 `serviceName` `Frame Loom Engine`、打包后的 `resources/engine` 路径都不变。本篇包含设置中心中的健康检查验收；已有事实同步于[服务笔记](../../implemented/architecture/2026-10-24-engine-service.md)与[桌面壳笔记](../../implemented/architecture/2026-10-24-desktop-shell.md)。
 - `pnpm-workspace.yaml` 只保留 `apps/*` 和 `packages/*`。
 - renderer 继续留在 `apps/desktop/src/renderer`，不拆成独立包。它只有一个使用者，electron-vite 的约定也是 main、preload、renderer 放在同一个包里。
 - 迁移是单独的 `refactor` 提交，不改变任何行为。必须同步的位置：

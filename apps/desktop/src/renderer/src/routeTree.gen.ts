@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as CanvasLabRouteImport } from './routes/canvas-lab'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects_.$projectId'
 import { Route as ProjectsProjectIdPagesPageIdRouteImport } from './routes/projects_.$projectId_.pages.$pageId'
@@ -18,11 +17,6 @@ import { Route as ProjectsProjectIdPagesPageIdRouteImport } from './routes/proje
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CanvasLabRoute = CanvasLabRouteImport.update({
-  id: '/canvas-lab',
-  path: '/canvas-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsRoute = ProjectsRouteImport.update({
@@ -44,14 +38,12 @@ const ProjectsProjectIdPagesPageIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/canvas-lab': typeof CanvasLabRoute
   '/projects': typeof ProjectsRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/$projectId/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/canvas-lab': typeof CanvasLabRoute
   '/projects': typeof ProjectsRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/$projectId/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
@@ -59,7 +51,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/canvas-lab': typeof CanvasLabRoute
   '/projects': typeof ProjectsRoute
   '/projects_/$projectId': typeof ProjectsProjectIdRoute
   '/projects_/$projectId_/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
@@ -68,21 +59,18 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/canvas-lab'
     | '/projects'
     | '/projects/$projectId'
     | '/projects/$projectId/pages/$pageId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/canvas-lab'
     | '/projects'
     | '/projects/$projectId'
     | '/projects/$projectId/pages/$pageId'
   id:
     | '__root__'
     | '/'
-    | '/canvas-lab'
     | '/projects'
     | '/projects_/$projectId'
     | '/projects_/$projectId_/pages/$pageId'
@@ -90,7 +78,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  CanvasLabRoute: typeof CanvasLabRoute
   ProjectsRoute: typeof ProjectsRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsProjectIdPagesPageIdRoute: typeof ProjectsProjectIdPagesPageIdRoute
@@ -103,13 +90,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/canvas-lab': {
-      id: '/canvas-lab'
-      path: '/canvas-lab'
-      fullPath: '/canvas-lab'
-      preLoaderRoute: typeof CanvasLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects': {
@@ -138,7 +118,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  CanvasLabRoute: CanvasLabRoute,
   ProjectsRoute: ProjectsRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsProjectIdPagesPageIdRoute: ProjectsProjectIdPagesPageIdRoute,

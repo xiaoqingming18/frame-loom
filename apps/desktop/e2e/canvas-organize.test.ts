@@ -1,3 +1,4 @@
+import { openProjectCanvas } from './project-canvas.fixture';
 import { expect, test, _electron } from '@playwright/test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,7 +21,7 @@ test('分组与整理：菜单、锁定、层级、JSON 往返与一步撤销', 
       if (/Content Security Policy|Refused to|\[React Flow\]/.test(message.text()))
         errors.push(message.text());
     });
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     const editor = page.getByRole('region', { name: '画布编辑区' });
     const pane = page.locator('.react-flow__pane');
     const imported: CanvasDocument = {

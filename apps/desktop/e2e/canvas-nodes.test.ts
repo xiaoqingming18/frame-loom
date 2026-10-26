@@ -1,3 +1,4 @@
+import { openProjectCanvas, canvasFixture } from './project-canvas.fixture';
 import { expect, test, _electron, type Locator, type Page } from '@playwright/test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -31,7 +32,7 @@ test('节点连线：类型、重复、环、端口限额、方式切换一步�
       if (/Content Security Policy|Refused to|\[React Flow\]/.test(message.text()))
         errors.push(message.text());
     });
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     const editor = page.getByRole('region', { name: '画布编辑区' });
     const box = (await editor.boundingBox())!;
     const add = async (x: number, y: number, label: string) => {
@@ -138,7 +139,7 @@ test('媒体导入：上传、拖入、粘贴、视频封面和单播放器', as
   const app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
   try {
     const page = await app.firstWindow();
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     const messages: string[] = [];
     page.on('console', (message) => {
       if (message.type() === 'error') messages.push(message.text());
@@ -197,7 +198,9 @@ test('媒体导入：上传、拖入、粘贴、视频封面和单播放器', as
     await expect(video.locator('img'), messages.join('\n')).toBeVisible();
     await expect
       .poll(async () =>
-        (await readdir(join(userData, 'media'))).some((file) => file.endsWith('.webp')),
+        (await readdir(join((await canvasFixture(page)).rootPath, '.frameloom/media'))).some(
+          (file) => file.endsWith('.webp'),
+        ),
       )
       .toBe(true);
     await editor.focus();

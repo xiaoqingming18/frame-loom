@@ -1,10 +1,19 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as baseRender,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CanvasEditorProps, CanvasHost } from '@frame-loom/canvas';
-import { ModelProfile, type CanvasRecord } from '@frame-loom/contracts';
+import { ModelProfile, emptyCanvasDocument } from '@frame-loom/contracts';
 import { EngineRequestError, type EngineClient } from '@/lib/engine-client';
 import { commandWindow, onEngineExited } from '@/lib/desktop-bridge';
-import { CanvasLab } from './canvas-lab';
+import { ProjectCanvas } from './project-canvas';
 
 const captured = vi.hoisted(() => ({ host: null as CanvasHost | null }));
 
@@ -35,7 +44,10 @@ vi.mock('@frame-loom/canvas', async (original) => ({
     );
   },
 }));
-vi.mock('@tanstack/react-router', () => ({ useBlocker: () => ({ status: 'idle' }) }));
+vi.mock('@tanstack/react-router', () => ({
+  useBlocker: () => ({ status: 'idle' }),
+  Link: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}));
 vi.mock('@/lib/desktop-bridge', () => ({
   commandWindow: vi.fn(),
   onEngineExited: vi.fn(() => vi.fn()),
@@ -46,27 +58,54 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function render(node: ReactNode) {
+  return baseRender(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      {node}
+    </QueryClientProvider>,
+  );
+}
+const record = {
+  format: 'frame-loom-page',
+  formatVersion: 1,
+  id: '00000000-0000-4000-8000-000000000002',
+  revision: 1,
+  document: emptyCanvasDocument(),
+  view: null,
+};
 function setup(initialFailure?: Error) {
-  const record: CanvasRecord | null = null;
   let failure = initialFailure;
   const calls: { path: string; body: unknown; method: string | undefined }[] = [];
   const client: EngineClient = {
     request(path, schema, init) {
       calls.push({ path, body: init?.body, method: init?.method });
+      if (path.includes('/sessions/')) return Promise.resolve(schema.parse({ saved: true }));
+      if (path === '/projects/00000000-0000-4000-8000-000000000001')
+        return Promise.reject(new Error('不读取面包屑'));
       if (failure) return Promise.reject(failure);
       if (path === '/channels') return Promise.resolve(schema.parse([]));
       if (path === '/channel-models') return Promise.resolve(schema.parse([]));
       if (path === '/model-defaults')
         return Promise.resolve(schema.parse({ chat: null, image: null, video: null, tts: null }));
+      if (path === '/generation-jobs' && init?.method === 'POST')
+        return Promise.reject(new Error('只检查生成请求归属'));
       if (path === '/model-profiles' || path === '/generation-jobs')
         return Promise.resolve(schema.parse([]));
-      return Promise.resolve(schema.parse(init?.method ? { revision: 1 } : record));
+      return Promise.resolve(schema.parse(init?.method ? { revision: 2, missing: [] } : record));
     },
     stream() {
       throw new Error('不应订阅流');
     },
   };
-  const view = render(<CanvasLab engineClient={client} />);
+  const view = render(
+    <ProjectCanvas
+      projectId="00000000-0000-4000-8000-000000000001"
+      pageId="00000000-0000-4000-8000-000000000002"
+      engineClient={client}
+    />,
+  );
   return {
     ...view,
     calls,
@@ -138,12 +177,21 @@ it('宿主图片档案按最长前缀匹配且显式选择优先，单张重试�
       '/model-defaults': { chat: null, image: null, video: null, tts: null },
       '/model-profiles': profiles,
       '/object-storage': null,
-      '/canvases/lab': null,
+      '/projects/00000000-0000-4000-8000-000000000001/pages/00000000-0000-4000-8000-000000000002':
+        null,
+      '/projects/00000000-0000-4000-8000-000000000001/sessions/open': { saved: true },
+      '/projects/00000000-0000-4000-8000-000000000001/sessions/close': { saved: true },
     };
-    return Promise.resolve(schema.parse(values[path]));
+    return Promise.resolve(
+      schema.parse(
+        path.endsWith('/pages/00000000-0000-4000-8000-000000000002') ? record : values[path],
+      ),
+    );
   });
   render(
-    <CanvasLab
+    <ProjectCanvas
+      projectId="00000000-0000-4000-8000-000000000001"
+      pageId="00000000-0000-4000-8000-000000000002"
       engineClient={{
         request: (path, schema, init) =>
           request(path, schema, init).then((value) => schema.parse(value)),
@@ -173,11 +221,41 @@ it('替身 client 加载失败只显示重试，重试成功后才允许编辑',
   fireEvent.click(screen.getByRole('button', { name: '重试' }));
   await screen.findByRole('button', { name: '编辑画布' });
 });
+it('会话先打开再加载，离开时保存成功后关闭，生成请求附带项目与页面归属', async () => {
+  const test = setup();
+  await screen.findByRole('button', { name: '编辑画布' });
+  const paths = test.calls.map((call) => call.path);
+  expect(
+    paths.indexOf('/projects/00000000-0000-4000-8000-000000000001/sessions/open'),
+  ).toBeLessThan(
+    paths.indexOf(
+      '/projects/00000000-0000-4000-8000-000000000001/pages/00000000-0000-4000-8000-000000000002',
+    ),
+  );
+  await captured
+    .host!.generation!.create({
+      modelId: '00000000-0000-4000-8000-000000000003',
+      mode: 'text',
+      prompt: '项目生成',
+      params: {},
+      inputs: [],
+      source: 'canvas',
+    })
+    .catch(() => {});
+  expect(test.calls.find((call) => call.path === '/generation-jobs')?.body).toMatchObject({
+    projectId: '00000000-0000-4000-8000-000000000001',
+    pageId: '00000000-0000-4000-8000-000000000002',
+  });
+  fireEvent.click(screen.getByRole('button', { name: '编辑画布' }));
+  test.unmount();
+  await vi.waitFor(() => expect(test.calls.at(-1)?.path).toMatch(/sessions\/close$/));
+  expect(test.calls.at(-2)?.method).toBe('PUT');
+});
 
 it('409 显示重新加载与导出，重新加载后可继续编辑；关闭前保存失败保留画布', async () => {
   const test = setup();
   fireEvent.click(await screen.findByRole('button', { name: '编辑画布' }));
-  test.fail(new EngineRequestError(409, 'CANVAS_REVISION_CONFLICT', '其他窗口已修改画布'));
+  test.fail(new EngineRequestError(409, 'PAGE_REVISION_CONFLICT', '其他窗口已修改画布'));
   const event = new Event('beforeunload', { cancelable: true });
   act(() => {
     window.dispatchEvent(event);
@@ -197,7 +275,7 @@ it('409 显示重新加载与导出，重新加载后可继续编辑；关闭前
   });
   await waitFor(() => expect(commandWindow).toHaveBeenCalledWith('close'));
   expect(test.calls.filter((call) => call.method === 'PUT').map((call) => call.body)).toMatchObject(
-    [{ revision: 0 }, { revision: 0 }],
+    [{ revision: 1 }, { revision: 1 }],
   );
 });
 
@@ -214,5 +292,5 @@ it('引擎退出保留内容并提供导出；放弃未保存修改才允许关�
   });
   await screen.findByRole('dialog');
   fireEvent.click(screen.getByRole('button', { name: '放弃更改并离开' }));
-  expect(commandWindow).toHaveBeenCalledWith('close');
+  await waitFor(() => expect(commandWindow).toHaveBeenCalledWith('close'));
 });

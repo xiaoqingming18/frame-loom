@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { CANVAS_LIMITS, type CanvasDocument } from '@frame-loom/contracts';
+import { CANVAS_LIMITS, type CanvasDocument, type CanvasMediaData } from '@frame-loom/contracts';
 import { useCanvas } from '../context';
 import {
   addNodes,
@@ -15,6 +15,7 @@ import {
   reorder,
   setLocked,
   ungroup,
+  updateData,
   type Point,
 } from '../commands/commands';
 import { arrange, type ArrangeMode, type ArrangeOrder } from '../layout/layout';
@@ -28,6 +29,8 @@ import {
 } from '../interaction/clipboard';
 import { checkConnection } from '../registry/connections';
 import { useMediaImports } from './use-media-imports';
+import { adoptMedia } from '../interaction/adopt-media';
+import { activeVersion, appendVersion, emptyMedia, fitMediaSize } from '../nodes/media';
 
 export const ZOOM_LIMITS = { min: 0.1, max: 4 };
 const PASTE_OFFSET = 24;
@@ -138,9 +141,21 @@ export function useCanvasActions() {
           x: base.x + pasteState.count * PASTE_OFFSET,
           y: base.y + pasteState.count * PASTE_OFFSET,
         });
-        const ok = run((document) => addNodes(document, nodes, edges));
-        if (ok) state().select(nodes.filter((node) => !node.parentId).map((node) => node.id));
-        return ok;
+        const insert = () => {
+          const ok = run((document) => addNodes(document, nodes, edges));
+          if (ok) state().select(nodes.filter((node) => !node.parentId).map((node) => node.id));
+          return ok;
+        };
+        if (!host.media.adopt) return insert();
+        void adoptMedia(host, nodes)
+          .then((missing) => {
+            insert();
+            if (missing.length) state().notify(`${missing.length} 个素材缺失，已保留引用`);
+          })
+          .catch((error: unknown) =>
+            state().notify(error instanceof Error ? error.message : '补齐媒体失败'),
+          );
+        return true;
       },
       duplicate() {
         const text = actions.copy();
@@ -213,6 +228,48 @@ export function useCanvasActions() {
       uploads: imports.tasks,
       retryImport: imports.retry,
       cancelImport: imports.cancel,
+      async pickAsset(at: Point = viewportCenter(), nodeId?: string) {
+        try {
+          const picked = await host.assets?.pick(nodeId ? 'image' : undefined);
+          if (!picked) return;
+          if (nodeId) {
+            const node = state().document.nodes.find((node) => node.id === nodeId);
+            if (!node || isNodeLocked(state().document, node)) return;
+            run((document) =>
+              updateData<CanvasMediaData>(document, nodeId, (data) =>
+                appendVersion(data, picked.version),
+              ),
+            );
+          } else {
+            const node = createNode(registry, picked.kind, at);
+            node.title = picked.name;
+            node.data = appendVersion(
+              emptyMedia(picked.kind === 'video' ? 'text' : undefined),
+              picked.version,
+            );
+            node.size = fitMediaSize(picked.version.width, picked.version.height, node.size);
+            if (run((document) => addNodes(document, [node]))) state().select([node.id]);
+          }
+        } catch (error) {
+          state().notify(error instanceof Error ? error.message : '添加资产失败');
+        }
+      },
+      async saveAsset() {
+        const node = state().document.nodes.find((node) => state().selectedNodes.has(node.id));
+        if (
+          !node ||
+          state().selectedNodes.size !== 1 ||
+          (node.type !== 'image' && node.type !== 'video')
+        )
+          return;
+        const version = activeVersion(node.data as CanvasMediaData);
+        if (!version) return;
+        try {
+          await host.assets?.save(version);
+        } catch (error) {
+          state().notify(error instanceof Error ? error.message : '保存资产失败');
+        }
+      },
       clipboardMime: CLIPBOARD_MIME,
       exportDocument() {
         downloadCanvasDocument(state().document);
@@ -222,15 +279,18 @@ export function useCanvasActions() {
           if (file.size > CANVAS_LIMITS.bytes)
             throw new CanvasCommandError('画布 JSON 不能超过 8 MiB');
           const next = parseDocument(await file.text(), registry);
+          const missing = await adoptMedia(host, next.nodes);
           if (run(() => next)) {
             state().select([]);
             state().setEditingTitle(null);
-            state().notify('已导入画布，可撤销恢复原内容；媒体文件需在本机存在');
+            state().notify(
+              missing.length
+                ? `已导入画布，${missing.length} 个素材缺失，已保留引用`
+                : '已导入画布，可撤销恢复原内容',
+            );
           }
         } catch (error) {
-          state().notify(
-            error instanceof CanvasCommandError ? error.message : '读取画布 JSON 失败',
-          );
+          state().notify(error instanceof Error ? error.message : '读取画布 JSON 失败');
         }
       },
     };

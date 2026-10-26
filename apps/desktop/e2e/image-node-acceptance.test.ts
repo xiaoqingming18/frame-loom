@@ -1,3 +1,4 @@
+import { openProjectCanvas, canvasFixture } from './project-canvas.fixture';
 import { expect, test, _electron, type Page, type ElectronApplication } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -6,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  CanvasRecord,
+  ProjectPageRecord,
   Channel,
   ChannelModelList,
   GenerationJob,
@@ -81,7 +82,7 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     const models = ChannelModelList.parse(await api(page, `/channels/${channel.id}/models`));
     const model = models.find((item) => item.upstreamModelId === 'gpt-image-2.5')!;
     await api(page, '/model-defaults', 'PUT', { image: model.id });
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     for (const path of ['./fixtures/reference-256.png', '../resources/icon.png']) {
       await page
         .getByLabel('上传图片或视频', { exact: true })
@@ -89,8 +90,8 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     }
     await expect(page.locator('.react-flow__node-image img')).toHaveCount(2);
     await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
-    await page.getByRole('link', { name: '项目库' }).click();
-    const record = CanvasRecord.parse(await api(page, '/canvases/lab'));
+    await page.getByRole('link', { name: '项目库', exact: true }).first().click();
+    const record = ProjectPageRecord.parse(await api(page, (await canvasFixture(page)).pagePath));
     const sources = record.document.nodes;
     const document: CanvasDocument = {
       schemaVersion: 1,
@@ -126,8 +127,11 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
         targetHandle: 'reference',
       })),
     };
-    await api(page, '/canvases/lab', 'PUT', { revision: record.revision, document });
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await api(page, (await canvasFixture(page)).pagePath, 'PUT', {
+      revision: record.revision,
+      document,
+    });
+    await openProjectCanvas(page, app);
     await page.locator('.react-flow__node[data-id="target"]').click();
     await page.getByRole('button', { name: '生成模型', exact: true }).click();
     await page.getByRole('button', { name: /^gpt-image-1 / }).click();
@@ -172,7 +176,7 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
       await expect(page.getByRole('button', { name: '生成图片', exact: true })).toBeEnabled();
     }
 
-    await page.getByRole('link', { name: '项目库' }).click();
+    await page.getByRole('link', { name: '项目库', exact: true }).first().click();
     const job = GenerationJob.parse(
       await api(page, '/generation-jobs', 'POST', {
         modelId: model.id,
@@ -184,8 +188,8 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
       }),
     );
     await expect.poll(() => !!finishLegacy).toBe(true);
-    const latest = CanvasRecord.parse(await api(page, '/canvases/lab'));
-    await api(page, '/canvases/lab', 'PUT', {
+    const latest = ProjectPageRecord.parse(await api(page, (await canvasFixture(page)).pagePath));
+    await api(page, (await canvasFixture(page)).pagePath, 'PUT', {
       revision: latest.revision,
       document: {
         schemaVersion: 1,
@@ -213,10 +217,10 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     app = undefined;
     app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     page = await app.firstWindow();
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     await expect(page.locator('.react-flow__node-image img')).toBeVisible();
     await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
-    const migrated = CanvasRecord.parse(await api(page, '/canvases/lab'));
+    const migrated = ProjectPageRecord.parse(await api(page, (await canvasFixture(page)).pagePath));
     expect(migrated.document.nodes[0]).toMatchObject({
       typeVersion: 2,
       data: {
@@ -229,7 +233,8 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     await expect(page.locator('.react-flow__node-image img')).toBeVisible();
     expect(
       (
-        CanvasRecord.parse(await api(page, '/canvases/lab')).document.nodes[0].data as {
+        ProjectPageRecord.parse(await api(page, (await canvasFixture(page)).pagePath)).document
+          .nodes[0].data as {
           versions: unknown[];
         }
       ).versions,

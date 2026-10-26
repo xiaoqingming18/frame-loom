@@ -68,8 +68,11 @@ test('项目库与创作页生命周期、偏好重启保留及明暗最小窗�
     dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: '创作页名称' }).fill('第一集');
     await dialog.getByRole('button', { name: '确认' }).click();
-    await expect(page.getByText('创作页已保存，项目画布正在接入。')).toBeVisible();
-    await page.getByRole('link', { name: '返回项目' }).click();
+    await expect(page.getByRole('region', { name: '画布编辑区' })).toBeVisible();
+    await page
+      .getByRole('navigation', { name: '画布面包屑' })
+      .getByRole('link', { name: '城市漫游' })
+      .click();
     await page.getByRole('button', { name: '展开 城市漫游' }).click();
     await expect(
       page.getByRole('navigation', { name: '项目树' }).getByRole('link', { name: '第一集' }),

@@ -1,3 +1,4 @@
+import { openProjectCanvas } from './project-canvas.fixture';
 import { expect, test, _electron, type ElectronApplication } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -139,9 +140,9 @@ test('界面配置渠道与默认模型，明暗主题及重启保留', async ({
       await page.getByRole('tab', { name: '模型服务' }).click();
       await page.getByRole('button', { name: '关闭', exact: true }).click();
       await expect(page.getByRole('link', { name: '模型测试' })).toHaveCount(0);
-      await page.getByRole('link', { name: '画布测试' }).click();
+      await openProjectCanvas(page, app);
       await expect(page.getByRole('region', { name: '画布编辑区' })).toBeVisible();
-      await page.screenshot({ path: info.outputPath(`canvas-lab-${source}.png`) });
+      await page.screenshot({ path: info.outputPath(`project-canvas-${source}.png`) });
       await page.getByRole('button', { name: '设置中心' }).click();
       await page.getByRole('button', { name: '设置', exact: true }).click();
       await page.getByRole('tab', { name: '模型服务' }).click();

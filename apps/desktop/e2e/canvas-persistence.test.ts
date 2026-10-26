@@ -1,9 +1,10 @@
+import { openProjectCanvas } from './project-canvas.fixture';
 import { expect, test, _electron, type ElectronApplication, type Page } from '@playwright/test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CanvasRecord, type CanvasDocument } from '@frame-loom/contracts';
+import { ProjectPageRecord, type CanvasDocument } from '@frame-loom/contracts';
 
 type EngineWindow = Window & {
   frameLoom: { getEngineConnection(): Promise<{ baseUrl: string; token: string }> };
@@ -30,13 +31,17 @@ async function stopApp(app: ElectronApplication | undefined) {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
     }
   }
-  app.process().kill();
-  await app.close();
+  await app
+    .evaluate(({ BrowserWindow, app }) => {
+      for (const window of BrowserWindow.getAllWindows()) window.destroy();
+      app.exit();
+    })
+    .catch(() => {});
 }
 
 async function openCanvas(app: ElectronApplication) {
   const page = await app.firstWindow();
-  await page.getByRole('link', { name: '画布测试' }).click();
+  await openProjectCanvas(page, app);
   await expect(page.getByRole('region', { name: '画布编辑区' })).toBeVisible();
   return page;
 }
@@ -46,10 +51,13 @@ async function readCanvas(page: Page) {
       window as unknown as EngineWindow
     ).frameLoom.getEngineConnection();
     return (
-      await fetch(`${baseUrl}/canvases/lab`, { headers: { Authorization: `Bearer ${token}` } })
+      await fetch(
+        `${baseUrl}${(JSON.parse(sessionStorage.getItem('project-canvas-fixture')!) as { pagePath: string }).pagePath}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
     ).json() as Promise<unknown>;
   });
-  return CanvasRecord.nullable().parse(value);
+  return ProjectPageRecord.nullable().parse(value);
 }
 async function rename(page: Page, from: string, to: string) {
   await page.getByText(from, { exact: true }).dblclick();
@@ -102,10 +110,10 @@ test('持久化：自动保存、路由离开、立即关闭与退出后重启�
     expect((await readCanvas(page))!.revision).toBe(first.revision);
 
     await rename(page, title, '离开路由前保存');
-    await page.getByRole('link', { name: '项目库', exact: true }).click();
+    await page.getByRole('link', { name: '项目库', exact: true }).first().click();
     await expect(page.getByRole('region', { name: '画布编辑区' })).toHaveCount(0);
     expect((await readCanvas(page))!.document.nodes[0].title).toBe('离开路由前保存');
-    await page.getByRole('link', { name: '画布测试' }).click();
+    await openProjectCanvas(page, app);
     await expect(page.getByText('离开路由前保存', { exact: true })).toBeVisible();
     await rename(page, '离开路由前保存', '关闭窗口前保存');
     const closed = app.waitForEvent('close');
@@ -167,21 +175,24 @@ test('持久化故障：409 不覆盖、导出救援与重新加载；引擎退�
           window as unknown as EngineWindow
         ).frameLoom.getEngineConnection();
         return (
-          await fetch(`${baseUrl}/canvases/lab`, {
-            method: 'PUT',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          })
+          await fetch(
+            `${baseUrl}${(JSON.parse(sessionStorage.getItem('project-canvas-fixture')!) as { pagePath: string }).pagePath}`,
+            {
+              method: 'PUT',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            },
+          )
         ).status;
       },
       { revision: original.revision, document: remote },
     );
     expect(externalStatus).toBe(200);
     await rename(page, original.document.nodes[0].title!, '本地未保存内容');
-    await page.getByRole('link', { name: '项目库', exact: true }).click();
+    await page.getByRole('link', { name: '项目库', exact: true }).first().click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.getByRole('button', { name: '留在画布' }).click();
-    await expect(page.getByRole('alert')).toContainText('其他窗口已修改');
+    await expect(page.getByRole('alert')).toContainText('创作页已被修改');
     const exportPath = join(userData, 'rescue.json');
     await app.evaluate(({ session }, path) => {
       session.defaultSession.once('will-download', (_event, item) => item.setSavePath(path));
@@ -223,7 +234,7 @@ test('持久化故障：409 不覆盖、导出救援与重新加载；引擎退�
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
       const section = (await page
-        .getByRole('region', { name: '画布测试', exact: true })
+        .getByRole('region', { name: '项目画布', exact: true })
         .boundingBox())!;
       const button = (await page.getByRole('button', { name: '导出当前画布 JSON' }).boundingBox())!;
       expect(button.x + button.width).toBeLessThanOrEqual(section.x + section.width);

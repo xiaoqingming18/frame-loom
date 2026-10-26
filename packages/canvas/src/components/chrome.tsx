@@ -55,7 +55,7 @@ export function AddNodeItems({
   pending?: PendingConnection;
   accepts?: (type: string) => boolean;
 }) {
-  const { registry } = useCanvas();
+  const { registry, host } = useCanvas();
   const types = registry.list().filter((type) => type.category && (!accepts || accepts(type.type)));
   if (!types.length)
     return (
@@ -63,12 +63,21 @@ export function AddNodeItems({
         没有可连接的节点类型
       </DropdownMenuLabel>
     );
-  return types.map((type) => (
-    <DropdownMenuItem key={type.type} onSelect={() => actions.addNode(type.type, at, pending)}>
-      <span aria-hidden="true">{type.icon}</span>
-      {type.label}
-    </DropdownMenuItem>
-  ));
+  return (
+    <>
+      {types.map((type) => (
+        <DropdownMenuItem key={type.type} onSelect={() => actions.addNode(type.type, at, pending)}>
+          <span aria-hidden="true">{type.icon}</span>
+          {type.label}
+        </DropdownMenuItem>
+      ))}
+      {host.assets && !pending && (
+        <DropdownMenuItem onSelect={() => void actions.pickAsset(at)}>
+          从项目资产添加
+        </DropdownMenuItem>
+      )}
+    </>
+  );
 }
 
 const tools: { id: CanvasTool; label: string; shortcut: string; icon: ReactNode }[] = [

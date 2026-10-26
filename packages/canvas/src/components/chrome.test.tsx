@@ -6,7 +6,12 @@ import { CanvasContext } from '../context';
 import { createCanvasStore } from '../store/store';
 import { createBuiltinRegistry } from '../nodes/builtin';
 import { media, doc } from '../test-utils';
-import { BottomDock, TopRightBar } from './chrome';
+import { AddNodeItems, BottomDock, TopRightBar } from './chrome';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@frame-loom/ui/components/dropdown-menu';
 import type { CanvasActionsApi } from './use-actions';
 
 vi.mock('@xyflow/react', async (importOriginal) => ({
@@ -22,7 +27,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function fixture(children: (actions: CanvasActionsApi) => ReactNode) {
+function fixture(children: (actions: CanvasActionsApi) => ReactNode, assets = false) {
   const store = createCanvasStore();
   const callbacks = {
     undo: vi.fn(),
@@ -35,6 +40,7 @@ function fixture(children: (actions: CanvasActionsApi) => ReactNode) {
     arrangeOrder: 'created',
     setArrangeOrder: vi.fn(),
     addNode: vi.fn(),
+    pickAsset: vi.fn(),
   };
   const actions = callbacks as unknown as CanvasActionsApi;
   render(
@@ -44,6 +50,7 @@ function fixture(children: (actions: CanvasActionsApi) => ReactNode) {
         registry: createBuiltinRegistry(),
         host: {
           media: { upload: () => Promise.reject(new Error('本测试不上传')), url: (hash) => hash },
+          ...(assets ? { assets: { pick: vi.fn(), save: vi.fn() } } : {}),
         },
       }}
     >
@@ -52,6 +59,25 @@ function fixture(children: (actions: CanvasActionsApi) => ReactNode) {
   );
   return { store, callbacks };
 }
+it.each([false, true])('资产入口仅在宿主提供能力时显示：%s', (assets) => {
+  const { callbacks } = fixture(
+    (actions) => (
+      <DropdownMenu open>
+        <DropdownMenuTrigger>添加</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <AddNodeItems actions={actions} at={{ x: 1, y: 2 }} />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ),
+    assets,
+  );
+  const item = screen.queryByRole('menuitem', { name: '从项目资产添加' });
+  expect(!!item).toBe(assets);
+  if (item) {
+    fireEvent.click(item);
+    expect(callbacks.pickAsset).toHaveBeenCalledWith({ x: 1, y: 2 });
+  }
+});
 
 it('底部栏包含已确认的工具，工具切换与撤销状态跟随独立 store', () => {
   const help = vi.fn();

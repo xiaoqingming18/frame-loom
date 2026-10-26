@@ -8,7 +8,7 @@ Frame Loom 的创作流程（参考图 → 图片 → 视频，以及后续的�
 
 需求与约束：
 
-- 画布以后与项目管理联动，但项目管理尚未实现。画布功能与界面位于独立 package，主工程左栏提供「画布测试」菜单和页面供人工验收。
+- 画布功能与界面位于独立 package，项目画布宿主位于 `features/projects/canvas/`；旧「画布测试」菜单和页面已删除。
 - 首期节点为图片与视频；架构要能低成本新增文本、音频、导演台、视频剪辑等节点。
 - 节点之间可以连线，连线必须做类型校验（图片不能连到只收音频的端口等）。视频节点按三种生成方式（文生视频、首尾帧、参考生视频）决定可用端口，连线本身不带角色。
 - 底部操作栏提供新增节点、指针、框选、抓手等工具；支持按住空格平移、复制粘贴、滚轮缩放等快捷键。
@@ -56,7 +56,7 @@ packages/canvas/                  @frame-loom/canvas
     nodes/        图片／视频／分组视图、data schema、端口声明、生成与版本回写
     host.ts       CanvasHost 宿主接口
     styles.css    --xy-* 到主题 token 的映射与画布专用样式
-apps/desktop/src/renderer/src/features/canvas-lab/   宿主实现与测试页
+apps/desktop/src/renderer/src/features/projects/canvas/   项目画布宿主与持久化
 ```
 
 - **`packages/ui`**：包含从 desktop 纯迁移的 `components/ui/*` 与 `lib/utils.ts` 的 `cn`，desktop 从 `@frame-loom/ui/...` 导入；包内也用包名自引用，`components.json` 随包迁移，沿用 shadcn monorepo 约定。`theme.css` 留在 desktop：主进程窗口背景测试直接解析它，画布包只使用语义类与 `var(--…)`。
@@ -78,7 +78,7 @@ apps/desktop/src/renderer/src/features/canvas-lab/   宿主实现与测试页
   }
   ```
 
-  `features/canvas-lab` 用 EngineClient 实现宿主；画布持久化会话独立持有 revision 与串行保存队列，避免 Query 的缓存刷新覆盖尚未保存的编辑；其他服务端查询继续使用 Query。项目管理落地后复用同一个包，只替换宿主实现。
+  项目画布宿主用 EngineClient 实现；画布持久化会话独立持有 revision 与串行保存队列，避免 Query 的缓存刷新覆盖尚未保存的编辑；其他服务端查询继续使用 Query。项目和页面 id 由路由注入，媒体与生成任务归属项目。
 - **ESLint**：renderer 的 React Hooks、Fast Refresh、Tailwind correctness 与颜色限制规则扩展到 `packages/ui/**`、`packages/canvas/**`；新增导入边界，`packages/*` 不能导入 `apps/*`，`packages/ui` 不能导入 `packages/canvas`。
 - **新增依赖**精确锁定：`@xyflow/react` 12.12.0、`zustand` 5.0.16（画布包自用；xyflow 内部另带 zustand 4，打包后多一份约 3 KB）。id 用 `crypto.randomUUID()`，快捷键自写，不引入热键库。dagre 留到"按依赖分层"再评估。
 
@@ -219,7 +219,7 @@ defineNodeType({
   - `GET /canvases/:id`：不存在时返回 JSON `null`。
   - `PUT /canvases/:id`，请求体 `{ revision, document }`：revision 为 0 时创建；与库内不一致时返回 409 `CANVAS_REVISION_CONFLICT`；成功返回新 revision。engine 用 contracts 校验外层结构、上限，并按注册的内置类型校验 image、video、group 的 `data`；未知类型的 `data` 原样保存。
   - `PUT /canvases/:id/view`：保存视图状态，不改 revision，后写覆盖。
-- id 为 `^[a-z0-9-]{1,64}$`，画布测试页固定使用 `lab`；项目管理落地后增加 `project_id` 关联。
+- 页面 id 沿用项目创作页 UUID；项目画布路由同时传入 `projectId` 与 `pageId`，不再使用固定 `lab`。
 - renderer 修改后防抖 1 秒自动保存，切换路由和关闭窗口前立即保存，标题区显示「已保存／保存中／保存失败」。409 时提示其他窗口已修改，提供「重新加载」与「导出当前画布 JSON」，never 静默覆盖。
 - 保存请求串行执行，保存期间的新编辑保留为待保存状态，响应只能确认已提交的快照；文档保存成功后再保存视图。未创建的画布先用 revision 0 创建，再写视图；视图接口对不存在的画布返回 404。冲突后暂停自动写入，重新加载成功才清空历史并恢复；加载失败不挂载可编辑画布，避免空文档覆盖已有内容。
 - 离开路由或关闭窗口时等待待保存请求完成；失败则保留画布供重试或导出。主进程在窗口关闭后才停止 engine，避免退出流程截断最后一次保存。
@@ -268,7 +268,7 @@ defineNodeType({
 
 - [桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)、[应用骨架](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)：部分重叠。engine 退出的重载捷径由类型化事件替换，preload 增加一个订阅方法；进程模型与鉴权边界不变。两篇的退出行为与 preload 方法列表已原地同步。
 - [engine 与 renderer 基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)：部分重叠。该篇的"renderer 不拆 `packages/ui`"理由是没有第二个使用者，画布包成为第二个使用者；"Zustand、`@xyflow/react` 到首个需要它的功能再引入"由本篇兑现。目录与延后项事实已原地同步，不改写其决定。
-- [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)：部分重叠。新增画布 token、侧栏「画布测试」、默认菜单移除；同步该篇对默认菜单快捷键的后果描述。
+- [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)：部分重叠。新增画布 token，项目侧栏承载画布入口，旧「画布测试」入口已移除；同步该篇对默认菜单快捷键的后果描述。
 - [lint 与格式化](../../implemented/process/2026-10-24-lint-and-format.md)：部分重叠。renderer 规则扩展到两个新包并增加包级导入边界，相关事实已原地同步。
 - [模型管理](../../proposed/architecture/2026-10-24-model-management.md)：部分重叠。复用 `/media`、`frame-media://`、生成任务与档案；模型测试页按本篇的迁移边界删除，真实供应商与 NSIS 验收仍由该篇持有。
 - [共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)：部分重叠，新增 `canvas.ts` 与 `engine:exited` 事件载荷，契约约定不变。
@@ -309,7 +309,7 @@ defineNodeType({
    - 剪贴板：前缀与 MIME 往返、非法与超限内容被拒绝。
 3. engine 集成（真实 SQLite）：创建、读取、revision 递增、409 冲突、上限与内置类型 `data` 校验、视图保存不改 revision。
 4. desktop：`engine:exited` 事件只发往可信窗口、preload 剥离原始事件并可取消订阅；engine 退出后页面不重载、画布内容保留。
-5. 桌面 e2e：打开「画布测试」，上传图片建节点，图片连到视频「首尾帧」的首帧口成功、连到「文生视频」被拒绝；切换方式断开连线并可撤销；保存后重启应用内容与视口保留。另覆盖模拟供应商下的图片生成与图片作首帧生成视频，并写回为新版本。
+5. 桌面 e2e：创建项目和创作页后进入项目画布，上传图片建节点，图片连到视频「首尾帧」的首帧口成功、连到「文生视频」被拒绝；切换方式断开连线并可撤销；保存后重启应用内容与视口保留。另覆盖模拟供应商下的图片生成与图片作首帧生成视频，并写回为新版本。
 
 人工验收于 2026-10-26 在开发环境与加固 win-unpacked exe 中完成，明暗两种模式均检查；原生资源管理器拖拽由用户确认两环境成功，其余交互、输入法、剪贴板、最小窗口与引擎故障导出有本机记录。详细截图、JSON 与日志位于 `.cache/canvas-06/acceptance.md`，不把该目录作为分发资源。
 

@@ -403,19 +403,52 @@ export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
               <Upload aria-hidden="true" className="size-3.5" />
               {uploading ? '正在上传…' : '上传图片'}
             </Button>
+            {host.assets && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={locked || uploading}
+                onClick={() => {
+                  setUploading(true);
+                  void host
+                    .assets!.pick('image')
+                    .then((picked) => {
+                      if (!picked) return;
+                      const current = store.getState();
+                      const node = current.document.nodes.find((node) => node.id === props.node.id);
+                      if (!node || isNodeLocked(current.document, node)) return;
+                      current.apply((document) =>
+                        updateData<CanvasMediaData>(document, node.id, (data) =>
+                          appendVersion(data, picked.version),
+                        ),
+                      );
+                    })
+                    .catch((error: unknown) =>
+                      store
+                        .getState()
+                        .notify(error instanceof Error ? error.message : '添加资产失败'),
+                    )
+                    .finally(() => setUploading(false));
+                }}
+              >
+                从项目资产添加
+              </Button>
+            )}
           </div>
         )
       }
     >
       {version ? (
-        <img
-          src={host.media.url(version.sha256)}
-          alt={props.node.title ?? '图片'}
-          draggable={false}
-          decoding="async"
-          loading="lazy"
-          className="size-full object-contain"
-        />
+        <MediaPreview key={version.sha256}>
+          <img
+            src={host.media.url(version.sha256)}
+            alt={props.node.title ?? '图片'}
+            draggable={false}
+            decoding="async"
+            loading="lazy"
+            className="size-full object-contain"
+          />
+        </MediaPreview>
       ) : (
         <Empty kind="image" pending={!!props.node.data.pendingJobIds?.length} />
       )}
@@ -502,35 +535,56 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
       }
     >
       {version ? (
-        play ? (
-          <video
-            src={host.media.url(version.sha256)}
-            poster={version.posterSha256 ? host.media.url(version.posterSha256) : undefined}
-            aria-label={props.node.title ?? '视频'}
-            muted
-            loop
-            autoPlay
-            playsInline
-            preload="metadata"
-            className="size-full object-contain"
-          />
-        ) : version.posterSha256 ? (
-          <img
-            src={host.media.url(version.posterSha256)}
-            alt={props.node.title ?? '视频封面'}
-            draggable={false}
-            decoding="async"
-            className="size-full object-contain"
-          />
-        ) : (
-          <div className="flex size-full items-center justify-center text-muted-foreground">
-            <Film aria-hidden="true" className="size-6" strokeWidth={1.25} />
-          </div>
-        )
+        <MediaPreview key={`${version.sha256}/${play}`}>
+          {play ? (
+            <video
+              src={host.media.url(version.sha256)}
+              poster={version.posterSha256 ? host.media.url(version.posterSha256) : undefined}
+              aria-label={props.node.title ?? '视频'}
+              muted
+              loop
+              autoPlay
+              playsInline
+              preload="metadata"
+              className="size-full object-contain"
+            />
+          ) : version.posterSha256 ? (
+            <img
+              src={host.media.url(version.posterSha256)}
+              alt={props.node.title ?? '视频封面'}
+              draggable={false}
+              decoding="async"
+              className="size-full object-contain"
+            />
+          ) : (
+            <div className="flex size-full items-center justify-center text-muted-foreground">
+              <Film aria-hidden="true" className="size-6" strokeWidth={1.25} />
+            </div>
+          )}
+        </MediaPreview>
       ) : (
         <Empty kind="video" pending={!!props.node.data.pendingJobIds?.length} />
       )}
     </MediaFrame>
+  );
+}
+
+/** 失败只改变展示，不移除版本记录，恢复文件后可重新进入页面。 */
+function MediaPreview({ children }: { children: ReactNode }) {
+  const [missing, setMissing] = useState(false);
+  return (
+    <div className="size-full" onErrorCapture={() => setMissing(true)}>
+      {missing ? (
+        <div
+          role="status"
+          className="flex size-full items-center justify-center text-sm text-muted-foreground"
+        >
+          素材缺失
+        </div>
+      ) : (
+        children
+      )}
+    </div>
   );
 }
 

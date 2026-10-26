@@ -61,7 +61,7 @@ Status: implemented
 ### 主题模式与持久化
 
 - `packages/contracts` 新增 `ThemeSource = z.enum(['system', 'light', 'dark'])`，默认 `system`。
-- 主进程在 `<userData>/preferences.json` 保存 `version: 1`、`theme` 及可选的项目保存位置、排序、资产布局；主题与项目偏好共享读取、合并、原子替换流程，避免互相覆盖。项目字段与桥接见[项目库方案](../../proposed/feature/2026-10-26-project-library.md)：
+- 主进程在 `<userData>/preferences.json` 保存 `version: 1`、`theme` 及可选的项目保存位置、排序、资产布局；主题与项目偏好共享读取、合并、原子替换流程，避免互相覆盖。项目字段与桥接见[项目库方案](../../implemented/feature/2026-10-26-project-library.md)：
   - 启动时、创建窗口之前同步读取。文件不存在、JSON 损坏或校验失败时使用默认值，不阻止启动。
   - 写入时先写临时文件再重命名。
   - 读取后立即设置 `nativeTheme.themeSource`，再根据 `nativeTheme.shouldUseDarkColors` 选窗口 `backgroundColor`：明亮 `#f6f7f9`，暗黑 `#0d0d0f`。这样窗口第一帧就和页面一致。
@@ -95,7 +95,7 @@ Status: implemented
 - `app/shell/` 组合标题栏、侧栏、主画布和设置中心弹窗。它属于 app 层，可以同时引用多个 feature。
 - 侧栏宽 260px，背景透明（显示 `background`）。从上到下：
   - 品牌区：20px 圆角 logo 加衬线体「Frame Loom」；右侧有折叠和搜索两个按钮。折叠用组件内状态实现，不持久化；搜索按钮暂时禁用。
-  - 导航：「开始创作」（`/`）、「项目库」（`/projects`）和「画布测试」（`/canvas-lab`）。当前路由对应的项用 `accent-active` 高亮。临时模型测试页已删除，图片／视频生成由画布节点承接；文本与 TTS 接口保留，迁移边界见[模型管理](../../proposed/architecture/2026-10-24-model-management.md)。
+  - 导航：「开始创作」（`/`）和「项目库」（`/projects`）。旧画布测试页已删除，图片／视频生成由项目画布节点承接；文本与 TTS 接口保留，迁移边界见[模型管理](../../proposed/architecture/2026-10-24-model-management.md)。
   - 「项目」分组标题：右侧的新建按钮暂时禁用。
   - 底部的「设置中心」按钮。
 - 主画布背景为 `canvas` 加 24px 的 `dot` 点阵。左上角 16px 圆角，上边和左边有 `border` 描边，主内容区单独滚动。
@@ -104,7 +104,7 @@ Status: implemented
   - 输入区：外观按设计稿实现，但文本框、模型、技能、版本、发送、选择项目全部禁用，并用提示说明「创作功能尚未开放」。
   - 公告胶囊「首版发布」在有发布说明之前不显示。
 - 未开放的按钮使用 `aria-disabled` 并阻止操作，文本框为只读；保留键盘焦点，用 Tooltip 和常驻 `aria-describedby` 提供提示，避免原生 `disabled` 导致提示无法被键盘访问。版本选择只标为「版本」，不宣称存在设计稿的 V3；输入提示移除尚不存在的 Design 使用指南。
-- 项目库（`/projects`）只显示空状态。
+- 项目库（`/projects`）显示项目卡片、搜索、排序和项目操作；详情页承载创作页与项目资产。
 - 健康查询在外壳挂载时执行一次。查询失败时，设置中心按钮上显示一个 `destructive` 圆点，否则 engine 出错用户无从得知。
 - 健康结果在外壳和设置面板间共享，`staleTime: Infinity`、`retryOnMount: false` 避免打开页签重复查询或自动重试；重新检查按钮显式刷新，主进程以 `engine:exited` 通知退出，页面保留当前编辑内容。
 

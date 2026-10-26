@@ -140,7 +140,7 @@ type Menu =
   | { kind: 'pane'; screen: Point; flow: Point };
 
 function Editor({ className }: { className?: string }) {
-  const { store, registry } = useCanvas();
+  const { store, registry, host } = useCanvas();
   const flow = useReactFlow();
   const actions = useCanvasActions();
   const document = useCanvasState((state) => state.document);
@@ -741,6 +741,18 @@ function Editor({ className }: { className?: string }) {
             <DropdownMenuItem disabled={selectedCount !== 1} onSelect={() => actions.rename()}>
               重命名<DropdownMenuShortcut>F2</DropdownMenuShortcut>
             </DropdownMenuItem>
+            {host.assets &&
+              selectedCount === 1 &&
+              document.nodes.some(
+                (node) =>
+                  selectedNodes.has(node.id) &&
+                  (node.type === 'image' || node.type === 'video') &&
+                  (node.data as { versions?: unknown[] }).versions?.length,
+              ) && (
+                <DropdownMenuItem onSelect={() => void actions.saveAsset()}>
+                  保存到项目资产
+                </DropdownMenuItem>
+              )}
             <DropdownMenuItem onSelect={() => actions.duplicate()}>
               原地复制<DropdownMenuShortcut>Ctrl+D</DropdownMenuShortcut>
             </DropdownMenuItem>

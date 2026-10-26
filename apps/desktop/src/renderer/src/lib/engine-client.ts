@@ -1,6 +1,10 @@
 import { EngineConnection, ErrorResponse } from '@frame-loom/contracts';
 
-type EngineRequestInit = Omit<RequestInit, 'body'> & { body?: unknown; timeoutMs?: number };
+type EngineRequestInit = Omit<RequestInit, 'body'> & {
+  body?: unknown;
+  timeoutMs?: number;
+  onUploadProgress?: (percent: number) => void;
+};
 
 export class EngineRequestError extends Error {
   constructor(
@@ -40,20 +44,46 @@ export function createEngineClient(getConnection: () => Promise<unknown>) {
         init.body instanceof Blob ? 'application/octet-stream' : 'application/json',
       );
     const requestInit = Object.fromEntries(
-      Object.entries(init).filter(([key]) => key !== 'timeoutMs'),
+      Object.entries(init).filter(([key]) => key !== 'timeoutMs' && key !== 'onUploadProgress'),
     ) as RequestInit;
-    const response = await fetch(url.href, {
-      ...requestInit,
-      body:
-        init.body === undefined
-          ? undefined
-          : init.body instanceof Blob
-            ? init.body
-            : JSON.stringify(init.body),
-      headers,
-      signal,
-      redirect: 'error',
-    });
+    const response =
+      init.body instanceof Blob && init.onUploadProgress
+        ? await new Promise<Response>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const abort = () => xhr.abort();
+            xhr.open(init.method ?? 'POST', url.href);
+            headers.forEach((value, name) => xhr.setRequestHeader(name, value));
+            xhr.upload.onprogress = (event) => {
+              if (event.lengthComputable)
+                init.onUploadProgress?.(
+                  Math.min(99, Math.round((event.loaded / event.total) * 100)),
+                );
+            };
+            xhr.onload = () =>
+              resolve(
+                new Response(xhr.responseText, {
+                  status: xhr.status,
+                  headers: { 'Content-Type': xhr.getResponseHeader('Content-Type') ?? '' },
+                }),
+              );
+            xhr.onerror = () => reject(new Error('上传连接失败'));
+            xhr.onabort = () => reject(new Error('上传已取消'));
+            xhr.onloadend = () => signal.removeEventListener('abort', abort);
+            signal.addEventListener('abort', abort, { once: true });
+            xhr.send(init.body as Blob);
+          })
+        : await fetch(url.href, {
+            ...requestInit,
+            body:
+              init.body === undefined
+                ? undefined
+                : init.body instanceof Blob
+                  ? init.body
+                  : JSON.stringify(init.body),
+            headers,
+            signal,
+            redirect: 'error',
+          });
     if (!response.ok) {
       const error = ErrorResponse.safeParse(await response.json().catch(() => null));
       throw new EngineRequestError(

@@ -32,7 +32,7 @@ function setup(record: CanvasRecord | null = null) {
       .mockImplementation((_id, revision) => Promise.resolve({ revision: revision + 1 })),
     saveView: vi.fn<NonNullable<CanvasHost['documents']>['saveView']>().mockResolvedValue(),
   };
-  const session = createCanvasPersistence(host, 'lab');
+  const session = createCanvasPersistence(host, '00000000-0000-4000-8000-000000000002');
   return { host, session, store: session.store };
 }
 afterEach(() => vi.useRealTimers());
@@ -43,7 +43,7 @@ it('持久化旧文档加载时迁移任务，保留原参数和提示词', asyn
   old.nodes[0].typeVersion = 1;
   old.nodes[0].data = { ...old.nodes[0].data, ...{ pendingJobId: id } };
   const { session, store } = setup({
-    id: 'lab',
+    id: '00000000-0000-4000-8000-000000000002',
     revision: 1,
     document: old,
     view: null,
@@ -59,7 +59,7 @@ it('持久化旧文档加载时迁移任务，保留原参数和提示词', asyn
 
 it('加载后恢复文档与视图，加载失败不变成可编辑空画布，也不自动写入', async () => {
   const record: CanvasRecord = {
-    id: 'lab',
+    id: '00000000-0000-4000-8000-000000000002',
     revision: 4,
     document: document(),
     view: { ...DEFAULT_VIEW, minimap: false },
@@ -97,12 +97,20 @@ it('防抖 1 秒保存，选择与工具不触发请求；离开时 flush 立即
   await vi.advanceTimersByTimeAsync(999);
   expect(host.save).not.toHaveBeenCalled();
   expect(await session.flush()).toBe(true);
-  expect(host.save).toHaveBeenCalledExactlyOnceWith('lab', 0, store.getState().document);
+  expect(host.save).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000002',
+    0,
+    store.getState().document,
+  );
   expect(session.getSnapshot().status).toBe('saved');
   store.getState().apply((doc) => ({ ...doc, nodes: [{ ...doc.nodes[0], title: '自动保存' }] }));
   await vi.advanceTimersByTimeAsync(1000);
   expect(host.save).toHaveBeenCalledTimes(2);
-  expect(host.save).toHaveBeenLastCalledWith('lab', 1, store.getState().document);
+  expect(host.save).toHaveBeenLastCalledWith(
+    '00000000-0000-4000-8000-000000000002',
+    1,
+    store.getState().document,
+  );
   session.stop();
   await vi.advanceTimersByTimeAsync(1000);
   expect(host.save).toHaveBeenCalledTimes(2);
@@ -125,8 +133,8 @@ it('保存中继续编辑按序使用新 revision 续存，旧响应不能把新
   first.resolve({ revision: 1 });
   await pending;
   expect(host.save.mock.calls).toEqual([
-    ['lab', 0, firstDocument],
-    ['lab', 1, store.getState().document],
+    ['00000000-0000-4000-8000-000000000002', 0, firstDocument],
+    ['00000000-0000-4000-8000-000000000002', 1, store.getState().document],
   ]);
   expect(session.hasPendingChanges()).toBe(false);
 });
@@ -150,8 +158,15 @@ it('首次只改视图时先创建文档，后续视图保存不增加文档 rev
   await session.reload();
   store.getState().setView({ minimap: false });
   await session.flush();
-  expect(host.save).toHaveBeenCalledExactlyOnceWith('lab', 0, emptyCanvasDocument());
-  expect(host.saveView).toHaveBeenCalledExactlyOnceWith('lab', store.getState().view);
+  expect(host.save).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000002',
+    0,
+    emptyCanvasDocument(),
+  );
+  expect(host.saveView).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000002',
+    store.getState().view,
+  );
   expect(host.save.mock.invocationCallOrder[0]).toBeLessThan(
     host.saveView.mock.invocationCallOrder[0],
   );
@@ -179,7 +194,7 @@ it('409 后保留内容、暂停保存；重载失败仍保留，成功才清空
   await session.reload();
   store.getState().apply(() => document());
   host.save.mockRejectedValueOnce(
-    new EngineRequestError(409, 'CANVAS_REVISION_CONFLICT', '其他窗口已修改'),
+    new EngineRequestError(409, 'PAGE_REVISION_CONFLICT', '其他窗口已修改'),
   );
   expect(await session.flush()).toBe(false);
   store.getState().apply((doc) => ({ ...doc, nodes: [{ ...doc.nodes[0], title: '本地保留' }] }));
@@ -191,18 +206,21 @@ it('409 后保留内容、暂停保存；重载失败仍保留，成功才清空
   expect(store.getState().document).toBe(local);
   expect(session.getSnapshot()).toMatchObject({ ready: true, status: 'conflict' });
   host.load.mockResolvedValueOnce({
-    id: 'lab',
+    id: '00000000-0000-4000-8000-000000000002',
     revision: 7,
     document: document(),
     view: DEFAULT_VIEW,
-    updatedAt: '2026-10-25T00:00:00Z',
   });
   await session.reload();
   expect(store.getState().past).toEqual([]);
   expect(store.getState().future).toEqual([]);
   store.getState().apply(() => emptyCanvasDocument());
   await session.flush();
-  expect(host.save).toHaveBeenLastCalledWith('lab', 7, emptyCanvasDocument());
+  expect(host.save).toHaveBeenLastCalledWith(
+    '00000000-0000-4000-8000-000000000002',
+    7,
+    emptyCanvasDocument(),
+  );
 });
 
 it('普通保存失败可按原 revision 重试；退出后忽略过期加载结果', async () => {
