@@ -42,6 +42,7 @@ it('低缩放省略未选中节点的表单，选中后仍可编辑', () => {
             create: vi.fn(),
             get: vi.fn(),
             cancel: vi.fn(),
+            resubmit: vi.fn(),
             subscribe: vi.fn(),
           },
         },

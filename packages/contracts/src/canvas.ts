@@ -46,6 +46,8 @@ export const CanvasMediaData = z
     modelId: z.string().uuid().optional(),
     params: z.record(z.string().max(100), ParamValue).optional(),
     pendingJobId: z.string().uuid().optional(),
+    pendingJobIds: z.array(z.string().uuid()).max(4).optional(),
+    count: z.number().int().min(1).max(4).optional(),
   })
   .refine(
     (data) => data.versions.length === 0 || data.activeVersion < data.versions.length,

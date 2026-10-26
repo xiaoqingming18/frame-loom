@@ -24,8 +24,9 @@ export function GenerationRuntime() {
         const ids = new Set(
           documents.flatMap((document) =>
             document.nodes.flatMap((node) => {
-              const id = (node.data as CanvasMediaData | null)?.pendingJobId;
-              return id && (!changedId || id === changedId) ? [id] : [];
+              if (node.type !== 'image' && node.type !== 'video') return [];
+              const ids = (node.data as CanvasMediaData | null)?.pendingJobIds ?? [];
+              return ids.filter((id) => !changedId || id === changedId);
             }),
           ),
         );
@@ -39,9 +40,13 @@ export function GenerationRuntime() {
             continue;
           }
           if (controller.signal.aborted) return;
+          const previous = store.getState().generationJobs.get(id);
           store.getState().setGenerationJob(job);
           if (isActiveGenerationJob(job)) continue;
-          if (job.status === 'failed' || job.status === 'cancelled')
+          if (
+            previous?.status !== job.status &&
+            (job.status === 'failed' || job.status === 'cancelled')
+          )
             store.getState().notify(job.errorMessage ?? '生成任务已结束');
           store.getState().applySystem((document) => writeGenerationJob(document, job));
         }

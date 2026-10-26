@@ -92,8 +92,8 @@ export function useCanvasActions() {
         const jobs = document.nodes
           .filter((node) => nodeIds.has(node.id) && !isNodeLocked(document, node))
           .flatMap((node) => {
-            const id = (node.data as { pendingJobId?: string } | null)?.pendingJobId;
-            return id ? [id] : [];
+            if (node.type !== 'image' && node.type !== 'video') return [];
+            return (node.data as { pendingJobIds?: string[] } | null)?.pendingJobIds ?? [];
           });
         if (jobs.length && window.confirm('远端可能仍在运行并计费，是否同时放弃生成任务？'))
           for (const id of jobs)

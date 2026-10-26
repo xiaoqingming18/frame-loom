@@ -27,7 +27,7 @@ Status: proposed
 
 ### 已落地边界
 
-01 的共享契约与 02 的 engine 档案、适配器已落地；画布数据、运行时、界面和 @ 引用仍待后续子计划。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
+01 的共享契约、02 的 engine 档案与适配器、03 的画布数据与多任务运行时已落地；新界面和 @ 引用仍待后续子计划。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，桌面宿主加载图片档案时使用相同匹配规则，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
 
 任务提交通过 `AdapterContext.profile` 传递创建时保存的档案快照，避免显式通用档案在执行时按模型 ID 重新匹配成更高能力。三个图片适配器先按档案解析语义参数，再显式组装供应商字段；OpenAI generations／edits 共享尺寸、画质与背景映射，透明时指定 PNG；Gemini 仅对声明清晰度的档案发送 `imageSize`；Seedream 发送像素尺寸和水印，产物声明 JPEG。`MediaService` 已有图片文件头及 `image-size` 识别，图片不经过 `probeMedia`，本次保留该实现并以 JPEG 下载入库集成测试确认真实格式。
 
@@ -85,7 +85,7 @@ Status: proposed
 
 ### 尺寸换算：contracts 中的共享纯函数
 
-01 契约与 02 engine 已落地；画布接入仍为本篇提案。共享入口使用 `imageRequestSize(profile, params)`、`resolveImageParams(profile, current)`、`parseImageReferences(prompt)` 与 `resolveImagePrompt(prompt, inputNodeIds)`。引用函数接收与实际 `inputs` 一一对应的已排序源节点 id，不直接读取画布连线或 `inputOrder`（后者存的是边 id）。失效引用保留原标记并返回 `missingNodeIds`，调用方据此阻止提交。
+01 契约、02 engine 与 03 画布参数回退已落地；尺寸预览与 @ 引用界面接入仍为本篇提案。共享入口使用 `imageRequestSize(profile, params)`、`resolveImageParams(profile, current)`、`parseImageReferences(prompt)` 与 `resolveImagePrompt(prompt, inputNodeIds)`。引用函数接收与实际 `inputs` 一一对应的已排序源节点 id，不直接读取画布连线或 `inputOrder`（后者存的是边 id）。失效引用保留原标记并返回 `missingNodeIds`，调用方据此阻止提交。
 
 尺寸换算按档案能力区分版本，不再维护第二份模型 id 匹配：OpenAI 是否声明 `resolution` 区分固定尺寸与任意尺寸；Seedream 是否允许 `1K` 区分 4.0 与 4.5／通用档案的面积下限。入参先按同一档案回退，未提供参数使用档案默认值；非图片档案拒绝换算，Gemini 返回 `undefined`。`changes` 记录显式传入值的调整／移除（含中文文案），首次填充默认值不产生模型切换提示。数量属于节点 `data.count`，不进入此函数，由 03／04 处理。
 
@@ -120,6 +120,8 @@ Status: proposed
 - `changes` 非空时画布提示"已按新模型调整：21:9 → 16:9"。
 
 ### 多张生成：N 个任务
+
+03 已落地：成功与取消任务移出 `pendingJobIds`，失败任务保留引用供重启恢复和单张重试，主动放弃失败项则移除引用；失败任务不反复通知，重试通过宿主 `resubmit` 返回新任务后在当前文档与历史快照中替换原 id。连续创建中每次立即登记成功创建的任务，后续创建失败停止本轮并保留已创建项。节点迁移同时覆盖持久化加载、JSON 导入与剪贴板入口，未来版本不降级迁移。现有表单暂以原有组件提供数量与逐项重试入口，04 接管最终外观。模拟供应商桌面 e2e 验证三张生成、第二张失败后单张重试、三版本与首帧视频重启保留。
 
 - 数量 ×N 时画布连续提交 N 个独立任务，各自成功后追加一个版本；失败的任务在节点上单独显示并可单独重试（复用 `POST /generation-jobs/:id/resubmit`）。
 - 理由：Gemini 与 Seedream 每次请求只返回一张，N 个任务对所有协议一致；每张有独立状态、取消与计费提示。代价：档案并发上限为 1 时多张排队；一次生成写入多个任务记录。

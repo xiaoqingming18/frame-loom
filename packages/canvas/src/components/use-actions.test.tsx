@@ -20,12 +20,20 @@ it.each([true, false])(
   (confirmed) => {
     const job = generationJob();
     const node = media('one');
-    node.data = { ...(node.data as object), pendingJobId: job.id };
+    const ids = [job.id, '33333333-3333-4333-8333-333333333333'];
+    node.data = { ...(node.data as object), pendingJobIds: ids };
     const store = createCanvasStore(doc([node]));
     const cancel = vi.fn().mockResolvedValue({ ...job, status: 'cancelled' });
     const host: CanvasHost = {
       media: { upload: vi.fn(), url: (hash) => hash },
-      generation: { load: vi.fn(), create: vi.fn(), get: vi.fn(), cancel, subscribe: vi.fn() },
+      generation: {
+        load: vi.fn(),
+        create: vi.fn(),
+        get: vi.fn(),
+        cancel,
+        resubmit: vi.fn(),
+        subscribe: vi.fn(),
+      },
     };
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(confirmed);
     const wrapper = ({ children }: { children: ReactNode }) => (
@@ -38,7 +46,8 @@ it.each([true, false])(
     act(() => result.current.deleteSelection());
     expect(store.getState().document.nodes).toEqual([]);
     expect(confirm).toHaveBeenCalledOnce();
-    expect(cancel).toHaveBeenCalledTimes(confirmed ? 1 : 0);
+    expect(cancel).toHaveBeenCalledTimes(confirmed ? 2 : 0);
+    if (confirmed) for (const id of ids) expect(cancel).toHaveBeenCalledWith(id);
     cancel.mockClear();
     confirm.mockClear();
     act(() => {

@@ -37,13 +37,13 @@ describe('checkConnection', () => {
     video('frames', 'frames'),
     video('text', 'text'),
     video('ref', 'reference'),
-    { ...media('aud'), type: 'audio', data: {} },
+    { ...media('aud'), type: 'audio', typeVersion: 1, data: {} },
     group('g'),
   ];
 
   it('未知、未来版本和非法数据节点保留数据但不暴露端口', () => {
     for (const node of [
-      media('future', 'image', { typeVersion: 2 }),
+      media('future', 'image', { typeVersion: 3 }),
       media('invalid', 'image', { data: {} }),
       media('unknown', 'image', { type: 'plugin:new' }),
     ]) {

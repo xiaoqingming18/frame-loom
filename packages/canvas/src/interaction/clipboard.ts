@@ -64,7 +64,7 @@ export function deserialize(text: string, registry?: NodeRegistry): ClipboardPay
     if (!parsed.success) return null;
     const ids = new Set(parsed.data.nodes.map((node) => node.id));
     const payload = {
-      nodes: parsed.data.nodes,
+      nodes: parsed.data.nodes.map((node) => registry?.migrate(node) ?? node),
       edges: parsed.data.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
     };
     if (!CanvasDocument.safeParse({ schemaVersion: 1, ...payload }).success) return null;

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CANVAS_LIMITS, canvasDocumentBytes, CanvasDocument, CanvasView } from './canvas.js';
+import {
+  CANVAS_LIMITS,
+  canvasDocumentBytes,
+  CanvasDocument,
+  CanvasMediaData,
+  CanvasView,
+} from './canvas.js';
 
 const sha = 'a'.repeat(64);
 const media = (extra = {}) => ({
@@ -34,6 +40,20 @@ const edge = (id: string, source: string, target: string) => ({
   targetHandle: 'reference',
 });
 const doc = (nodes: unknown[], edges: unknown[] = []) => ({ schemaVersion: 1, nodes, edges });
+
+it('媒体数据兼容旧任务并限制数量和任务数组', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  expect(CanvasMediaData.parse(media({ pendingJobId: id })).pendingJobId).toBe(id);
+  expect(CanvasMediaData.parse(media({ pendingJobIds: [id, id, id, id], count: 4 })).count).toBe(4);
+  for (const extra of [
+    { count: 0 },
+    { count: 5 },
+    { count: 1.5 },
+    { pendingJobIds: [id, id, id, id, id] },
+    { pendingJobIds: ['invalid'] },
+  ])
+    expect(CanvasMediaData.safeParse(media(extra)).success).toBe(false);
+});
 
 describe('CanvasDocument', () => {
   it('接受合法文档、分组和未知类型节点的任意 data', () => {

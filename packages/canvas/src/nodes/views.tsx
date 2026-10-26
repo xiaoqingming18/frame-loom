@@ -287,7 +287,7 @@ export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
           className="size-full object-contain"
         />
       ) : (
-        <Empty kind="image" pending={!!props.node.data.pendingJobId} />
+        <Empty kind="image" pending={!!props.node.data.pendingJobIds?.length} />
       )}
     </MediaFrame>
   );
@@ -398,7 +398,7 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
           </div>
         )
       ) : (
-        <Empty kind="video" pending={!!props.node.data.pendingJobId} />
+        <Empty kind="video" pending={!!props.node.data.pendingJobIds?.length} />
       )}
     </MediaFrame>
   );

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import {
   checkGenerationRequest,
+  resolveImageParams,
   type CanvasMediaData,
   type GenerationRequest,
 } from '@frame-loom/contracts';
@@ -27,12 +28,8 @@ export function GenerationPanel({
   const configError = useCanvasState((state) => state.generationError);
   const document = useCanvasState((state) => state.document);
   const generating = useCanvasState((state) => state.generationSubmitting.has(nodeId));
-  const job = useCanvasState((state) =>
-    state.generationJobs.get(
-      (state.document.nodes.find((node) => node.id === nodeId)?.data as CanvasMediaData | undefined)
-        ?.pendingJobId ?? '',
-    ),
-  );
+  const jobs = useCanvasState((state) => state.generationJobs);
+  const pendingIds = data.pendingJobIds ?? [];
   const locked = useCanvasState((state) => {
     const node = state.document.nodes.find((item) => item.id === nodeId);
     return !node || isNodeLocked(state.document, node);
@@ -54,10 +51,13 @@ export function GenerationPanel({
           modelId: model.id,
           mode,
           prompt,
-          params: {
-            ...Object.fromEntries(profile.params.map((param) => [param.key, param.default])),
-            ...data.params,
-          },
+          params:
+            kind === 'image'
+              ? resolveImageParams(profile, data.params ?? {}).params
+              : {
+                  ...Object.fromEntries(profile.params.map((param) => [param.key, param.default])),
+                  ...data.params,
+                },
           inputs,
           source: 'canvas',
         }
@@ -81,7 +81,7 @@ export function GenerationPanel({
       issues.length ||
       storageMissing ||
       missingInputs ||
-      data.pendingJobId ||
+      pendingIds.length ||
       locked ||
       generating
     )
@@ -91,26 +91,43 @@ export function GenerationPanel({
       return;
     store.getState().setGenerationSubmitting(nodeId, true);
     try {
-      const created = await api.create(request);
-      if (!store.getState().document.nodes.some((node) => node.id === nodeId)) {
-        store.getState().notify('生成任务已创建；节点已删除，远端可能仍在运行并计费');
+      for (let index = 0; index < (kind === 'image' ? (data.count ?? 1) : 1); index++) {
+        const created = await api.create(request);
+        store.getState().setGenerationJob(created);
         store.getState().applySystem((document) =>
           updateData<CanvasMediaData>(document, nodeId, (current) => ({
             ...current,
-            pendingJobId: created.id,
+            pendingJobIds: [...(current.pendingJobIds ?? []), created.id],
           })),
         );
-        return;
+        store.getState().applySystem((document) => writeGenerationJob(document, created));
+        if (!store.getState().document.nodes.some((node) => node.id === nodeId)) {
+          store.getState().notify('生成任务已创建；节点已删除，远端可能仍在运行并计费');
+          return;
+        }
       }
+    } catch (error) {
+      store.getState().notify(error instanceof Error ? error.message : '创建任务失败');
+    } finally {
+      store.getState().setGenerationSubmitting(nodeId, false);
+    }
+  }
+
+  async function retry(id: string) {
+    if (!api || locked || store.getState().generationSubmitting.has(nodeId)) return;
+    store.getState().setGenerationSubmitting(nodeId, true);
+    try {
+      const created = await api.resubmit(id);
+      store.getState().setGenerationJob(created);
       store.getState().applySystem((document) =>
         updateData<CanvasMediaData>(document, nodeId, (current) => ({
           ...current,
-          pendingJobId: created.id,
+          pendingJobIds: current.pendingJobIds?.map((jobId) => (jobId === id ? created.id : jobId)),
         })),
       );
-      store.getState().setGenerationJob(created);
+      store.getState().applySystem((document) => writeGenerationJob(document, created));
     } catch (error) {
-      store.getState().notify(error instanceof Error ? error.message : '创建任务失败');
+      store.getState().notify(error instanceof Error ? error.message : '重试任务失败');
     } finally {
       store.getState().setGenerationSubmitting(nodeId, false);
     }
@@ -124,9 +141,29 @@ export function GenerationPanel({
             aria-label="生成模型"
             disabled={locked}
             value={model?.id ?? ''}
-            onChange={(event) =>
-              setData((current) => ({ ...current, modelId: event.target.value, params: {} }))
-            }
+            onChange={(event) => {
+              const next = options.find((item) => item.id === event.target.value);
+              const resolved =
+                kind === 'image' && next?.profile
+                  ? resolveImageParams(next.profile, {
+                      ...request?.params,
+                      ...data.params,
+                    })
+                  : { params: {}, changes: [] };
+              if (
+                setData((current) => ({
+                  ...current,
+                  modelId: event.target.value,
+                  params: resolved.params,
+                })) &&
+                resolved.changes.length
+              )
+                store
+                  .getState()
+                  .notify(
+                    `已按新模型调整：${resolved.changes.map((change) => change.message).join('；')}`,
+                  );
+            }}
           >
             <option value="">选择{kind === 'image' ? '图片' : '视频'}模型</option>
             {options.map((item) => (
@@ -220,42 +257,76 @@ export function GenerationPanel({
           )}
           {storageMissing && <p>当前参考素材需要先配置对象存储</p>}
           {missingInputs && <p>连线来源尚无可用媒体，请先生成或上传素材</p>}
-          {job?.errorMessage && (
-            <p role="alert" className="text-destructive">
-              {job.errorMessage}
-            </p>
+          {pendingIds.map((id, index) => {
+            const job = jobs.get(id);
+            return (
+              <div key={id} className="space-y-1">
+                {job?.errorMessage && (
+                  <p role="alert" className="text-destructive">
+                    {job.errorMessage}
+                  </p>
+                )}
+                <p role="status">
+                  任务 {index + 1}：
+                  {job?.status === 'submit_unknown'
+                    ? '提交结果不明：远端可能已受理并计费'
+                    : (job?.status ?? '正在查询生成任务…')}
+                </p>
+                {job?.status === 'failed' && (
+                  <Button size="sm" disabled={locked || generating} onClick={() => void retry(id)}>
+                    重试任务 {index + 1}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={locked || generating}
+                  onClick={() =>
+                    void api
+                      .cancel(id)
+                      .then((next) => {
+                        store.getState().setGenerationJob(next);
+                        if (next.status === 'failed')
+                          store.getState().applySystem((document) =>
+                            updateData<CanvasMediaData>(document, nodeId, (current) => ({
+                              ...current,
+                              pendingJobIds: current.pendingJobIds?.filter((jobId) => jobId !== id),
+                            })),
+                          );
+                        store
+                          .getState()
+                          .applySystem((document) => writeGenerationJob(document, next));
+                        store.getState().notify(next.errorMessage ?? '生成任务已结束');
+                      })
+                      .catch((error: unknown) =>
+                        store
+                          .getState()
+                          .notify(error instanceof Error ? error.message : '放弃任务失败'),
+                      )
+                  }
+                >
+                  放弃任务
+                </Button>
+              </div>
+            );
+          })}
+          {kind === 'image' && (
+            <NativeSelect
+              aria-label="生成数量"
+              disabled={locked || generating || !!pendingIds.length}
+              value={String(data.count ?? 1)}
+              onChange={(event) =>
+                setData((current) => ({ ...current, count: Number(event.target.value) }))
+              }
+            >
+              {[1, 2, 3, 4].map((count) => (
+                <option key={count} value={count}>
+                  ×{count}
+                </option>
+              ))}
+            </NativeSelect>
           )}
-          {data.pendingJobId ? (
-            <>
-              <p role="status">
-                {job?.status === 'submit_unknown'
-                  ? '提交结果不明：远端可能已受理并计费'
-                  : (job?.status ?? '正在查询生成任务…')}
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  void api
-                    .cancel(data.pendingJobId!)
-                    .then((next) => {
-                      store.getState().setGenerationJob(next);
-                      store
-                        .getState()
-                        .applySystem((document) => writeGenerationJob(document, next));
-                      store.getState().notify(next.errorMessage ?? '生成任务已结束');
-                    })
-                    .catch((error: unknown) =>
-                      store
-                        .getState()
-                        .notify(error instanceof Error ? error.message : '放弃任务失败'),
-                    )
-                }
-              >
-                放弃任务
-              </Button>
-            </>
-          ) : (
+          {!pendingIds.length && (
             <Button
               size="sm"
               disabled={

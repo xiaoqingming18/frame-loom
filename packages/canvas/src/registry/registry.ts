@@ -72,6 +72,16 @@ export class NodeRegistry {
     );
   }
 
+  migrate(node: CanvasNode): CanvasNode {
+    const definition = this.get(node.type);
+    if (!definition?.migrate || node.typeVersion >= definition.version) return node;
+    return {
+      ...node,
+      typeVersion: definition.version,
+      data: definition.dataSchema.parse(definition.migrate(node.data, node.typeVersion)),
+    };
+  }
+
   inputs(node: CanvasNode): readonly InputPort[] {
     const definition = this.get(node.type);
     const data = definition?.dataSchema.safeParse(node.data);

@@ -66,14 +66,29 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
                   )
                     return [];
                   const profile =
-                    profiles.find(
-                      (item) =>
-                        item.kind === model.kind &&
-                        item.protocol === model.protocol &&
-                        (model.profileId
-                          ? item.id === model.profileId
-                          : item.matchIds.includes(model.upstreamModelId)),
-                    ) ??
+                    profiles
+                      .filter(
+                        (item) =>
+                          item.kind === model.kind &&
+                          item.protocol === model.protocol &&
+                          (model.profileId
+                            ? item.id === model.profileId
+                            : item.matchIds.some((id) =>
+                                model.kind === 'image'
+                                  ? model.upstreamModelId.startsWith(id)
+                                  : model.upstreamModelId === id,
+                              )),
+                      )
+                      .sort((a, b) => {
+                        const length = (item: typeof a) =>
+                          Math.max(
+                            0,
+                            ...item.matchIds
+                              .filter((id) => model.upstreamModelId.startsWith(id))
+                              .map((id) => id.length),
+                          );
+                        return length(b) - length(a);
+                      })[0] ??
                     profiles.find(
                       (item) =>
                         !model.profileId &&
@@ -102,6 +117,10 @@ export function CanvasLab({ engineClient }: { engineClient: EngineClient }) {
             }),
           get: (id, signal) =>
             engineClient.request('/generation-jobs/' + id, GenerationJob, { signal }),
+          resubmit: (id) =>
+            engineClient.request('/generation-jobs/' + id + '/resubmit', GenerationJob, {
+              method: 'POST',
+            }),
           cancel: (id) =>
             engineClient.request('/generation-jobs/' + id + '/cancel', GenerationJob, {
               method: 'POST',

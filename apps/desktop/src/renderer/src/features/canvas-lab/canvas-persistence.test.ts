@@ -10,7 +10,7 @@ const document = () => ({
     {
       id: 'one',
       type: 'image',
-      typeVersion: 1,
+      typeVersion: 2,
       position: { x: 10, y: 20 },
       size: { width: 280, height: 180 },
       data: { versions: [], activeVersion: 0, prompt: '第一版', inputOrder: [] },
@@ -36,6 +36,26 @@ function setup(record: CanvasRecord | null = null) {
   return { host, session, store: session.store };
 }
 afterEach(() => vi.useRealTimers());
+
+it('持久化旧文档加载时迁移任务，保留原参数和提示词', async () => {
+  const old = document();
+  const id = '11111111-1111-4111-8111-111111111111';
+  old.nodes[0].typeVersion = 1;
+  old.nodes[0].data = { ...old.nodes[0].data, ...{ pendingJobId: id } };
+  const { session, store } = setup({
+    id: 'lab',
+    revision: 1,
+    document: old,
+    view: null,
+    updatedAt: '2026-10-25T00:00:00Z',
+  });
+  await session.reload();
+  expect(store.getState().document.nodes[0]).toMatchObject({
+    typeVersion: 2,
+    data: { prompt: '第一版', pendingJobIds: [id] },
+  });
+  expect(store.getState().document.nodes[0].data).not.toHaveProperty('pendingJobId');
+});
 
 it('加载后恢复文档与视图，加载失败不变成可编辑空画布，也不自动写入', async () => {
   const record: CanvasRecord = {

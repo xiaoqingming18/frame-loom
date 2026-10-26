@@ -11,9 +11,14 @@ import {
 } from './media';
 import { GroupNodeView, ImageNodeView, VideoNodeView } from './views';
 
+function migrateMedia(data: unknown): CanvasMediaData {
+  const { pendingJobId, ...rest } = CanvasMediaData.parse(data);
+  return pendingJobId && !rest.pendingJobIds ? { ...rest, pendingJobIds: [pendingJobId] } : rest;
+}
+
 export const imageNode = defineNodeType({
   type: 'image',
-  version: 1,
+  version: 2,
   label: '图片',
   icon: <ImageIcon />,
   category: 'media',
@@ -21,6 +26,7 @@ export const imageNode = defineNodeType({
   minSize: { width: 120, height: 80 },
   keepAspect: true,
   dataSchema: CanvasMediaData,
+  migrate: migrateMedia,
   createData: () => emptyMedia(),
   inputs: () => imageInputs,
   outputs: () => imageOutputs,
@@ -33,7 +39,7 @@ export const imageNode = defineNodeType({
 
 export const videoNode = defineNodeType({
   type: 'video',
-  version: 1,
+  version: 2,
   label: '视频',
   icon: <Film />,
   category: 'media',
@@ -41,6 +47,7 @@ export const videoNode = defineNodeType({
   minSize: { width: 200, height: 112 },
   keepAspect: true,
   dataSchema: CanvasMediaData,
+  migrate: migrateMedia,
   createData: () => emptyMedia('text'),
   inputs: (data) => videoInputs(data.mode),
   outputs: () => videoOutputs,

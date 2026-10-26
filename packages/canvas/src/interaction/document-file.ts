@@ -26,7 +26,10 @@ export function parseDocument(text: string, registry: NodeRegistry): CanvasDocum
   }
   const result = CanvasDocument.safeParse(value);
   if (!result.success) throw new CanvasCommandError('画布文档结构或节点数据无效');
-  const document = result.data;
+  const document = {
+    ...result.data,
+    nodes: result.data.nodes.map((node) => registry.migrate(node)),
+  };
   const nodes = new Map(document.nodes.map((node) => [node.id, node]));
   const accepted: CanvasDocument['edges'] = [];
   for (const edge of document.edges) {

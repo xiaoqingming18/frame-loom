@@ -16,7 +16,7 @@ async function drag(page: Page, source: Locator, target: Locator) {
   await page.mouse.up();
 }
 
-test('画布图片生成、首帧视频生成与版本重启保留', async ({}, info) => {
+test('画布三张图片生成、失败单张重试、首帧视频生成与版本重启保留', async ({}, info) => {
   const imageRequests: string[] = [];
   const videoRequests: string[] = [];
   const png = (await readFile(new URL('./fixtures/reference-256.png', import.meta.url))).toString(
@@ -57,6 +57,12 @@ test('画布图片生成、首帧视频生成与版本重启保留', async ({}, 
       const path = new URL(request.url!, 'http://localhost').pathname;
       if (path.endsWith('/images/generations')) {
         imageRequests.push(body);
+        if (imageRequests.length === 2) {
+          response
+            .writeHead(400)
+            .end(JSON.stringify({ error: { message: '第二张模拟失败', code: 'invalid_params' } }));
+          return;
+        }
         response.end(JSON.stringify({ data: [{ b64_json: png }] }));
       } else if (path.endsWith('/contents/generations/tasks')) {
         videoRequests.push(body);
@@ -129,6 +135,7 @@ test('画布图片生成、首帧视频生成与版本重启保留', async ({}, 
     await page.mouse.wheel(0, 300);
     await expect.poll(() => parameters.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
     expect(await page.locator('.react-flow__viewport').getAttribute('style')).toBe(viewport);
+    await page.getByLabel('生成数量').selectOption('3');
     await page.getByRole('button', { name: '生成图片', exact: true }).click();
     const preview = page.locator('.react-flow__node-image img');
     await expect(preview).toBeVisible();
@@ -139,11 +146,14 @@ test('画布图片生成、首帧视频生成与版本重启保留', async ({}, 
           .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
       )
       .toBe(256);
-    expect(imageRequests).toHaveLength(1);
+    await expect(page.getByLabel('当前版本').locator('option')).toHaveCount(2);
+    await page.getByRole('button', { name: /重试任务/ }).click();
+    await expect(page.getByLabel('当前版本').locator('option')).toHaveCount(3);
+    expect(imageRequests).toHaveLength(4);
     expect(JSON.parse(imageRequests[0])).toMatchObject({
       model: 'gpt-image-1',
       prompt: '一束暖光落在旧电影胶片上',
-      n: 1,
+      size: '1024x1024',
     });
 
     const box = (await editor.boundingBox())!;
@@ -214,7 +224,7 @@ test('画布图片生成、首帧视频生成与版本重启保留', async ({}, 
           .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
       )
       .toBe(256);
-    expect(imageRequests).toHaveLength(1);
+    expect(imageRequests).toHaveLength(4);
     expect(videoRequests).toHaveLength(1);
   } finally {
     await app?.close();

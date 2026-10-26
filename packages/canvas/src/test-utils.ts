@@ -54,7 +54,7 @@ export function media(
   return {
     id,
     type,
-    typeVersion: 1,
+    typeVersion: 2,
     position: { x: 0, y: 0 },
     size: { width: 100, height: 100 },
     title: id,

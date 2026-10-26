@@ -1,34 +1,39 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { CanvasEditorProps } from '@frame-loom/canvas';
-import type { CanvasRecord } from '@frame-loom/contracts';
+import type { CanvasEditorProps, CanvasHost } from '@frame-loom/canvas';
+import { ModelProfile, type CanvasRecord } from '@frame-loom/contracts';
 import { EngineRequestError, type EngineClient } from '@/lib/engine-client';
 import { commandWindow, onEngineExited } from '@/lib/desktop-bridge';
 import { CanvasLab } from './canvas-lab';
 
+const captured = vi.hoisted(() => ({ host: null as CanvasHost | null }));
+
 vi.mock('@frame-loom/canvas', async (original) => ({
   ...(await original<typeof import('@frame-loom/canvas')>()),
-  CanvasEditor: ({ store }: CanvasEditorProps) => (
-    <button
-      onClick={() =>
-        store!.getState().apply((doc) => ({
-          ...doc,
-          nodes: [
-            {
-              id: 'one',
-              type: 'image',
-              typeVersion: 1,
-              position: { x: 0, y: 0 },
-              size: { width: 280, height: 180 },
-              data: { versions: [], activeVersion: 0, prompt: '本地内容', inputOrder: [] },
-            },
-          ],
-        }))
-      }
-    >
-      编辑画布
-    </button>
-  ),
+  CanvasEditor: ({ store, host }: CanvasEditorProps) => {
+    captured.host = host;
+    return (
+      <button
+        onClick={() =>
+          store!.getState().apply((doc) => ({
+            ...doc,
+            nodes: [
+              {
+                id: 'one',
+                type: 'image',
+                typeVersion: 1,
+                position: { x: 0, y: 0 },
+                size: { width: 280, height: 180 },
+                data: { versions: [], activeVersion: 0, prompt: '本地内容', inputOrder: [] },
+              },
+            ],
+          }))
+        }
+      >
+        编辑画布
+      </button>
+    );
+  },
 }));
 vi.mock('@tanstack/react-router', () => ({ useBlocker: () => ({ status: 'idle' }) }));
 vi.mock('@/lib/desktop-bridge', () => ({
@@ -70,6 +75,93 @@ function setup(initialFailure?: Error) {
     },
   };
 }
+
+it('宿主图片档案按最长前缀匹配且显式选择优先，单张重试调用 resubmit', async () => {
+  const base = ModelProfile.parse({
+    id: 'base',
+    name: '图片',
+    kind: 'image',
+    protocol: 'openai-images',
+    matchIds: ['gpt-image-2'],
+    generic: false,
+    modes: [{ id: 'text', name: '文生图' }],
+    params: [],
+    constraints: [],
+    inputs: [],
+    runtime: {
+      concurrency: 1,
+      pollInitialMs: 1000,
+      pollMaxMs: 5000,
+      timeoutMs: 10000,
+      submitTimeoutMs: 1000,
+      supportsCancel: false,
+    },
+  });
+  const profiles = [
+    base,
+    { ...base, id: 'new', matchIds: ['gpt-image-2.5'] },
+    { ...base, id: 'generic', generic: true, matchIds: [] },
+  ];
+  const channelId = crypto.randomUUID();
+  const model = {
+    channelId,
+    enabled: true,
+    kind: 'image',
+    protocol: 'openai-images',
+    displayName: '图片',
+    profileId: null,
+    overrides: {},
+    metadata: null,
+    lastCheck: null,
+  };
+  const request = vi.fn<EngineClient['request']>().mockImplementation((path, schema) => {
+    const values: Record<string, unknown> = {
+      '/channels': [
+        {
+          id: channelId,
+          name: '渠道',
+          enabled: true,
+          apiFormat: 'openai-completions',
+          baseUrl: 'https://example.com',
+          hasKey: true,
+          keyHint: null,
+          headerNames: [],
+          lastCheck: null,
+          createdAt: '2026-10-26T00:00:00Z',
+          updatedAt: '2026-10-26T00:00:00Z',
+        },
+      ],
+      '/channel-models': [
+        { ...model, id: crypto.randomUUID(), upstreamModelId: 'gpt-image-2.5-2026-09-08' },
+        { ...model, id: crypto.randomUUID(), upstreamModelId: 'gpt-image-2.5', profileId: 'base' },
+      ],
+      '/model-defaults': { chat: null, image: null, video: null, tts: null },
+      '/model-profiles': profiles,
+      '/object-storage': null,
+      '/canvases/lab': null,
+    };
+    return Promise.resolve(schema.parse(values[path]));
+  });
+  render(
+    <CanvasLab
+      engineClient={{
+        request: (path, schema, init) =>
+          request(path, schema, init).then((value) => schema.parse(value)),
+        stream: vi.fn(),
+      }}
+    />,
+  );
+  await screen.findByRole('button', { name: '编辑画布' });
+  const config = await captured.host!.generation!.load(new AbortController().signal);
+  expect(config.models.map((model) => model.profile?.id)).toEqual(['new', 'base']);
+  request.mockRejectedValueOnce(new Error('重试响应'));
+  await expect(captured.host!.generation!.resubmit('failed-id')).rejects.toThrow('重试响应');
+  expect(request).toHaveBeenLastCalledWith(
+    '/generation-jobs/failed-id/resubmit',
+    expect.anything(),
+    { method: 'POST' },
+  );
+});
 
 it('替身 client 加载失败只显示重试，重试成功后才允许编辑', async () => {
   const test = setup(new Error('读取失败'));

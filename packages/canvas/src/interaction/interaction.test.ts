@@ -30,6 +30,15 @@ const key = (
     ...extra,
   }) as KeyboardEvent;
 
+it('旧剪贴板节点迁移到 v2，任务引用保留', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const node = media('old', 'image', { typeVersion: 1 });
+  node.data = { ...(node.data as object), pendingJobId: id };
+  const next = deserialize(serialize({ nodes: [node], edges: [] }), createBuiltinRegistry());
+  expect(next?.nodes[0]).toMatchObject({ typeVersion: 2, data: { pendingJobIds: [id] } });
+  expect(next?.nodes[0].data).not.toHaveProperty('pendingJobId');
+});
+
 describe('快捷键', () => {
   it('映射工具、编辑与视图快捷键', () => {
     expect(shortcutFor(key('v'))).toBe('tool-pointer');

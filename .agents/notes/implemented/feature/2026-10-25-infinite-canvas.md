@@ -119,7 +119,9 @@ type CanvasView = { viewport: { x: number; y: number; zoom: number }; minimap: b
     mode?: 'text' | 'frames' | 'reference'; // 仅视频
     inputOrder: string[];        // 多参考的顺序，元素为边 id
     modelId?: string; params?: Record<string, string | number | boolean>;
-    pendingJobId?: string;       // 重新打开画布时补查任务
+    pendingJobIds?: string[];    // 最多 4 个，重新打开画布时补查任务
+    count?: number;              // 图片生成数量 1–4，默认 1
+    pendingJobId?: string;       // 仅过渡期 schema 接受，旧节点迁移时移除
   }
   ```
 
@@ -238,12 +240,12 @@ defineNodeType({
 
 ### 节点内生成
 
-- [图片节点改造](../../proposed/feature/2026-10-26-canvas-image-node.md)的契约与 engine 已完成：图片档案按模型族最长前缀匹配，显式档案优先；三个图片适配器按任务档案快照将语义参数翻译为供应商字段，Seedream 产物声明 JPEG 并按真实文件头入库。画布侧旧参数回退、多任务和新输入框仍待该改造后续子计划，本篇不将这些界面行为视为已实现。
+- [图片节点改造](../../proposed/feature/2026-10-26-canvas-image-node.md)的契约、engine 与多任务运行时已完成：图片档案按模型族最长前缀匹配，显式档案优先；三个图片适配器按任务档案快照将语义参数翻译为供应商字段，Seedream 产物声明 JPEG 并按真实文件头入库。画布切换图片模型时保留兼容参数、回退不支持的值并提示；新输入框与 @ 引用仍待后续子计划。
 
 - 06 实施约束：生成配置由宿主一次加载，整张画布共用一条 SSE 与活动任务轮询；同步运行时挂在编辑器根部，扫描当前文档及历史快照中的任务，不能依赖可见节点组件的生命周期。成功产物使用现有媒体版本结构及系统事务写回，重复事件不重复追加；提交结果不明保留任务引用并显示计费提示，不自动重提。删除、剪切共用确认入口，只有明确选择放弃任务才调用 cancel。参数、版本选择和输入顺序存节点，临时请求状态不落盘。
 
 - 图片和视频节点内置生成区：提示词、模型（按类别筛选已启用模型）、视频生成方式、档案参数；提交 `POST /generation-jobs`，`source: 'canvas'`，`inputs` 由连线按上文映射，`modelId` 与参数保存在节点 `data`。
-- 提交后节点写入 `pendingJobId`；SSE `generation.job.updated` 与活动任务定时查询驱动刷新。任务成功后把产物追加为新版本并设为当前版本，清除 `pendingJobId`。画布未打开时完成的任务，在下次打开时根据 `pendingJobId` 查询并补写。
+- 图片按 `count` 连续创建独立任务，每次立即追加到 `pendingJobIds`；视频仍单任务。SSE `generation.job.updated` 与活动任务定时查询驱动刷新。任务成功后按 `jobId` 去重追加为新版本并移除对应引用，取消时也移除；失败项保留供单张重试，通过 `resubmit` 替换其 id，主动放弃失败项则移除引用。画布未打开时完成的任务，下次打开时逐个补写。图片与视频节点版本为 2，持久化、JSON 与剪贴板入口通过注册表迁移旧 `pendingJobId`，未来版本原样保留。
 - 删除生成中的节点时提示「远端可能仍在运行并计费」，提供同时放弃任务的选项，复用现有 cancel。
 - 按[模型管理](../../proposed/architecture/2026-10-24-model-management.md)约定删除模型测试页的路由、feature 与侧栏入口，engine 接口保留；图片／视频生成由画布节点承接，文本与 TTS 的业务界面不在本次范围内。
 

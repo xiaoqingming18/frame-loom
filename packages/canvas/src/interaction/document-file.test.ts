@@ -7,6 +7,15 @@ import { parseDocument } from './document-file';
 
 const registry = createBuiltinRegistry();
 
+it.each(['image', 'video'] as const)('导入旧 %s 节点迁移任务引用且其余数据保留', (kind) => {
+  const pendingJobId = '11111111-1111-4111-8111-111111111111';
+  const node = media('old', kind, { typeVersion: 1 });
+  node.data = { ...(node.data as object), pendingJobId, params: { size: '1024x1024' } };
+  const migrated = parseDocument(JSON.stringify(doc([node])), registry).nodes[0];
+  const { pendingJobId: oldId, ...rest } = node.data as Record<string, unknown>;
+  expect(migrated).toEqual({ ...node, typeVersion: 2, data: { ...rest, pendingJobIds: [oldId] } });
+});
+
 it('JSON 往返保留分组、层级、锁定与连线，整份替换可撤销重做', () => {
   const document = doc(
     [
@@ -52,6 +61,6 @@ it('未知类型与未来版本的节点、data 和连线原样保留', () => {
     [edge('ab', 'a', 'b')],
   );
   expect(parseDocument(JSON.stringify(document), registry)).toEqual(document);
-  document.nodes[0] = media('a', 'image', { typeVersion: 2 });
+  document.nodes[0] = media('a', 'image', { typeVersion: 3 });
   expect(parseDocument(JSON.stringify(document), registry)).toEqual(document);
 });

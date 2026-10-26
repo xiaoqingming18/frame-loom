@@ -8,15 +8,16 @@ export function isActiveGenerationJob(job: GenerationJob) {
 }
 
 export function writeGenerationJob(document: CanvasDocument, job: GenerationJob) {
-  if (isActiveGenerationJob(job) || job.status === 'submit_unknown') return document;
+  if (isActiveGenerationJob(job) || job.status === 'submit_unknown' || job.status === 'failed')
+    return document;
   let changed = false;
   const nodes = document.nodes.map((node) => {
     if (node.type !== 'image' && node.type !== 'video') return node;
     const data = node.data as CanvasMediaData;
-    if (data.pendingJobId !== job.id) return node;
+    if (!data.pendingJobIds?.includes(job.id)) return node;
     changed = true;
     const rest = { ...data };
-    delete rest.pendingJobId;
+    rest.pendingJobIds = data.pendingJobIds.filter((id) => id !== job.id);
     const output = job.outputs[0];
     if (
       job.status !== 'succeeded' ||
