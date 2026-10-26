@@ -11,11 +11,22 @@ export function generationModel(
 }
 
 export function generationInputs(document: CanvasDocument, nodeId: string): GenerationInput[] {
+  return generationReferences(document, nodeId).map((reference) => reference.input);
+}
+
+/** 编号、缩略图和请求输入共用同一次排序及有效产物筛选。 */
+export function generationReferences(document: CanvasDocument, nodeId: string) {
   const target = document.nodes.find((node) => node.id === nodeId);
   const inputOrder = (target?.data as { inputOrder?: string[] } | undefined)?.inputOrder ?? [];
   return document.edges
     .filter((edge) => edge.target === nodeId)
-    .sort((a, b) => inputOrder.indexOf(a.id) - inputOrder.indexOf(b.id))
+    .sort((a, b) => {
+      const rank = (id: string) => {
+        const index = inputOrder.indexOf(id);
+        return index < 0 ? inputOrder.length : index;
+      };
+      return rank(a.id) - rank(b.id);
+    })
     .flatMap((edge) => {
       const source = document.nodes.find((node) => node.id === edge.source);
       if (!source || (source.type !== 'image' && source.type !== 'video')) return [];
@@ -24,14 +35,18 @@ export function generationInputs(document: CanvasDocument, nodeId: string): Gene
       return media
         ? [
             {
-              kind: source.type === 'video' ? ('video' as const) : ('image' as const),
-              role:
-                edge.targetHandle === 'first_frame'
-                  ? ('first_frame' as const)
-                  : edge.targetHandle === 'last_frame'
-                    ? ('last_frame' as const)
-                    : ('reference' as const),
-              sha256: media.sha256,
+              edge,
+              node: source,
+              input: {
+                kind: source.type === 'video' ? ('video' as const) : ('image' as const),
+                role:
+                  edge.targetHandle === 'first_frame'
+                    ? ('first_frame' as const)
+                    : edge.targetHandle === 'last_frame'
+                      ? ('last_frame' as const)
+                      : ('reference' as const),
+                sha256: media.sha256,
+              },
             },
           ]
         : [];

@@ -1,6 +1,6 @@
 # Agent Note: 画布图片节点：统一生图参数、按模型能力动态化与提示词输入框
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
@@ -23,11 +23,11 @@ Status: proposed
 
 失败条件：用户能在界面上选出某模型不支持的参数组合并提交；切换模型后参数静默变化而无提示；同一节点多张生成互相覆盖或丢失；@ 引用与实际发送的参考图编号不一致。
 
-## Proposal
+## Decision
 
 ### 已落地边界
 
-01 的共享契约、02 的 engine 档案与适配器、03 的画布数据与多任务运行时已落地；新界面和 @ 引用仍待后续子计划。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，桌面宿主加载图片档案时使用相同匹配规则，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
+共享契约、engine 档案与适配器、画布多任务运行时、节点与输入框界面及 @ 引用均已落地。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，桌面宿主加载图片档案时使用相同匹配规则，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
 
 任务提交通过 `AdapterContext.profile` 传递创建时保存的档案快照，避免显式通用档案在执行时按模型 ID 重新匹配成更高能力。三个图片适配器先按档案解析语义参数，再显式组装供应商字段；OpenAI generations／edits 共享尺寸、画质与背景映射，透明时指定 PNG；Gemini 仅对声明清晰度的档案发送 `imageSize`；Seedream 发送像素尺寸和水印，产物声明 JPEG。`MediaService` 已有图片文件头及 `image-size` 识别，图片不经过 `probeMedia`，本次保留该实现并以 JPEG 下载入库集成测试确认真实格式。
 
@@ -85,11 +85,11 @@ Status: proposed
 
 ### 尺寸换算：contracts 中的共享纯函数
 
-01 契约、02 engine 与 03 画布参数回退已落地；尺寸预览与 @ 引用界面接入仍为本篇提案。共享入口使用 `imageRequestSize(profile, params)`、`resolveImageParams(profile, current)`、`parseImageReferences(prompt)` 与 `resolveImagePrompt(prompt, inputNodeIds)`。引用函数接收与实际 `inputs` 一一对应的已排序源节点 id，不直接读取画布连线或 `inputOrder`（后者存的是边 id）。失效引用保留原标记并返回 `missingNodeIds`，调用方据此阻止提交。
+01 契约、02 engine、03 画布参数回退、04 尺寸预览与 05 引用界面均已接入。共享入口使用 `imageRequestSize(profile, params)`、`resolveImageParams(profile, current)`、`parseImageReferences(prompt)` 与 `resolveImagePrompt(prompt, inputNodeIds)`。引用函数接收与实际 `inputs` 一一对应的已排序源节点 id，不直接读取画布连线或 `inputOrder`（后者存的是边 id）。失效引用保留原标记并返回 `missingNodeIds`，调用方据此阻止提交。
 
 尺寸换算按档案能力区分版本，不再维护第二份模型 id 匹配：OpenAI 是否声明 `resolution` 区分固定尺寸与任意尺寸；Seedream 是否允许 `1K` 区分 4.0 与 4.5／通用档案的面积下限。入参先按同一档案回退，未提供参数使用档案默认值；非图片档案拒绝换算，Gemini 返回 `undefined`。`changes` 记录显式传入值的调整／移除（含中文文案），首次填充默认值不产生模型切换提示。数量属于节点 `data.count`，不进入此函数，由 03／04 处理。
 
-`packages/contracts` 新增 `imageRequestSize(profile, params)` 一类纯函数，engine 适配器用它组装请求，界面用它显示"≈ W×H"，两边结果一致。
+`packages/contracts` 提供 `imageRequestSize(profile, params)` 等纯函数，engine 适配器用它组装请求，界面用它显示"≈ W×H"，两边结果一致。
 
 - **GPT Image 1**：查表，1:1 → `1024x1024`，3:2 → `1536x1024`，2:3 → `1024x1536`。
 - **GPT Image 2／2.5**：目标面积 A 为 1K = 1024²、2K = 2560×1440（官方可靠上限）、4K = 8,294,400（总像素上限）。`w = √(A·r)`、`h = √(A/r)`，长边超过 3840 时等比缩到 3840，各自取最接近的 16 的倍数；越过面积上限时改为向下取整，低于下限时向上取整；取整后长短边比超过 3 时把长边向下调到满足 3:1 的 16 倍数。示例：
@@ -109,7 +109,7 @@ Status: proposed
 
 ### 切换模型时回退
 
-`packages/contracts` 新增纯函数 `resolveImageParams(profile, current)`，返回 `{ params, changes }`：
+`packages/contracts` 提供纯函数 `resolveImageParams(profile, current)`，返回 `{ params, changes }`：
 
 - 比例：支持则保留，否则取对数距离最近的支持比例（21:9 → 16:9）。
 - 清晰度：取不高于当前值的最高档；没有则取最低档。
@@ -121,7 +121,7 @@ Status: proposed
 
 ### 多张生成：N 个任务
 
-03 已落地：成功与取消任务移出 `pendingJobIds`，失败任务保留引用供重启恢复和单张重试，主动放弃失败项则移除引用；失败任务不反复通知，重试通过宿主 `resubmit` 返回新任务后在当前文档与历史快照中替换原 id。连续创建中每次立即登记成功创建的任务，后续创建失败停止本轮并保留已创建项。节点迁移同时覆盖持久化加载、JSON 导入与剪贴板入口，未来版本不降级迁移。现有表单暂以原有组件提供数量与逐项重试入口，04 接管最终外观。模拟供应商桌面 e2e 验证三张生成、第二张失败后单张重试、三版本与首帧视频重启保留。
+03 已落地：成功与取消任务移出 `pendingJobIds`，失败任务保留引用供重启恢复和单张重试，主动放弃失败项则移除引用；失败任务不反复通知，重试通过宿主 `resubmit` 返回新任务后在当前文档与历史快照中替换原 id。连续创建中每次立即登记成功创建的任务，后续创建失败停止本轮并保留已创建项。节点迁移同时覆盖持久化加载、JSON 导入与剪贴板入口，未来版本不降级迁移。输入框提供数量选择，媒体框提供逐项状态与重试入口。模拟供应商桌面 e2e 验证三张生成、第二张失败后单张重试、三版本与首帧视频重启保留。
 
 - 数量 ×N 时画布连续提交 N 个独立任务，各自成功后追加一个版本；失败的任务在节点上单独显示并可单独重试（复用 `POST /generation-jobs/:id/resubmit`）。
 - 理由：Gemini 与 Seedream 每次请求只返回一张，N 个任务对所有协议一致；每张有独立状态、取消与计费提示。代价：档案并发上限为 1 时多张排队；一次生成写入多个任务记录。
@@ -129,6 +129,8 @@ Status: proposed
 - `generation-runtime`、`generation-writeback`、删除确认（`use-actions.ts`）全部按数组处理；写回仍以 `version.jobId` 去重。
 
 ### @ 引用参考
+
+05 已落地：`generationReferences` 让参考来源与实际请求共用排序及有效产物筛选，未列入 `inputOrder` 的边排在已排序边之后；`ImagePromptEditor` 只维护纯文本与不可编辑标签，沿用画布文档历史，不引入富文本依赖。`insertImageReference` 在一次 `apply` 中校验并写入连线和标签；头部支持拖动与 Alt 加左右方向键排序。提交和字数统一使用 `resolveImagePrompt`，断开引用阻止发送；原始标记与替换后的文本都遵守 32000 字上限，超长粘贴恢复原文并提示。组件测试和模拟供应商桌面 e2e 覆盖组字保护、粘贴、撤销、排序与编号替换；开发版与加固 exe 的明暗、小窗口及原生中文组字检查记录于 `.cache/canvas-image-node/acceptance.md`。
 
 - **触发**：在提示词中输入 `@`，或点击输入框头部的"+"，弹出参考列表。输入法组字（`isComposing`）期间不触发，也不响应画布快捷键。
 - **候选**：第一组为已连入本节点的参考（缩略图、名称、当前编号）；第二组为画布上其他已有产物的图片节点。不列当前节点；`checkConnection` 判定成环或不兼容的置灰并说明原因；参考数已达当前档案上限时第二组整体置灰，提示"当前模型最多 N 张参考"。
@@ -142,7 +144,7 @@ Status: proposed
 
 ### 节点与输入框界面
 
-04 已落地：`GenerationPanel` 保留生成请求与连续创建任务的边界，`generation-composer.tsx`、`generation-params.tsx` 独立组织输入框与参数面板；`generation-status.tsx` 和媒体框负责状态、取消、失败单张重试与版本切换，操作不依赖节点选中。只在单选节点时挂载 `NodeToolbar` 输入框，低缩放未选中节点不挂载；宽度按画布可用区域限制到最多 620px，空间不足时优先放到上方，再避开标题并允许滚动，公共工具栏保留操作空间。弹层隔离键盘事件，避免 Esc 同时取消节点选择；视频复用外壳，方式切换与既有档案参数保持原语义。Gemini 由供应商确定实际像素，界面不伪造尺寸。79 项画布组件测试及 5 项桌面回归通过，明暗小窗口截图位于 `.cache/canvas-image-node/`；加固产物检查留待最终验收。05 再接入 @ 编辑器、头部引用按钮与参考排序，本步骤只展示已有参考缩略图。
+04 已落地：`GenerationPanel` 保留生成请求与连续创建任务的边界，`generation-composer.tsx`、`generation-params.tsx` 独立组织输入框与参数面板；`generation-status.tsx` 和媒体框负责状态、取消、失败单张重试与版本切换，操作不依赖节点选中。只在单选节点时挂载 `NodeToolbar` 输入框，低缩放未选中节点不挂载；宽度按画布可用区域限制到最多 620px，空间不足时优先放到上方，再避开标题并允许滚动，公共工具栏保留操作空间。弹层隔离键盘事件，避免 Esc 同时取消节点选择；视频复用外壳，方式切换与既有档案参数保持原语义。Gemini 由供应商确定实际像素，界面不伪造尺寸。89 项画布组件测试通过，@ 编辑器、头部引用按钮与参考排序使用同一份参考顺序；两环境的明暗小窗口截图位于 `.cache/canvas-image-node/`。
 
 依据 `docs/design/canvas-image-node.html`；颜色全部使用主题 token，明暗两种模式验收；画布背景、工具栏、小地图保持现状。
 
@@ -159,8 +161,8 @@ Status: proposed
 
 ### 相关笔记核对
 
-- [无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)：部分重叠。该篇"节点内生成"的生成区形态、`pendingJobId` 单任务与"切换模型清空参数"由本篇替换；节点即生成位、结果追加为版本、任务同步挂在编辑器根部等决定不变。落地时原地同步该篇事实并互链。
-- [模型管理](../../proposed/architecture/2026-10-24-model-management.md)：部分重叠。档案字段中 `matchIds` 由精确匹配改为前缀匹配；"不按名称关键词猜类别"不受影响（前缀只在用户已选定类别与协议后选择档案）。图片档案按模型族拆分的事实落地时原地同步。
+- [无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)：部分重叠。该篇"节点内生成"的生成区形态、`pendingJobId` 单任务与"切换模型清空参数"由本篇替换；节点即生成位、结果追加为版本、任务同步挂在编辑器根部等决定不变。该篇已原地同步事实并互链。
+- [模型管理](../../proposed/architecture/2026-10-24-model-management.md)：部分重叠。档案字段中 `matchIds` 由精确匹配改为前缀匹配；"不按名称关键词猜类别"不受影响（前缀只在用户已选定类别与协议后选择档案）。图片档案、多任务与引用界面的实现事实已原地同步。
 - [以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)：相关不重叠；设置页的档案下拉会出现新的档案名称，交互不变。
 - [共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)：部分重叠，contracts 新增尺寸换算、参数回退与引用替换纯函数，约定不变。
 - 其余笔记无关。
@@ -182,7 +184,7 @@ Status: proposed
 - **引用固定替换为"图N"** — 最强理由：规则单一，测试简单。不选：用户确定跟随提示词语言，英文提示词中混入中文编号可能降低模型理解。
 - **@ 引用放到第二期** — 最强理由：本期改动已覆盖 contracts、engine、画布三层，推迟可降低风险。不选：用户确定本期实现。
 
-## Acceptance criteria
+## Testing
 
 1. contracts 单测：
    - `imageRequestSize`：GPT Image 2／2.5 的 14 比例 × 3 档全部满足宽高 16 倍数、长边 ≤ 3840、长短边比 ≤ 3、总像素 655,360–8,294,400，且比例误差 < 1%；GPT Image 1 三个尺寸；Seedream 8 个官方比例等于官方表值，其余比例满足 4.0／4.5 的总像素与比例范围。
@@ -195,15 +197,17 @@ Status: proposed
    - 产物 mime 与实际格式一致（Seedream jpeg）。
 3. 画布单测与组件测试：`pendingJobIds` 迁移与多任务写回、去重；切换模型回退与提示；面板置灰／隐藏随档案变化；发送按钮禁用原因；@ 选中未连线节点建线并一步撤销；输入法组字不触发菜单。
 4. 桌面 e2e（模拟供应商）：×3 生成写回 3 个版本并可单张重试失败项；切换模型后参数按回退规则变化；@ 引用后提交的提示词与 `inputs` 编号一致；旧文档（含 `pendingJobId`）打开后任务继续补写。
-5. 人工验收（开发版与加固 exe，明暗模式）：节点与输入框对照 `docs/design/canvas-image-node.html`；720×560 最小窗口下输入框与参数面板不溢出；键盘可操作全部弹层；中文输入法在 @ 编辑器内正常组字。
-6. `pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm run verify` 通过。
+5. 人工验收（开发版与加固 exe，明暗模式）通过：节点与输入框对照 `docs/design/canvas-image-node.html`；720×560 最小窗口下输入框与参数面板不溢出；键盘可操作全部弹层；中文输入法在 @ 编辑器内正常组字。
+6. 全仓门禁与桌面回归结果、开发版和加固 exe 的明暗、小窗口、键盘与原生输入法证据记录于 `.cache/canvas-image-node/acceptance.md`。527 项单测（contracts 141、engine 161、canvas 89、desktop 136）及完整 13 项桌面 e2e 通过，typecheck、lint、format:check 通过。
 
-## Risks
+## Consequences
+
+- **收益与代价**：语义参数和共享换算让界面与供应商请求保持一致，模型切换保留兼容选择；代价是需要维护模型族能力随上游变化。轻量 @ 编辑器避免新增富文本依赖，但仍需在 Chromium 升级时回归选区、粘贴与原生组字。
 
 - **上游能力漂移**：gpt-image-2 透明背景、4K 与 Gemini 3.1 512 档来自文档且存在矛盾或预览标注；档案取值以真实供应商冒烟结果原地修正，冒烟归[模型管理](../../proposed/architecture/2026-10-24-model-management.md)的验收持有。
 - **中转站差异**：用户经 new-api 等中转配置的模型可能不接受任意 `WxH` 或 `imageConfig.imageSize`；此时用户可在模型设置中改选通用档案，错误按 `invalid_params` 提示。
 - **前缀误匹配**：前缀匹配可能把未来同前缀但能力不同的模型（如假设的 `gpt-image-2-mini`）归入 gpt-image-2；最长前缀与显式 `profileId` 可纠正，新模型出现时补档案。
 - **落盘格式**：`pendingJobIds` 与 `typeVersion` 2 一旦分发，旧版本应用打开新文档会把图片／视频节点降级为未知节点占位（数据保留）；回退时需要反向迁移。
-- **contentEditable 边界**：粘贴、撤销、输入法与选区在 Chromium 中有细节差异；以组件测试与人工输入法验收兜底，问题集中时再评估富文本库。
+- **contentEditable 边界**：粘贴、撤销、输入法与选区在 Chromium 中有细节差异；组件测试与本机原生输入法验收覆盖当前边界，问题集中时再评估富文本库。
 - **成本**：N 个任务在并发上限为 1 时排队，4 张 4K 可能耗时数分钟；节点上显示进度"1/4"。
 - **回滚**：契约、档案、适配器、画布各自独立提交；节点迁移与 `pendingJobIds` 回退需要反向迁移函数。

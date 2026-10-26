@@ -10,6 +10,33 @@ import { GenerationStatus } from './generation-status';
 import { createCanvasStore } from '../store/store';
 import { doc, edge, generationJob, media, sha } from '../test-utils';
 import { writeGenerationJob } from './generation-writeback';
+import { deleteElements } from '../commands/commands';
+
+function referenceSource(id: string, hash = 'a') {
+  const node = media(id);
+  node.data = {
+    ...(node.data as CanvasMediaData),
+    versions: [
+      {
+        sha256: sha(hash),
+        mime: 'image/png',
+        width: 100,
+        height: 100,
+        createdAt: '2026-10-25T00:00:00.000Z',
+      },
+    ],
+  };
+  return node;
+}
+
+function caretAtEnd(editor: HTMLElement) {
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  window.getSelection()!.removeAllRanges();
+  window.getSelection()!.addRange(range);
+}
 
 function Panel() {
   const data = useCanvasState((state) => state.document.nodes[1].data as CanvasMediaData);
@@ -20,6 +47,195 @@ function Panel() {
     </>
   );
 }
+
+it('标签往返保存，粘贴只取纯文本，退格整块删除，撤销恢复', async () => {
+  const test = setupPanel({ prompt: '参考 @{source}' });
+  await act(() =>
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('source'), document.nodes[1]],
+      edges: [edge('e', 'source', 'target')],
+    })),
+  );
+  const editor = screen.getByRole('textbox', { name: '生成提示词' });
+  expect(editor.querySelector('[contenteditable="false"]')?.textContent).toBe('图1');
+  expect(test.data().prompt).toBe('参考 @{source}');
+  caretAtEnd(editor);
+  fireEvent.paste(editor, {
+    clipboardData: {
+      getData: (type: string) => (type === 'text/plain' ? '<b>纯文本</b>' : '<b>富文本</b>'),
+    },
+  });
+  expect(test.data().prompt).toBe('参考 @{source}<b>纯文本</b>');
+  expect(editor.querySelector('b')).toBeNull();
+  act(() => test.store.getState().undo());
+  caretAtEnd(editor);
+  fireEvent.keyDown(editor, { key: 'Backspace' });
+  expect(test.data().prompt).toBe('参考 ');
+  fireEvent.keyDown(editor, { key: 'z', ctrlKey: true });
+  expect(test.data().prompt).toBe('参考 @{source}');
+});
+
+it('超长粘贴恢复原文并提示，不保存超出 schema 的提示词', () => {
+  const test = setupPanel();
+  const editor = screen.getByRole('textbox', { name: '生成提示词' });
+  caretAtEnd(editor);
+  fireEvent.paste(editor, { clipboardData: { getData: () => '字'.repeat(32001) } });
+  expect(test.data().prompt).toBe('暖光');
+  expect(editor.textContent).toBe('暖光');
+  expect(test.store.getState().notice?.text).toContain('最多 32000 字');
+});
+
+it('组字不触发菜单或撤销，完成后普通 @ 可用键盘选入', async () => {
+  const test = setupPanel();
+  await act(() =>
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('source'), document.nodes[1]],
+    })),
+  );
+  const editor = screen.getByRole('textbox', { name: '生成提示词' });
+  fireEvent.compositionStart(editor);
+  editor.textContent = '暖光@';
+  caretAtEnd(editor);
+  fireEvent.input(editor);
+  fireEvent.keyDown(editor, { key: 'z', ctrlKey: true, isComposing: true });
+  expect(screen.queryByRole('listbox')).toBeNull();
+  expect(test.data().prompt).toBe('暖光');
+  fireEvent.compositionEnd(editor);
+  expect(test.data().prompt).toBe('暖光@');
+  expect(screen.queryByRole('listbox')).toBeNull();
+  fireEvent.input(editor);
+  expect(screen.getByRole('listbox')).toBeDefined();
+  fireEvent.keyDown(editor, { key: 'ArrowDown' });
+  fireEvent.keyDown(editor, { key: 'Enter' });
+  expect(test.data().prompt).toBe('暖光@{source}');
+  expect(test.store.getState().document.edges).toHaveLength(1);
+  act(() => test.store.getState().undo());
+  expect(test.store.getState().document.edges).toHaveLength(0);
+  expect(test.data().prompt).toBe('暖光@');
+});
+
+it('候选分组并提示模型上限和成环原因', async () => {
+  const test = setupPanel();
+  await act(() =>
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('source'), document.nodes[1], referenceSource('other')],
+      edges: [edge('e', 'source', 'target')],
+    })),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '添加参考' }));
+  expect(screen.getByRole('group', { name: '已连入参考' })).toBeDefined();
+  expect(screen.getByRole<HTMLButtonElement>('option', { name: /other/ }).disabled).toBe(true);
+  expect(screen.getByText('当前模型最多 1 张参考')).toBeDefined();
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+  await act(() =>
+    test.store
+      .getState()
+      .apply((document) => ({ ...document, edges: [edge('reverse', 'target', 'other')] })),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '添加参考' }));
+  expect(screen.getByText('连线会形成循环依赖')).toBeDefined();
+});
+
+it('端口不兼容的图片候选置灰并显示原因', async () => {
+  const test = setupPanel();
+  await act(() =>
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('source'), document.nodes[1]],
+    })),
+  );
+  vi.spyOn(test.registry, 'inputs').mockReturnValue([
+    { id: 'reference', label: '参考图', accepts: ['video'], max: 16 },
+  ]);
+  fireEvent.click(screen.getByRole('button', { name: '添加参考' }));
+  expect(screen.getByRole<HTMLButtonElement>('option', { name: /source/ }).disabled).toBe(true);
+  expect(screen.getByText('「参考图」不接受图片')).toBeDefined();
+});
+
+it('替换后超出字数上限时禁止发送', async () => {
+  const test = setupPanel({ prompt: 'x'.repeat(31996) + '@{a}' });
+  await act(() =>
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('a'), document.nodes[1]],
+      edges: [edge('e', 'a', 'target')],
+    })),
+  );
+  expect(screen.getByText('替换后的提示词最多 32000 字')).toBeDefined();
+  expect(screen.getByLabelText('提示词字数').textContent).toBe('32003 字');
+  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
+  expect(test.api.create).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['参考 @{source}', '参考 图2'],
+  ['Use @{source}', 'Use Image 2'],
+])('排序后标签与实际请求编号一致：%s', async (prompt, expected) => {
+  const test = setupPanel({ prompt });
+  act(() => {
+    test.store.getState().setGenerationConfig({
+      storageReady: true,
+      models: [
+        {
+          id: modelId,
+          label: '图片模型',
+          kind: 'image',
+          profile: { ...profile, inputs: [{ ...profile.inputs[0], maxCount: 2 }] },
+        },
+      ],
+    });
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('source'), document.nodes[1], referenceSource('other', 'b')],
+      edges: [edge('e1', 'source', 'target'), edge('e2', 'other', 'target')],
+    }));
+  });
+  fireEvent.keyDown(screen.getByRole('button', { name: '参考 1，Alt 加方向键排序' }), {
+    key: 'ArrowRight',
+    altKey: true,
+  });
+  expect(test.data().inputOrder).toEqual(['e2', 'e1']);
+  expect(screen.getByRole('textbox').querySelector('[data-reference]')?.textContent).toBe('图2');
+  expect(screen.getByLabelText('提示词字数').textContent).toBe(`${expected.length} 字`);
+  test.api.create.mockResolvedValue(generationJob({ status: 'pending' }));
+  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
+  await waitFor(() => expect(test.api.create).toHaveBeenCalled());
+  expect(test.api.create.mock.calls[0][0]).toMatchObject({
+    prompt: expected,
+    inputs: [{ sha256: sha('b') }, { sha256: sha('a') }],
+  });
+  expect(test.data().prompt).toBe(prompt);
+});
+
+it('拖动排序后断开连线，标签失效并阻止提交', async () => {
+  const test = setupPanel({ prompt: '参考 @{source}' });
+  await act(() =>
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('source'), document.nodes[1], referenceSource('other', 'b')],
+      edges: [edge('e1', 'source', 'target'), edge('e2', 'other', 'target')],
+    })),
+  );
+  const dataTransfer = { setData: vi.fn() };
+  fireEvent.dragStart(screen.getByRole('button', { name: '参考 1，Alt 加方向键排序' }), {
+    dataTransfer,
+  });
+  fireEvent.drop(screen.getByRole('button', { name: '参考 2，Alt 加方向键排序' }), {
+    dataTransfer,
+  });
+  expect(test.data().inputOrder).toEqual(['e2', 'e1']);
+  await act(() =>
+    test.store.getState().apply((document) => deleteElements(document, new Set(), new Set(['e1']))),
+  );
+  expect(screen.getByText('失效参考')).toBeDefined();
+  expect(screen.getByText('引用的参考已断开')).toBeDefined();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
+  expect(test.api.create).not.toHaveBeenCalled();
+});
 
 afterEach(() => {
   cleanup();
@@ -77,18 +293,24 @@ function setupPanel(data: Partial<CanvasMediaData> = {}) {
     resubmit: vi.fn(),
     subscribe: vi.fn(),
   };
+  const registry = createBuiltinRegistry();
   render(
     <CanvasContext.Provider
       value={{
         store,
-        registry: createBuiltinRegistry(),
+        registry,
         host: { media: { upload: vi.fn(), url: (id) => id }, generation: api },
       }}
     >
       <Panel />
     </CanvasContext.Provider>,
   );
-  return { store, api, data: () => store.getState().document.nodes[1].data as CanvasMediaData };
+  return {
+    store,
+    api,
+    registry,
+    data: () => store.getState().document.nodes[1].data as CanvasMediaData,
+  };
 }
 
 it('按数量连续创建任务，重复点击不会重复提交，部分创建失败保留已创建项', async () => {
@@ -201,9 +423,9 @@ it('提示词为空时发送按钮提供可读禁用原因，展开和字数同�
   expect(screen.getByRole('button', { name: '收起提示词' }).getAttribute('aria-expanded')).toBe(
     'true',
   );
-  fireEvent.change(screen.getByRole('textbox', { name: '生成提示词' }), {
-    target: { value: '暖光' },
-  });
+  const editor = screen.getByRole('textbox', { name: '生成提示词' });
+  editor.textContent = '暖光';
+  fireEvent.input(editor);
   expect(test.data().prompt).toBe('暖光');
   expect(screen.getByLabelText('提示词字数').textContent).toBe('2 字');
   expect(send.disabled).toBe(false);

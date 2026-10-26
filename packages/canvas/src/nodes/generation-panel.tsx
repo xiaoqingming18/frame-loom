@@ -3,12 +3,13 @@ import { GenerationComposer } from './generation-composer';
 import {
   checkGenerationRequest,
   resolveImageParams,
+  resolveImagePrompt,
   type CanvasMediaData,
   type GenerationRequest,
 } from '@frame-loom/contracts';
 import { isNodeLocked, updateData } from '../commands/commands';
 import { useCanvas, useCanvasState } from '../context';
-import { generationInputs, generationModel } from './generation-inputs';
+import { generationReferences, generationModel } from './generation-inputs';
 import { writeGenerationJob } from './generation-writeback';
 
 export function GenerationPanel({
@@ -30,8 +31,16 @@ export function GenerationPanel({
     const node = state.document.nodes.find((item) => item.id === nodeId);
     return !node || isNodeLocked(state.document, node);
   });
-  const prompt = data.prompt;
-  const inputs = useMemo(() => generationInputs(document, nodeId), [document, nodeId]);
+  const references = useMemo(() => generationReferences(document, nodeId), [document, nodeId]);
+  const inputs = references.map((reference) => reference.input);
+  const resolved =
+    kind === 'image'
+      ? resolveImagePrompt(
+          data.prompt,
+          references.map((reference) => reference.node.id),
+        )
+      : { prompt: data.prompt, missingNodeIds: [] };
+  const prompt = resolved.prompt;
   const missingInputs =
     document.edges.filter((edge) => edge.target === nodeId).length > inputs.length;
   const api = host.generation;
@@ -77,6 +86,8 @@ export function GenerationPanel({
       issues.length ||
       storageMissing ||
       missingInputs ||
+      resolved.missingNodeIds.length ||
+      prompt.length > 32000 ||
       pendingIds.length ||
       locked ||
       generating
@@ -118,6 +129,8 @@ export function GenerationPanel({
       (data.modelId ? '原模型已不可用，请重新选择生成模型' : '请先在模型服务中启用生成模型'),
     model && !profile && '此模型没有匹配的生成档案，无法提交任务',
     !prompt.trim() && '请填写提示词',
+    prompt.length > 32000 && '替换后的提示词最多 32000 字',
+    resolved.missingNodeIds.length > 0 && '引用的参考已断开',
     storageMissing && '当前参考素材需要先配置对象存储',
     missingInputs && '连线来源尚无可用媒体，请先生成或上传素材',
     issues[0]?.message,

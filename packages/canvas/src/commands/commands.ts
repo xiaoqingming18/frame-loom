@@ -3,6 +3,7 @@ import type {
   CanvasEdge,
   CanvasGroupColor,
   CanvasNode,
+  CanvasMediaData,
 } from '@frame-loom/contracts';
 import { CANVAS_LIMITS } from '@frame-loom/contracts';
 import { checkConnection, invalidEdges, type ConnectionAttempt } from '../registry/connections';
@@ -221,6 +222,40 @@ export function reconnect(
   if (!old) return document;
   const withoutOld = deleteElements(document, new Set(), new Set([edgeId]));
   return connect(registry, withoutOld, attempt);
+}
+
+/** 自动连线与标签写入作为一个文档命令，撤销时一并恢复。 */
+export function insertImageReference(
+  registry: NodeRegistry,
+  document: CanvasDocument,
+  nodeId: string,
+  sourceId: string,
+  prompt: string,
+  maxReferences: number,
+): CanvasDocument {
+  const target = document.nodes.find((node) => node.id === nodeId);
+  const source = document.nodes.find((node) => node.id === sourceId);
+  if (prompt.length > 32000) throw new CanvasCommandError('提示词最多 32000 字（含引用标记）');
+  if (!target || isNodeLocked(document, target)) throw new CanvasCommandError('节点已锁定或不存在');
+  if (
+    target.type !== 'image' ||
+    source?.type !== 'image' ||
+    !registry.supports(source) ||
+    !registry.get(source.type)?.output?.(source.data)
+  )
+    throw new CanvasCommandError('参考节点尚无可用图片');
+  let next = document;
+  if (!document.edges.some((edge) => edge.source === sourceId && edge.target === nodeId)) {
+    if (document.edges.filter((edge) => edge.target === nodeId).length >= maxReferences)
+      throw new CanvasCommandError(`当前模型最多 ${maxReferences} 张参考`);
+    next = connect(registry, document, {
+      source: sourceId,
+      target: nodeId,
+      sourceHandle: 'out',
+      targetHandle: 'reference',
+    });
+  }
+  return updateData<CanvasMediaData>(next, nodeId, (data) => ({ ...data, prompt }));
 }
 
 /** 修改节点数据（例如切换视频方式），并删除因此失效的连线；返回删除条数。 */

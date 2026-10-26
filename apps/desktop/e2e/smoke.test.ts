@@ -42,9 +42,10 @@ test('快捷面板向上展开，键盘关闭及模态焦点交接在折叠侧�
     await page.keyboard.press('Enter');
     await expect(quick).toBeVisible();
     await expect(settings).toBeHidden();
-    expect((await quick.boundingBox())!.y + (await quick.boundingBox())!.height).toBeLessThan(
-      (await trigger.boundingBox())!.y,
-    );
+    await expect(async () => {
+      const bounds = (await quick.boundingBox())!;
+      expect(bounds.y + bounds.height).toBeLessThan((await trigger.boundingBox())!.y);
+    }).toPass();
     await page.keyboard.press('Escape');
     await expect(quick).toBeHidden();
     await expect(trigger).toBeFocused();

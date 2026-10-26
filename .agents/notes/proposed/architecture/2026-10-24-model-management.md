@@ -144,7 +144,7 @@ interface GenerationAdapter {
 - 每个类别再提供一份通用档案，例如"通用 OpenAI 图片"，只开放最基础的参数。上游 ID 匹配不上内置档案的渠道模型使用通用档案，并提示用户确认。不按模型名称关键词猜类别，拉取到的未知模型由用户选择类别后才能启用。
 - 厂商特有、档案未建模的参数，只能通过档案声明的透传白名单传入，不接受任意字段。不提供用户自定义调用脚本。
 
-[画布图片节点改造](../feature/2026-10-26-canvas-image-node.md)已完成 contracts 与 engine 部分：图片有 GPT Image 1／2／2.5、Gemini 2.5 Flash／3 Pro／3.1 Flash、Seedream 4.0／4.5 共 8 个模型族及 3 个通用档案，档案声明比例、清晰度、画质、背景与可选取值标签 `notes`。旧 `*-default` ID 保留，分别对应 GPT Image 1、Gemini 2.5 Flash、Seedream 4.0；显式选择不随模型前缀改变。任务按创建时保存的档案快照执行，三个适配器显式翻译语义参数，不整体展开 `request.params`；Seedream 产物声明 JPEG，媒体入库按真实文件头识别。画布参数界面与多任务尚未完成，真实供应商冒烟仍待验收。
+[画布图片节点改造](../../implemented/feature/2026-10-26-canvas-image-node.md)已完成：图片有 GPT Image 1／2／2.5、Gemini 2.5 Flash／3 Pro／3.1 Flash、Seedream 4.0／4.5 共 8 个模型族及 3 个通用档案，档案声明比例、清晰度、画质、背景与可选取值标签 `notes`。旧 `*-default` ID 保留，分别对应 GPT Image 1、Gemini 2.5 Flash、Seedream 4.0；显式选择不随模型前缀改变。任务按创建时保存的档案快照执行，三个适配器显式翻译语义参数，不整体展开 `request.params`；Seedream 产物声明 JPEG，媒体入库按真实文件头识别。画布已提供按能力变化的参数面板、多任务与失败单张重试、@ 引用及旧文档迁移补写，模拟供应商 e2e 验证参数回退与中英文参考编号；开发版和加固 exe 的明暗、小窗口及原生中文组字检查完成。真实供应商冒烟仍待本篇验收，不能以画布模拟结果替代。
 
 ### 生成任务
 

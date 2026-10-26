@@ -35,6 +35,8 @@ test('节点连线：类型、重复、环、端口限额、方式切换一步�
     const editor = page.getByRole('region', { name: '画布编辑区' });
     const box = (await editor.boundingBox())!;
     const add = async (x: number, y: number, label: string) => {
+      await editor.focus();
+      await page.keyboard.press('Escape');
       await page.mouse.dblclick(box.x + x, box.y + y);
       await page.getByRole('menuitem', { name: label, exact: true }).click();
       await expect(page.locator('.react-flow__node'), errors.join('\n')).not.toHaveCount(0);

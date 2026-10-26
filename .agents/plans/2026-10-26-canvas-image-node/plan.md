@@ -1,11 +1,11 @@
 # Plan: 画布图片节点参数与输入框
 
-Status: active
-Note: ../../notes/proposed/feature/2026-10-26-canvas-image-node.md
+Status: done
+Note: ../../notes/implemented/feature/2026-10-26-canvas-image-node.md
 
 ## 目标
 
-达成[画布图片节点方案](../../notes/proposed/feature/2026-10-26-canvas-image-node.md)的验收标准：
+达成[画布图片节点方案](../../notes/implemented/feature/2026-10-26-canvas-image-node.md)的验收标准：
 
 - 图片节点参数统一为比例、清晰度、画质、背景与数量，按模型族档案动态置灰或隐藏，切换模型就近回退并提示。
 - engine 按模型族前缀匹配档案，三个图片适配器由共享换算函数生成供应商请求体。
@@ -26,8 +26,8 @@ Note: ../../notes/proposed/feature/2026-10-26-canvas-image-node.md
 | 02 | [图片档案与适配器](02-engine-profiles.md) | done | 01 | 模型族档案、前缀匹配、三个适配器请求体、产物 mime、请求固件 |
 | 03 | [多任务数据与运行时](03-multi-job.md) | done | 01 | `pendingJobIds`、`count`、节点迁移、多任务提交／写回／删除确认 |
 | 04 | [节点与输入框界面](04-node-composer.md) | done | 02、03 | 节点本体、输入框、模型／参数／数量弹层、Slider、视频节点复用外壳 |
-| 05 | [@ 引用参考](05-mentions.md) | draft | 04 | contentEditable 编辑器、候选列表、自动连线、失效检测、提交替换 |
-| 06 | [验收与收尾](06-acceptance.md) | draft | 05 | e2e、明暗人工验收、笔记转 implemented、相关笔记同步 |
+| 05 | [@ 引用参考](05-mentions.md) | done | 04 | contentEditable 编辑器、候选列表、自动连线、失效检测、提交替换 |
+| 06 | [验收与收尾](06-acceptance.md) | done | 05 | e2e、明暗人工验收、笔记转 implemented、相关笔记同步 |
 
 ## 依赖与顺序
 
@@ -36,11 +36,11 @@ Note: ../../notes/proposed/feature/2026-10-26-canvas-image-node.md
 
 ## 验收
 
-- [ ] contracts、engine、canvas、desktop 单测与组件测试通过，`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 通过 — 证据：各子计划验证
-- [ ] 桌面 e2e 覆盖多张生成与单张重试、切换模型回退、@ 引用编号、旧文档迁移后补写 — 证据：06 验证
-- [ ] 开发版与加固 exe 明暗人工验收通过，720×560 不溢出，中文输入法在 @ 编辑器内正常 — 证据：06 验证
-- [ ] 笔记转入 `implemented/`，无限画布与模型管理笔记原地同步，计划转 `done` — 证据：06 收尾
+- [x] contracts、engine、canvas、desktop 单测与组件测试通过，`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 通过 — 证据：各子计划验证
+- [x] 桌面 e2e 覆盖多张生成与单张重试、切换模型回退、@ 引用编号、旧文档迁移后补写 — 证据：06 验证
+- [x] 开发版与加固 exe 明暗人工验收通过，720×560 不溢出，中文输入法在 @ 编辑器内正常 — 证据：06 验证
+- [x] 笔记转入 `implemented/`，无限画布与模型管理笔记原地同步，计划转 `done` — 证据：06 收尾
 
 ## 发现与偏差
 
-- 01–04 已完成；OpenAI 1K 独立 16 对齐在四个比例上略超 1% 误差，改为误差超限时局部选择相邻合法尺寸，详见 01 的发现与偏差及关联笔记。02 同步统一媒体入口的图片前缀匹配并向适配器传递任务档案快照，保留旧 `*-default` ID；JPEG 固件下载入库已验证。03 补齐迁移入口、失败引用保留与单张重试、宿主前缀匹配，模拟供应商三张生成及重试 e2e 通过；Gemini 2.5 本身支持 21:9，回退验收改为按目标档案实际能力判断。04 完成节点与输入框界面、79 项画布测试与 5 项桌面回归，非加固测试构建的明暗小窗口截图已自查；输入框按画布范围收窄与避让，不伪造 Gemini 像素。05、06 保持 draft。
+- 01–05 已完成；OpenAI 1K 独立 16 对齐在四个比例上略超 1% 误差，改为误差超限时局部选择相邻合法尺寸，详见 01 的发现与偏差及关联笔记。02 同步统一媒体入口的图片前缀匹配并向适配器传递任务档案快照，保留旧 `*-default` ID；JPEG 固件下载入库已验证。03 补齐迁移入口、失败引用保留与单张重试、宿主前缀匹配，模拟供应商三张生成及重试 e2e 通过；Gemini 2.5 本身支持 21:9，回退验收改为按目标档案实际能力判断。04 完成节点与输入框界面，输入框按画布范围收窄与避让，不伪造 Gemini 像素。05 完成 @ 编辑器、参考排序与编号替换，89 项画布测试、5 项桌面回归分批通过，明暗小窗口截图已自查。06 补齐双参考中英文编号、模型回退与旧文档重启补写 e2e；开发版和加固 exe 的明暗、720×560、键盘弹层与原生中文组字检查完成，证据位于 `.cache/canvas-image-node/acceptance.md`。图片笔记转 implemented，父子计划完成。

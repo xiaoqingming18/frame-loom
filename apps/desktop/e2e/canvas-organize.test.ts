@@ -250,6 +250,7 @@ test('分组与整理：菜单、锁定、层级、JSON 往返与一步撤销', 
     await expect(page.locator('.react-flow__node-image')).toHaveCount(51);
     await expect(page.getByLabel('生成提示词')).toHaveCount(0);
     await page.keyboard.press('Shift+0');
+    await expect(page.locator('.react-flow__viewport')).toHaveAttribute('style', /scale\(1\)/);
     await expect.poll(() => page.locator('.react-flow__node-image').count()).toBeLessThan(51);
     await page.locator('.react-flow__node-image').first().focus();
     await page.locator('.react-flow__node-image').first().press('Enter');

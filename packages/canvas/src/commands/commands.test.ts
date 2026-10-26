@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { CanvasDocument } from '@frame-loom/contracts';
 import { createBuiltinRegistry } from '../nodes/builtin';
 import { doc, edge, group, media } from '../test-utils';
+import { createCanvasStore } from '../store/store';
+import type { CanvasMediaData } from '@frame-loom/contracts';
 import {
   deleteElements,
   fitGroup,
@@ -12,9 +14,65 @@ import {
   reorder,
   setLocked,
   ungroup,
+  insertImageReference,
 } from './commands';
 
 const registry = createBuiltinRegistry();
+
+it('参考连线与标签一步撤销；参考上限、成环、锁定错误不留下部分修改', () => {
+  const source = media('source');
+  source.data = {
+    ...(source.data as CanvasMediaData),
+    versions: [
+      {
+        sha256: 'a'.repeat(64),
+        mime: 'image/png',
+        width: 1,
+        height: 1,
+        createdAt: '2026-10-26T00:00:00.000Z',
+      },
+    ],
+  };
+  const store = createCanvasStore(doc([source, media('target')]));
+  expect(
+    store
+      .getState()
+      .apply((document) =>
+        insertImageReference(registry, document, 'target', 'source', '@{source}', 1),
+      ),
+  ).toBe(true);
+  expect(store.getState().document.edges).toHaveLength(1);
+  expect((store.getState().document.nodes[1].data as CanvasMediaData).prompt).toBe('@{source}');
+  expect(store.getState().past).toHaveLength(1);
+  store.getState().undo();
+  const original = store.getState().document;
+  expect(original.edges).toHaveLength(0);
+  expect((original.nodes[1].data as CanvasMediaData).prompt).toBe('');
+  expect(() =>
+    insertImageReference(registry, original, 'target', 'source', '@{source}', 0),
+  ).toThrow('最多 0');
+  expect(() =>
+    insertImageReference(
+      registry,
+      { ...original, edges: [edge('reverse', 'target', 'source')] },
+      'target',
+      'source',
+      '@{source}',
+      1,
+    ),
+  ).toThrow('循环依赖');
+  expect(() =>
+    insertImageReference(
+      registry,
+      setLocked(original, new Set(['target']), true),
+      'target',
+      'source',
+      '@{source}',
+      1,
+    ),
+  ).toThrow('锁定');
+  expect(store.getState().document).toBe(original);
+});
 
 describe('分组', () => {
   const base = doc([

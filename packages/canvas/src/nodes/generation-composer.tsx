@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { ArrowUp, ChevronDown, Copy, Expand, Minimize2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowUp, ChevronDown, Copy, Expand, Minimize2, Plus } from 'lucide-react';
 import {
   IMAGE_PARAM_LABELS,
   IMAGE_QUALITY_LABELS,
   IMAGE_BACKGROUND_LABELS,
+  resolveImagePrompt,
   type CanvasMediaData,
   type GenerationInput,
   type GenerationRequest,
@@ -18,7 +19,10 @@ import {
   TooltipTrigger,
 } from '@frame-loom/ui/components/tooltip';
 import type { CanvasGenerationConfig } from '../host';
-import { useCanvas } from '../context';
+import { useCanvas, useCanvasState } from '../context';
+import { updateData } from '../commands/commands';
+import { generationReferences } from './generation-inputs';
+import { ImagePromptEditor } from './image-prompt-editor';
 import { GenerationParams } from './generation-params';
 
 type Model = CanvasGenerationConfig['models'][number];
@@ -61,6 +65,23 @@ export function GenerationComposer({
   const [expanded, setExpanded] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [countOpen, setCountOpen] = useState(false);
+  const document = useCanvasState((state) => state.document);
+  const references = generationReferences(document, nodeId);
+  const dragged = useRef<string | null>(null);
+  const promptEditor = useRef<{ open: () => void }>(null);
+  function reorderReference(sourceId: string, targetId: string) {
+    if (locked || sourceId === targetId) return;
+    const order = references.map((reference) => reference.edge.id);
+    const from = order.indexOf(sourceId);
+    const to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    order.splice(to, 0, order.splice(from, 1)[0]);
+    store
+      .getState()
+      .apply((document) =>
+        updateData<CanvasMediaData>(document, nodeId, (data) => ({ ...data, inputOrder: order })),
+      );
+  }
   const profile = model?.profile ?? undefined;
   const summary =
     kind === 'image'
@@ -88,9 +109,45 @@ export function GenerationComposer({
             )}
             {inputs.map((input, index) => (
               <span
-                key={`${index}-${input.sha256}`}
+                key={references[index].edge.id}
                 title={`参考 ${index + 1}`}
-                className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-xs"
+                role={kind === 'image' ? 'button' : undefined}
+                aria-label={kind === 'image' ? `参考 ${index + 1}，Alt 加方向键排序` : undefined}
+                tabIndex={kind === 'image' && !locked ? 0 : undefined}
+                draggable={kind === 'image' && !locked}
+                onDragStart={(event) => {
+                  dragged.current = references[index].edge.id;
+                  event.dataTransfer.setData('text/plain', references[index].edge.id);
+                  event.stopPropagation();
+                }}
+                onDragOver={(event) => {
+                  if (kind === 'image') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }
+                }}
+                onDrop={(event) => {
+                  if (kind !== 'image') return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (dragged.current) reorderReference(dragged.current, references[index].edge.id);
+                  dragged.current = null;
+                }}
+                onDragEnd={() => {
+                  dragged.current = null;
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    kind !== 'image' ||
+                    !event.altKey ||
+                    !['ArrowLeft', 'ArrowRight'].includes(event.key)
+                  )
+                    return;
+                  event.preventDefault();
+                  const target = references[index + (event.key === 'ArrowLeft' ? -1 : 1)];
+                  if (target) reorderReference(references[index].edge.id, target.edge.id);
+                }}
+                className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 {input.kind === 'image' && input.sha256 ? (
                   <img
@@ -104,6 +161,18 @@ export function GenerationComposer({
                 )}
               </span>
             ))}
+            {kind === 'image' && (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="添加参考"
+                disabled={locked}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => promptEditor.current?.open()}
+              >
+                <Plus aria-hidden="true" className="size-4" />
+              </Button>
+            )}
           </div>
           <Button
             size="icon"
@@ -119,15 +188,27 @@ export function GenerationComposer({
             )}
           </Button>
         </div>
-        <Textarea
-          aria-label="生成提示词"
-          disabled={locked}
-          value={data.prompt}
-          maxLength={profile?.protocol === 'minimax-video-v2' ? 7000 : 32000}
-          placeholder="描述你想要生成的内容…"
-          className={`min-h-20 resize-none border-0 bg-transparent px-4 py-3 text-sm shadow-none transition-[height] duration-200 focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[min(260px,35vh)]' : 'h-20'}`}
-          onChange={(event) => onPrompt(event.target.value)}
-        />
+        {kind === 'image' ? (
+          <ImagePromptEditor
+            ref={promptEditor}
+            nodeId={nodeId}
+            value={data.prompt}
+            disabled={locked}
+            expanded={expanded}
+            profile={profile}
+            onChange={onPrompt}
+          />
+        ) : (
+          <Textarea
+            aria-label="生成提示词"
+            disabled={locked}
+            value={data.prompt}
+            maxLength={profile?.protocol === 'minimax-video-v2' ? 7000 : 32000}
+            placeholder="描述你想要生成的内容…"
+            className={`min-h-20 resize-none border-0 bg-transparent px-4 py-3 text-sm shadow-none transition-[height] duration-200 focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[min(260px,35vh)]' : 'h-20'}`}
+            onChange={(event) => onPrompt(event.target.value)}
+          />
+        )}
         <div className="flex items-center justify-between px-3 pb-2 text-xs text-muted-foreground">
           <Button
             size="icon"
@@ -142,7 +223,15 @@ export function GenerationComposer({
           >
             <Copy aria-hidden="true" className="size-3.5" />
           </Button>
-          <span aria-label="提示词字数">{data.prompt.length} 字</span>
+          <span aria-label="提示词字数">
+            {kind === 'image'
+              ? resolveImagePrompt(
+                  data.prompt,
+                  references.map((reference) => reference.node.id),
+                ).prompt.length
+              : data.prompt.length}{' '}
+            字
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2">
           <Popover open={modelOpen} onOpenChange={setModelOpen}>

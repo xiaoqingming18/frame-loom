@@ -55,7 +55,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     });
     request.on('end', () => {
       const path = new URL(request.url!, 'http://localhost').pathname;
-      if (path.endsWith('/images/generations')) {
+      if (path.endsWith('/images/generations') || path.endsWith('/images/edits')) {
         imageRequests.push(body);
         if (imageRequests.length === 2) {
           response
@@ -234,6 +234,44 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
         { type: 'image_url', role: 'first_frame' },
       ],
     });
+
+    await page.getByRole('button', { name: '添加节点', exact: true }).click();
+    await page.getByRole('menuitem', { name: '图片', exact: true }).click();
+    const promptEditor = page.getByRole('textbox', { name: '生成提示词' });
+    await promptEditor.fill('参考 @');
+    await expect(page.getByRole('listbox', { name: '引用参考' })).toBeVisible();
+    await promptEditor.press('ArrowDown');
+    await promptEditor.press('Enter');
+    await expect(promptEditor.locator('[data-reference]')).toHaveText('图1');
+    await expect(page.locator('.react-flow__edge')).toHaveCount(2);
+    await promptEditor.press('Control+z');
+    await expect(promptEditor).toHaveText('参考 @');
+    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+    await promptEditor.press('Control+Shift+z');
+    await expect(promptEditor.locator('[data-reference]')).toHaveText('图1');
+    await expect(page.locator('.react-flow__edge')).toHaveCount(2);
+    await expect(page.getByLabel('提示词字数')).toHaveText('5 字');
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+      await page.getByRole('button', { name: '添加参考' }).click();
+      await expect(page.getByRole('group', { name: '已连入参考' })).toBeVisible();
+      await page.screenshot({ path: join(screenshots, `mentions-${theme}.png`) });
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
+      await expect(async () => {
+        const menuBounds = (await page.getByRole('listbox', { name: '引用参考' }).boundingBox())!;
+        expect(menuBounds.x).toBeGreaterThanOrEqual((await editor.boundingBox())!.x);
+        expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(720);
+      }).toPass();
+      await page.screenshot({ path: join(screenshots, `mentions-small-${theme}.png`) });
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].setSize(1500, 960),
+      );
+      await promptEditor.press('Escape');
+    }
+    await page.getByRole('button', { name: '生成图片', exact: true }).click();
+    await expect(page.locator('.react-flow__node-image img')).toHaveCount(2);
+    expect(imageRequests).toHaveLength(5);
+    expect(imageRequests[4]).toContain('参考 图1');
     for (const theme of ['light', 'dark']) {
       await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
       await expect(page.locator('body')).toHaveCSS(
@@ -264,7 +302,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     page = await app.firstWindow();
     await page.getByRole('link', { name: '画布测试' }).click();
-    await expect(page.locator('.react-flow__node-image img')).toHaveCount(1);
+    await expect(page.locator('.react-flow__node-image img')).toHaveCount(2);
     await expect
       .poll(() =>
         page
@@ -273,7 +311,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
           .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
       )
       .toBe(256);
-    expect(imageRequests).toHaveLength(4);
+    expect(imageRequests).toHaveLength(5);
     expect(videoRequests).toHaveLength(1);
   } finally {
     await app?.close();
