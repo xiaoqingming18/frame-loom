@@ -408,6 +408,119 @@ it('切换视频模型保留不兼容参数为待处理项并阻止提交', () =
   expect(test.data().pendingParams).toEqual({});
 });
 
+it('文生视频没有空素材栏和添加入口，参数入口显示比例与时长', () => {
+  setupPanel({}, 'video');
+  expect(
+    screen.queryByRole('button', { name: /添加.*素材|添加首帧|添加尾帧|视频素材/ }),
+  ).toBeNull();
+  expect(screen.getByRole('button', { name: '生成参数' }).textContent).toBe('比例 · 时长');
+  expect(
+    screen.getByRole('textbox', { name: '生成提示词' }).previousElementSibling?.className,
+  ).toContain('h-0');
+});
+
+it('首尾帧可先选尾帧，候选只含当前有效图片；替换沿用连线且一步撤销', () => {
+  const test = setupPanel({ mode: 'frames' }, 'video');
+  act(() => {
+    test.store.getState().setGenerationConfig({
+      storageReady: true,
+      models: [
+        {
+          id: modelId,
+          label: '视频模型',
+          kind: 'video',
+          profile: ModelProfile.parse({
+            ...videoProfile,
+            modes: [{ id: 'frames', name: '首尾帧', requiredRoles: ['first_frame'] }],
+          }),
+        },
+      ],
+    });
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [
+        referenceSource('source'),
+        document.nodes[1],
+        referenceSource('replacement', 'b'),
+        media('empty'),
+        { ...referenceSource('movie'), type: 'video' },
+      ],
+    }));
+  });
+  fireEvent.click(screen.getByRole('button', { name: '添加尾帧' }));
+  expect(screen.queryByRole('button', { name: '选择 empty' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '选择 movie' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '选择 source' }));
+  expect(test.store.getState().document.edges).toMatchObject([
+    { source: 'source', targetHandle: 'last_frame' },
+  ]);
+  fireEvent.click(screen.getByRole('button', { name: '替换尾帧' }));
+  fireEvent.click(screen.getByRole('button', { name: '选择 replacement' }));
+  expect(test.store.getState().document.edges).toMatchObject([
+    { source: 'replacement', targetHandle: 'last_frame' },
+  ]);
+  act(() => test.store.getState().undo());
+  expect(test.store.getState().document.edges).toMatchObject([
+    { source: 'source', targetHandle: 'last_frame' },
+  ]);
+  fireEvent.click(screen.getByRole('button', { name: '替换尾帧' }));
+  fireEvent.click(screen.getByRole('button', { name: '移除尾帧' }));
+  expect(test.store.getState().document.edges).toEqual([]);
+});
+
+it('视频时长沿用离散档案，比例约束仍禁用不可用选项', () => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const test = setupPanel({}, 'video');
+  act(() =>
+    test.store.getState().setGenerationConfig({
+      storageReady: true,
+      models: [
+        {
+          id: modelId,
+          label: '视频模型',
+          kind: 'video',
+          profile: ModelProfile.parse({
+            ...videoProfile,
+            params: [
+              { key: 'duration', name: '时长', type: 'enum', values: [5, 10], default: 5 },
+              {
+                key: 'ratio',
+                name: '比例',
+                type: 'enum',
+                values: ['16:9', '9:16'],
+                default: '16:9',
+              },
+            ],
+            constraints: [
+              {
+                when: { mode: 'text' },
+                param: 'ratio',
+                allowed: ['16:9'],
+                message: '当前模式只允许横屏',
+              },
+            ],
+          }),
+        },
+      ],
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
+  expect(screen.queryByText('更多')).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '比例 9:16' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '增加时长' }));
+  expect(test.data().params?.duration).toBe(10);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '增加时长' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '减少时长' }));
+  expect(test.data().params?.duration).toBe(5);
+});
+
 it('本地音频和连线素材按同一顺序编号与提交，文件保存为节点引用', async () => {
   const test = setupPanel({ mode: 'reference' }, 'video');
   const audio = {
@@ -449,7 +562,7 @@ it('本地音频和连线素材按同一顺序编号与提交，文件保存为�
     }));
   });
   fireEvent.click(screen.getByRole('button', { name: '视频素材' }));
-  fireEvent.click(screen.getByRole('button', { name: '添加参考素材' }));
+  fireEvent.click(screen.getByRole('button', { name: '上传参考素材' }));
   fireEvent.change(screen.getByLabelText('上传视频参考素材'), {
     target: { files: [new File(['audio'], '声音.wav', { type: 'audio/wav' })] },
   });

@@ -6,16 +6,6 @@ import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Locator, Page } from '@playwright/test';
-
-async function drag(page: Page, source: Locator, target: Locator) {
-  const from = (await source.boundingBox())!;
-  const to = (await target.boundingBox())!;
-  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
-  await page.mouse.up();
-}
 
 test('画布三张图片生成、失败单张重试、首帧视频生成与版本重启保留', async ({}, info) => {
   const imageRequests: string[] = [];
@@ -231,12 +221,40 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     await page.mouse.dblclick(box.x + 760, box.y + 260);
     await page.getByRole('menuitem', { name: '视频', exact: true }).click();
     const videoNode = page.locator('.react-flow__node-video');
+    await page.getByRole('button', { name: '隐藏小地图' }).click();
+    await expect(page.getByLabel('生成提示词')).toBeVisible();
+    await page.getByRole('button', { name: '显示小地图' }).click();
+    await page.locator('.react-flow__minimap').click({ position: { x: 8, y: 8 } });
+    await expect(page.getByLabel('生成提示词')).toBeVisible();
+    await page.getByRole('button', { name: '缩放比例' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByLabel('生成提示词')).toBeVisible();
+    await page.mouse.click(box.x + 550, box.y + 80);
+    await page.mouse.move(box.x + 560, box.y + 80);
+    await expect(page.getByRole('textbox', { name: '生成提示词' })).toHaveCount(0);
+    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeHidden();
+    await videoNode.hover();
+    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeVisible();
+    await videoNode.click();
+    await page.mouse.move(box.x + 560, box.y + 80);
+    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeVisible();
+    const videoComposer = page.getByRole('textbox', { name: '生成提示词' });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+      await page.screenshot({ path: info.outputPath(`video-text-${theme}.png`) });
+    }
+    await expect(
+      videoComposer.locator('..').getByRole('button', { name: '视频素材', exact: true }),
+    ).toHaveCount(0);
     await page.getByRole('radio', { name: '首尾帧', exact: true }).click();
-    await drag(
-      page,
-      page.locator('.react-flow__node-image [data-handleid="out"]'),
-      videoNode.locator('[data-handleid="first_frame"]'),
-    );
+    await page.getByRole('button', { name: '添加首帧', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: '选择首帧', exact: true })
+      .getByRole('button', { name: /^选择 / })
+      .click();
+    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+    await page.locator('.react-flow__node-image').click();
+    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeHidden();
     await videoNode.click();
     await page.getByLabel('生成提示词').focus();
     await ime.send('Input.imeSetComposition', {
@@ -268,7 +286,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     await page.mouse.up({ button: 'middle' });
     await page.getByRole('button', { name: '生成参数', exact: true }).click();
     const videoParameters = page.getByRole('dialog', { name: '生成参数', exact: true });
-    await videoParameters.getByText('更多', { exact: true }).click();
+    await expect(videoParameters.getByRole('radiogroup', { name: '生成方式' })).toHaveCount(0);
     await videoParameters.getByRole('button', { name: '时长（秒）说明' }).click();
     await expect(page.getByText('默认值：5。', { exact: true })).toBeVisible();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));

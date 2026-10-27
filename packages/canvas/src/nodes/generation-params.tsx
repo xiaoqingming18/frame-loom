@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@frame-loom/ui/componen
 import { Popover, PopoverContent, PopoverTrigger } from '@frame-loom/ui/components/popover';
 import { Button } from '@frame-loom/ui/components/button';
 import { CircleHelp } from 'lucide-react';
+import { VideoParamControl } from './video-param-control';
 
 type Params = GenerationRequest['params'];
 const groups = {
@@ -49,6 +50,8 @@ export function GenerationParams({
   request?: GenerationRequest;
 }) {
   let pixels: string | undefined;
+  const video = profile.kind === 'video';
+  const Container = video ? 'div' : 'details';
   // 通用档案可能不声明比例；Gemini 的实际尺寸由供应商决定，不伪造像素值。
   if (profile.kind === 'image' && profile.params.some((param) => param.key === 'aspectRatio'))
     pixels = imageRequestSize(profile, params)?.replace('x', '×');
@@ -149,11 +152,13 @@ export function GenerationParams({
           );
         })}
       {profile.params.some((param) => profile.kind !== 'image' || !(param.key in groups)) && (
-        <details>
-          <summary className="cursor-pointer rounded-sm text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring">
-            更多
-          </summary>
-          <div className="mt-3 space-y-3">
+        <Container>
+          {!video && (
+            <summary className="cursor-pointer rounded-sm text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring">
+              更多
+            </summary>
+          )}
+          <div className={video ? 'space-y-6' : 'mt-3 space-y-3'}>
             {profile.params
               .filter(
                 (param) =>
@@ -164,8 +169,13 @@ export function GenerationParams({
                   ),
               )
               .map((param) => (
-                <div key={param.key} className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-1">
+                <div
+                  key={param.key}
+                  className={
+                    video ? 'flex flex-col gap-2' : 'flex items-center justify-between gap-3'
+                  }
+                >
+                  <span className="flex items-center gap-1 text-muted-foreground">
                     {param.name}
                     {profile.kind === 'video' && (
                       <Popover>
@@ -202,7 +212,24 @@ export function GenerationParams({
                       </Popover>
                     )}
                   </span>
-                  {param.type === 'enum' ? (
+                  {video &&
+                  ((param.type === 'enum' &&
+                    ['ratio', 'aspectRatio', 'aspect_ratio', 'resolution', 'duration'].includes(
+                      param.key,
+                    )) ||
+                    (param.key === 'duration' &&
+                      param.type === 'number' &&
+                      param.min !== undefined &&
+                      param.max !== undefined)) ? (
+                    <VideoParamControl
+                      param={param}
+                      params={params}
+                      profile={profile}
+                      request={request}
+                      disabled={disabled}
+                      onChange={onChange}
+                    />
+                  ) : param.type === 'enum' ? (
                     <NativeSelect
                       aria-label={param.name}
                       disabled={disabled}
@@ -276,7 +303,7 @@ export function GenerationParams({
                 </div>
               ))}
           </div>
-        </details>
+        </Container>
       )}
       {pixels && (
         <p aria-label="预计像素" className="border-t pt-3 text-muted-foreground">

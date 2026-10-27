@@ -63,6 +63,7 @@ test('节点连线：类型、重复、环、端口限额、方式切换一步�
     await expect(page.locator('.react-flow__edge')).toHaveCount(2);
     await drag(page, out(images.nth(1)), images.nth(0).locator('[data-handleid="reference"]'));
     await expect(editor.getByRole('status')).toContainText('循环依赖');
+    await video.hover();
     await page.getByRole('radio', { name: '文生视频', exact: true }).click();
     await expect(page.locator('.react-flow__edge')).toHaveCount(2);
     await expect(first).toHaveAttribute('title', '首帧（当前模型不支持）');

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { CircleHelp, Plus } from 'lucide-react';
+import { CircleHelp } from 'lucide-react';
 import {
   generationRoleReason,
   type CanvasMediaData,
@@ -60,8 +60,7 @@ export function VideoReferences({
           className="h-8 shrink-0 px-1 text-xs"
           disabled={disabled}
         >
-          <Plus aria-hidden="true" className="size-3.5" />
-          素材
+          管理素材
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -145,7 +144,7 @@ export function VideoReferences({
                     fileInput.current?.click();
                   }}
                 >
-                  添加{name}
+                  上传{name}
                 </Button>
               );
             })}

@@ -33,6 +33,7 @@ import { useCanvas, useCanvasState } from '../context';
 import { updateData } from '../commands/commands';
 import { generationSources } from './generation-inputs';
 import { VideoReferences } from './video-references';
+import { VideoReferenceSlots } from './video-reference-picker';
 import { ImagePromptEditor } from './image-prompt-editor';
 import { GenerationParams } from './generation-params';
 
@@ -112,15 +113,27 @@ export function GenerationComposer({
                 : String(params[key]),
           )
           .join(' · ')
-      : '视频参数';
+      : '比例 · 时长';
+  const videoMode = data.mode ?? 'text';
+  const hasMaterialBar = kind === 'image' || videoMode !== 'text' || inputs.length > 0;
   return (
     <TooltipProvider>
       <div
         onKeyDown={(event) => event.stopPropagation()}
         className="nodrag nopan nowheel w-full overflow-hidden rounded-2xl bg-card text-foreground shadow-panel"
       >
-        <div className="flex h-16 items-start justify-between gap-3 px-2 pt-2">
+        <div
+          className={`flex items-start justify-between gap-3 px-2 pt-2 ${hasMaterialBar ? 'min-h-16' : 'relative h-0 p-0'}`}
+        >
           <div aria-label="参考素材" className="flex min-w-0 items-center gap-2 overflow-x-auto">
+            {kind === 'video' && profile && videoMode !== 'text' && (
+              <VideoReferenceSlots
+                nodeId={nodeId}
+                profile={profile}
+                mode={videoMode}
+                disabled={locked}
+              />
+            )}
             {kind === 'image' && (
               <Button
                 size="icon"
@@ -134,67 +147,72 @@ export function GenerationComposer({
                 <Plus aria-hidden="true" className="size-4" />
               </Button>
             )}
-            {inputs.map((input, index) => (
-              <span
-                key={references[index].id}
-                title={`${input.role === 'first_frame' ? '首帧' : input.role === 'last_frame' ? '尾帧' : '参考'} ${index + 1}`}
-                role={kind === 'image' ? 'button' : undefined}
-                aria-label={kind === 'image' ? `参考 ${index + 1}，Alt 加方向键排序` : undefined}
-                tabIndex={kind === 'image' && !locked ? 0 : undefined}
-                draggable={kind === 'image' && !locked}
-                onDragStart={(event) => {
-                  dragged.current = references[index].id;
-                  event.dataTransfer.setData('text/plain', references[index].id);
-                  event.stopPropagation();
-                }}
-                onDragOver={(event) => {
-                  if (kind === 'image') {
+            {inputs.map((input, index) =>
+              kind === 'video' && videoMode === 'frames' && input.role !== 'reference' ? null : (
+                <span
+                  key={references[index].id}
+                  title={`${input.role === 'first_frame' ? '首帧' : input.role === 'last_frame' ? '尾帧' : '参考'} ${index + 1}`}
+                  role={kind === 'image' ? 'button' : undefined}
+                  aria-label={kind === 'image' ? `参考 ${index + 1}，Alt 加方向键排序` : undefined}
+                  tabIndex={kind === 'image' && !locked ? 0 : undefined}
+                  draggable={kind === 'image' && !locked}
+                  onDragStart={(event) => {
+                    dragged.current = references[index].id;
+                    event.dataTransfer.setData('text/plain', references[index].id);
+                    event.stopPropagation();
+                  }}
+                  onDragOver={(event) => {
+                    if (kind === 'image') {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (kind !== 'image') return;
                     event.preventDefault();
                     event.stopPropagation();
-                  }
-                }}
-                onDrop={(event) => {
-                  if (kind !== 'image') return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (dragged.current) reorderReference(dragged.current, references[index].id);
-                  dragged.current = null;
-                }}
-                onDragEnd={() => {
-                  dragged.current = null;
-                }}
-                onKeyDown={(event) => {
-                  if (
-                    kind !== 'image' ||
-                    !event.altKey ||
-                    !['ArrowLeft', 'ArrowRight'].includes(event.key)
-                  )
-                    return;
-                  event.preventDefault();
-                  const target = references[index + (event.key === 'ArrowLeft' ? -1 : 1)];
-                  if (target) reorderReference(references[index].id, target.id);
-                }}
-                className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              >
-                {input.kind === 'image' && input.sha256 ? (
-                  <img
-                    src={host.media.url(input.sha256)}
-                    alt={`参考 ${index + 1}`}
-                    draggable={false}
-                    className="size-full object-cover"
-                  />
-                ) : (
-                  `${input.kind === 'video' ? '视频' : '音频'} ${index + 1}`
-                )}
-              </span>
-            ))}
+                    if (dragged.current) reorderReference(dragged.current, references[index].id);
+                    dragged.current = null;
+                  }}
+                  onDragEnd={() => {
+                    dragged.current = null;
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      kind !== 'image' ||
+                      !event.altKey ||
+                      !['ArrowLeft', 'ArrowRight'].includes(event.key)
+                    )
+                      return;
+                    event.preventDefault();
+                    const target = references[index + (event.key === 'ArrowLeft' ? -1 : 1)];
+                    if (target) reorderReference(references[index].id, target.id);
+                  }}
+                  className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  {input.kind === 'image' && input.sha256 ? (
+                    <img
+                      src={host.media.url(input.sha256)}
+                      alt={`参考 ${index + 1}`}
+                      draggable={false}
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    `${input.kind === 'video' ? '视频' : '音频'} ${index + 1}`
+                  )}
+                </span>
+              ),
+            )}
+            {kind === 'video' && profile && (videoMode !== 'text' || inputs.length > 0) && (
+              <VideoReferences nodeId={nodeId} data={data} profile={profile} disabled={locked} />
+            )}
           </div>
           <Button
             size="icon"
             variant="ghost"
             aria-label={expanded ? '收起提示词' : '展开提示词'}
             aria-expanded={expanded}
-            className="size-7 text-muted-foreground"
+            className={`size-7 text-muted-foreground ${hasMaterialBar ? '' : 'absolute top-2 right-2'}`}
             onClick={() => setExpanded(!expanded)}
           >
             {expanded ? (
@@ -222,7 +240,7 @@ export function GenerationComposer({
             defaultValue={data.prompt}
             maxLength={profile?.promptMaxLength ?? 32000}
             placeholder="描述你想要生成的内容…"
-            className={`min-h-0 resize-none rounded-none border-0 bg-transparent px-3.5 py-6 text-sm shadow-none transition-[height] duration-200 ease-in-out focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[292px]' : 'h-32'}`}
+            className={`min-h-0 resize-none rounded-none border-0 bg-transparent px-3.5 py-3 pr-11 text-sm shadow-none transition-[height] duration-200 ease-in-out focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[292px]' : 'h-32'}`}
             onCompositionStart={() => {
               composing.current = true;
             }}
@@ -261,9 +279,6 @@ export function GenerationComposer({
           </span>
         </div>
         <div className="flex items-center gap-1 px-3 pb-3">
-          {kind === 'video' && profile && (
-            <VideoReferences nodeId={nodeId} data={data} profile={profile} disabled={locked} />
-          )}
           <Popover open={modelOpen} onOpenChange={setModelOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -341,7 +356,7 @@ export function GenerationComposer({
               side="top"
               sticky="always"
               collisionPadding={{ top: 58, right: 16, bottom: 16, left: 16 }}
-              className="nodrag nopan nowheel max-h-[min(440px,var(--radix-popover-content-available-height))] w-[420px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-xl"
+              className={`nodrag nopan nowheel w-[420px] max-w-[calc(100vw-32px)] overflow-y-auto ${kind === 'video' ? 'max-h-[min(580px,var(--radix-popover-content-available-height))] rounded-2xl border-0 p-6 shadow-panel' : 'max-h-[min(440px,var(--radix-popover-content-available-height))] rounded-xl'}`}
             >
               {profile && (
                 <>

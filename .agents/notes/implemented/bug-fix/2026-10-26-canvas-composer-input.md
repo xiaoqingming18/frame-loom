@@ -14,6 +14,8 @@ Status: implemented
 
 ## Related notes
 
+[视频输入区](../feature/2026-10-27-video-composer.md)调整视频素材栏、参数卡片与 Tab 显隐；固定宽下方布局和输入保护继续沿用本篇。
+
 [图片节点](../../implemented/feature/2026-10-26-canvas-image-node.md)部分重叠：本篇替换输入框避让决定，保留单选显示、固定屏幕尺寸、引用与生成契约。[无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)部分重叠，同步布局事实，其余决定保留。其余活跃笔记与本次修复无关。
 
 ## Alternatives considered

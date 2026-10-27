@@ -253,7 +253,7 @@ function MediaFrame({
           .map((port) => port.id)
       : retained.map((port) => port.id);
   return (
-    <div className="flex size-full flex-col">
+    <div className="group/media flex size-full flex-col">
       <div className="absolute -top-7 right-0 left-0 flex items-center justify-between gap-2">
         <NodeTitle
           nodeId={node.id}
@@ -521,30 +521,36 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
         <div
           role="radiogroup"
           aria-label="生成方式"
-          className="nodrag nopan absolute -bottom-9 left-1/2 flex -translate-x-1/2 gap-0.5 rounded-lg border bg-popover p-0.5 shadow-canvas-panel"
+          className={cn(
+            'nodrag nopan absolute top-full left-1/2 -translate-x-1/2 pt-2',
+            !props.selected &&
+              'invisible group-focus-within/media:visible group-hover/media:visible',
+          )}
         >
-          {(profile
-            ? executableGenerationModes(profile).map((item) => ({
-                id: item.id as CanvasVideoMode,
-                label: item.name,
-              }))
-            : VIDEO_MODES
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="radio"
-              aria-checked={mode === item.id}
-              disabled={locked}
-              onClick={() => setMode(item.id)}
-              className={cn(
-                'rounded-md px-2 py-1 text-xs whitespace-nowrap text-muted-foreground hover:bg-accent disabled:opacity-50',
-                mode === item.id && 'bg-accent-active text-foreground',
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
+          <div className="flex gap-0.5 rounded-lg border bg-popover p-0.5 shadow-canvas-panel">
+            {(profile
+              ? executableGenerationModes(profile).map((item) => ({
+                  id: item.id as CanvasVideoMode,
+                  label: item.name,
+                }))
+              : VIDEO_MODES
+            ).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={mode === item.id}
+                disabled={locked}
+                onClick={() => setMode(item.id)}
+                className={cn(
+                  'rounded-md px-2 py-1 text-xs whitespace-nowrap text-muted-foreground hover:bg-accent disabled:opacity-50',
+                  mode === item.id && 'bg-accent-active text-foreground',
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       }
     >
