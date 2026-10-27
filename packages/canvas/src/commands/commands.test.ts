@@ -13,6 +13,8 @@ import {
   reparentAfterDrag,
   reorder,
   setLocked,
+  setTag,
+  isTaggable,
   ungroup,
   insertImageReference,
 } from './commands';
@@ -211,4 +213,32 @@ describe('删除、锁定与微移', () => {
       nudge(locked, new Set(['c', 'b']), { x: 10, y: 0 }).nodes.map((node) => node.position.x),
     ).toEqual([10, 0]);
   });
+});
+
+it('批量标签跳过不可打标签、自身与分组锁定的节点，一步撤销且重复操作不记历史', () => {
+  const document = doc([
+    group('g', { locked: true }),
+    media('child', 'image', { parentId: 'g' }),
+    media('locked', 'video', { locked: true }),
+    media('a'),
+    media('b', 'video'),
+  ]);
+  const store = createCanvasStore(document);
+  const ids = new Set(document.nodes.map((node) => node.id));
+  expect(isTaggable(document.nodes[0])).toBe(false);
+  store.getState().apply((current) => setTag(current, ids, 'builtin-prop'));
+  expect(store.getState().document.nodes.map((node) => node.tagId)).toEqual([
+    undefined,
+    undefined,
+    undefined,
+    'builtin-prop',
+    'builtin-prop',
+  ]);
+  store.getState().apply((current) => setTag(current, ids, 'builtin-prop'));
+  expect(store.getState().past).toHaveLength(1);
+  store.getState().undo();
+  expect(store.getState().document).toBe(document);
+  store.getState().redo();
+  store.getState().apply((current) => setTag(current, ids, null));
+  expect(store.getState().document.nodes.every((node) => !('tagId' in node))).toBe(true);
 });

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { DEFAULT_VIEW, type CanvasHost } from '@frame-loom/canvas';
-import { emptyCanvasDocument, type CanvasRecord } from '@frame-loom/contracts';
+import { emptyCanvasDocument, type CanvasRecord, type ProjectTag } from '@frame-loom/contracts';
 import { EngineRequestError } from '@/lib/engine-client';
 import { createCanvasPersistence } from './canvas-persistence';
 
@@ -24,7 +24,7 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-function setup(record: CanvasRecord | null = null) {
+function setup(record: CanvasRecord | null = null, tags: ProjectTag[] = []) {
   const host = {
     load: vi.fn<NonNullable<CanvasHost['documents']>['load']>().mockResolvedValue(record),
     save: vi
@@ -32,10 +32,62 @@ function setup(record: CanvasRecord | null = null) {
       .mockImplementation((_id, revision) => Promise.resolve({ revision: revision + 1 })),
     saveView: vi.fn<NonNullable<CanvasHost['documents']>['saveView']>().mockResolvedValue(),
   };
-  const session = createCanvasPersistence(host, '00000000-0000-4000-8000-000000000002');
-  return { host, session, store: session.store };
+  const loadTags = vi.fn().mockResolvedValue(tags);
+  const session = createCanvasPersistence(host, '00000000-0000-4000-8000-000000000002', loadTags);
+  return { host, loadTags, session, store: session.store };
 }
 afterEach(() => vi.useRealTimers());
+
+it('加载时只清理悬空标签，既不进入历史也不触发保存，随下次编辑落盘', async () => {
+  const tag = { id: 'valid', name: '人物', color: 'pink', builtin: false } as const;
+  const node = document().nodes[0];
+  const { host, session, store } = setup(
+    {
+      id: '00000000-0000-4000-8000-000000000002',
+      revision: 4,
+      updatedAt: '2026-10-27T00:00:00Z',
+      document: {
+        ...document(),
+        nodes: [
+          { ...node, id: 'one', tagId: 'valid' },
+          { ...node, id: 'two', tagId: 'deleted' },
+        ],
+      },
+      view: null,
+    },
+    [tag],
+  );
+  await session.reload();
+  expect(store.getState().document.nodes[0].tagId).toBe('valid');
+  expect(store.getState().document.nodes[1]).not.toHaveProperty('tagId');
+  expect(store.getState().tags).toEqual([tag]);
+  expect(store.getState().past).toEqual([]);
+  expect(session.hasPendingChanges()).toBe(false);
+  expect(session.getSnapshot().status).toBe('saved');
+  await session.flush();
+  expect(host.save).not.toHaveBeenCalled();
+  store
+    .getState()
+    .apply((doc) => ({ ...doc, nodes: doc.nodes.map((item) => ({ ...item, title: '新标题' })) }));
+  await session.flush();
+  expect(host.save.mock.calls[0][1]).toBe(4);
+  expect(host.save.mock.calls[0][2].nodes[1]).not.toHaveProperty('tagId');
+});
+
+it('标签读取失败时不把未清理的页面开放为可编辑，重试成功后恢复', async () => {
+  const { host, loadTags, session } = setup();
+  loadTags.mockRejectedValueOnce(new Error('标签读取失败'));
+  await session.reload();
+  expect(session.getSnapshot()).toMatchObject({
+    ready: false,
+    status: 'error',
+    message: '标签读取失败',
+  });
+  await session.flush();
+  expect(host.save).not.toHaveBeenCalled();
+  await session.reload();
+  expect(session.getSnapshot()).toMatchObject({ ready: true, status: 'saved' });
+});
 
 it('持久化旧文档加载时迁移任务，保留原参数和提示词', async () => {
   const old = document();

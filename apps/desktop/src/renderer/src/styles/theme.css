@@ -52,6 +52,27 @@
   --canvas-dock-shadow: 0 4px 16px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
   --canvas-bar-shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
   --canvas-node-shadow: 0 4px 12px rgb(0 0 0 / 0.05);
+  /* 项目标签：色点和徽标文字使用前景色，徽标使用对应浅底色。 */
+  --tag-red: #b91c1c;
+  --tag-red-bg: #fee2e2;
+  --tag-orange: #c2410c;
+  --tag-orange-bg: #ffedd5;
+  --tag-yellow: #854d0e;
+  --tag-yellow-bg: #fef3c7;
+  --tag-green: #15803d;
+  --tag-green-bg: #dcfce7;
+  --tag-cyan: #0e7490;
+  --tag-cyan-bg: #cffafe;
+  --tag-blue: #1d4ed8;
+  --tag-blue-bg: #dbeafe;
+  --tag-indigo: #4338ca;
+  --tag-indigo-bg: #e0e7ff;
+  --tag-purple: #7e22ce;
+  --tag-purple-bg: #f3e8ff;
+  --tag-pink: #be185d;
+  --tag-pink-bg: #fce7f3;
+  --tag-gray: #52525b;
+  --tag-gray-bg: #e4e4e7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -105,6 +126,26 @@
     --canvas-dock-shadow: 0 4px 16px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.06);
     --canvas-bar-shadow: 0 1px 3px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(255 255 255 / 0.05);
     --canvas-node-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+    --tag-red: #f87171;
+    --tag-red-bg: #451a1a;
+    --tag-orange: #fb923c;
+    --tag-orange-bg: #431f0d;
+    --tag-yellow: #facc15;
+    --tag-yellow-bg: #3f3107;
+    --tag-green: #4ade80;
+    --tag-green-bg: #12351e;
+    --tag-cyan: #22d3ee;
+    --tag-cyan-bg: #12343a;
+    --tag-blue: #60a5fa;
+    --tag-blue-bg: #172b45;
+    --tag-indigo: #a5b4fc;
+    --tag-indigo-bg: #24234a;
+    --tag-purple: #c084fc;
+    --tag-purple-bg: #351a4a;
+    --tag-pink: #f472b6;
+    --tag-pink-bg: #451a34;
+    --tag-gray: #d4d4d8;
+    --tag-gray-bg: #303036;
   }
 }
 

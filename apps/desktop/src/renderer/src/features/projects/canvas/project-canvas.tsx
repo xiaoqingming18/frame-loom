@@ -5,6 +5,8 @@ import {
   ProjectPageRecord,
   ProjectPageSaveResult,
   ProjectMutationResult,
+  ProjectTag,
+  ProjectTagUsage,
   ChannelList,
   ChannelModelList,
   EngineEvent,
@@ -24,11 +26,19 @@ import {
   DialogTitle,
 } from '@frame-loom/ui/components/dialog';
 import { EngineRequestError, type EngineClient } from '@/lib/engine-client';
+import {
+  createProjectTag,
+  deleteProjectTag,
+  projectQuery,
+  projectTagUsagesQuery,
+  projectTagsQuery,
+  updateProjectTag,
+} from '@/lib/project-queries';
+import { TagDeleteDialog } from './tag-delete-dialog';
 import { commandWindow, onEngineExited } from '@/lib/desktop-bridge';
 import { createCanvasPersistence } from './canvas-persistence';
-import { useQuery } from '@tanstack/react-query';
-import { projectQuery } from '@/lib/project-queries';
 import { useCanvasAssets } from './use-canvas-assets';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 const ViewSaved = z.strictObject({ saved: z.literal(true) });
 
@@ -42,7 +52,23 @@ export function ProjectCanvas({
   projectId: string;
   pageId: string;
 }) {
+  const queryClient = useQueryClient();
   const project = useQuery(projectQuery(engineClient, projectId));
+  const tagsQuery = useMemo(
+    () => projectTagsQuery(engineClient, projectId),
+    [engineClient, projectId],
+  );
+  const tags = useQuery(tagsQuery);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    tag: ProjectTag;
+    usages: ProjectTagUsage[];
+    loading: boolean;
+    error: string | null;
+    attempt: number;
+  } | null>(null);
+  const deleteDialogResolve = useRef<
+    ((value: { pageId: string; nodeId: string; tagId: string | null }[] | null) => void) | null
+  >(null);
   const assets = useCanvasAssets(engineClient, projectId);
   const session = useMemo(() => {
     let opening: Promise<unknown> | undefined;
@@ -71,6 +97,34 @@ export function ProjectCanvas({
         })),
     };
   }, [engineClient, projectId]);
+  const documents = useMemo(
+    () =>
+      ({
+        load: async (id) => {
+          await session.open();
+          return engineClient.request(`/projects/${projectId}/pages/${id}`, ProjectPageRecord);
+        },
+        save: (id, revision, document) =>
+          engineClient.request(`/projects/${projectId}/pages/${id}`, ProjectPageSaveResult, {
+            method: 'PUT',
+            body: { revision, document },
+          }),
+        saveView: async (id, view) => {
+          await engineClient.request(`/projects/${projectId}/pages/${id}/view`, ViewSaved, {
+            method: 'PUT',
+            body: view,
+          });
+        },
+      }) satisfies NonNullable<CanvasHost['documents']>,
+    [engineClient, projectId, session],
+  );
+  const persistence = useMemo(
+    () =>
+      createCanvasPersistence(documents, pageId, () =>
+        engineClient.request(`/projects/${projectId}/tags`, ProjectTag.array()),
+      ),
+    [documents, engineClient, pageId, projectId],
+  );
   const host = useMemo(
     () =>
       ({
@@ -154,34 +208,104 @@ export function ProjectCanvas({
             })();
           },
         },
-        documents: {
-          load: async (id) => {
-            await session.open();
-            return engineClient.request(`/projects/${projectId}/pages/${id}`, ProjectPageRecord);
+        documents,
+        assets: assets.host,
+        tags: {
+          list: (signal) =>
+            engineClient.request(`/projects/${projectId}/tags`, z.array(ProjectTag), { signal }),
+          create: async (input) => {
+            const result = await createProjectTag(engineClient, projectId, input);
+            queryClient.setQueryData(tagsQuery.queryKey, result);
+            return result;
           },
-          save: (id, revision, document) =>
-            engineClient.request(`/projects/${projectId}/pages/${id}`, ProjectPageSaveResult, {
-              method: 'PUT',
-              body: { revision, document },
-            }),
-          saveView: async (id, view) => {
-            await engineClient.request(`/projects/${projectId}/pages/${id}/view`, ViewSaved, {
-              method: 'PUT',
-              body: view,
-            });
+          update: async (id, patch) => {
+            const result = await updateProjectTag(engineClient, projectId, id, patch);
+            queryClient.setQueryData(tagsQuery.queryKey, result);
+            return result;
+          },
+          remove: async (tag) => {
+            if (!(await persistence.flush())) return null;
+            const usagesQuery = projectTagUsagesQuery(engineClient, projectId, tag.id);
+            let usages = await queryClient.fetchQuery({ ...usagesQuery, staleTime: 0 });
+            let error: string | null = null;
+            let attempt = 0;
+            try {
+              while (true) {
+                setDeleteDialog({ tag, usages, loading: false, error, attempt: attempt++ });
+                const reassign = await new Promise<
+                  { pageId: string; nodeId: string; tagId: string | null }[] | null
+                >((resolve) => {
+                  deleteDialogResolve.current = resolve;
+                });
+                deleteDialogResolve.current = null;
+                if (!reassign) return null;
+                setDeleteDialog((current) => current && { ...current, loading: true, error: null });
+                const targets = new Map(
+                  reassign
+                    .filter((item) => item.pageId === pageId)
+                    .map((item) => [item.nodeId, item.tagId]),
+                );
+                const current = persistence.store.getState();
+                if (
+                  current.document.nodes.some(
+                    (node) => targets.has(node.id) && node.tagId === tag.id,
+                  )
+                ) {
+                  current.apply((document) => ({
+                    ...document,
+                    nodes: document.nodes.map((node) => {
+                      if (!targets.has(node.id) || node.tagId !== tag.id) return node;
+                      const updated = { ...node };
+                      const target = targets.get(node.id);
+                      if (target) updated.tagId = target;
+                      else delete updated.tagId;
+                      return updated;
+                    }),
+                  }));
+                }
+                if (!(await persistence.flush())) return null;
+                try {
+                  const result = await deleteProjectTag(
+                    engineClient,
+                    projectId,
+                    tag.id,
+                    reassign.filter((item) => item.pageId !== pageId),
+                  );
+                  queryClient.setQueryData(tagsQuery.queryKey, result);
+                  return result;
+                } catch (cause) {
+                  if (cause instanceof EngineRequestError && cause.status === 409) {
+                    usages = await queryClient.fetchQuery({ ...usagesQuery, staleTime: 0 });
+                    error = '标签引用已变化，请重新选择。';
+                  } else {
+                    error = cause instanceof Error ? cause.message : '删除标签失败';
+                  }
+                }
+              }
+            } finally {
+              deleteDialogResolve.current = null;
+              setDeleteDialog(null);
+            }
           },
         },
-        assets: assets.host,
       }) satisfies CanvasHost,
-    [engineClient, projectId, pageId, assets.host, session],
-  );
-  const persistence = useMemo(
-    () => createCanvasPersistence(host.documents, pageId),
-    [host, pageId],
+    [
+      engineClient,
+      projectId,
+      pageId,
+      assets.host,
+      documents,
+      persistence,
+      queryClient,
+      tagsQuery.queryKey,
+    ],
   );
   const state = useSyncExternalStore(persistence.subscribe, persistence.getSnapshot);
   const [closeBlocked, setCloseBlocked] = useState(false);
   const allowClose = useRef(false);
+  useEffect(() => {
+    if (tags.data) persistence.store.getState().setTags(tags.data);
+  }, [persistence, tags.data]);
   const blocker = useBlocker({
     shouldBlockFn: useCallback(
       async ({ current, next }) => {
@@ -200,7 +324,11 @@ export function ProjectCanvas({
     enableBeforeUnload: false,
     withResolver: true,
   });
-  const exportDocument = () => downloadCanvasDocument(persistence.store.getState().document);
+  const exportDocument = () =>
+    downloadCanvasDocument(
+      persistence.store.getState().document,
+      persistence.store.getState().tags,
+    );
 
   useEffect(() => {
     persistence.start();
@@ -244,6 +372,8 @@ export function ProjectCanvas({
       ),
     );
     return () => {
+      deleteDialogResolve.current?.(null);
+      deleteDialogResolve.current = null;
       window.removeEventListener('beforeunload', beforeUnload);
       unsubscribe();
       persistence.stop();
@@ -345,6 +475,19 @@ export function ProjectCanvas({
         {state.ready && <CanvasEditor host={host} store={persistence.store} />}
       </div>
       {assets.dialog}
+      {deleteDialog && (
+        <TagDeleteDialog
+          key={deleteDialog.attempt}
+          projectId={projectId}
+          tag={deleteDialog.tag}
+          tags={tags.data ?? []}
+          usages={deleteDialog.usages}
+          loading={deleteDialog.loading}
+          error={deleteDialog.error}
+          onCancel={() => deleteDialogResolve.current?.(null)}
+          onConfirm={(reassign) => deleteDialogResolve.current?.(reassign)}
+        />
+      )}
       <Dialog
         open={closeBlocked || blocker.status === 'blocked'}
         onOpenChange={(open) => {

@@ -13,3 +13,6 @@ export { checkConnection } from './registry/connections';
 export { downloadCanvasDocument } from './interaction/document-file';
 export { createBuiltinRegistry, groupNode, imageNode, videoNode } from './nodes/builtin';
 export { generationInputs } from './nodes/generation-inputs';
+
+export { NodeHeader } from './nodes/views';
+export { isTaggable, setTag } from './commands/commands';

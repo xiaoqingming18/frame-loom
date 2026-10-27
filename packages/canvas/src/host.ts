@@ -8,6 +8,9 @@ import type {
   GenerationJob,
   GenerationRequest,
   MediaFile,
+  ProjectTag,
+  ProjectTagCreateRequest,
+  ProjectTagUpdateRequest,
   ModelProfile,
 } from '@frame-loom/contracts';
 
@@ -47,6 +50,12 @@ export interface CanvasHost {
     load(id: string): Promise<Pick<CanvasRecord, 'id' | 'revision' | 'document' | 'view'> | null>;
     save(id: string, revision: number, document: CanvasDocument): Promise<{ revision: number }>;
     saveView(id: string, view: CanvasView): Promise<void>;
+  };
+  tags?: {
+    list(signal: AbortSignal): Promise<ProjectTag[]>;
+    create(input: ProjectTagCreateRequest): Promise<ProjectTag[]>;
+    update(id: string, patch: ProjectTagUpdateRequest): Promise<ProjectTag[]>;
+    remove(tag: ProjectTag): Promise<ProjectTag[] | null>;
   };
   generation?: CanvasGenerationHost;
   assets?: {

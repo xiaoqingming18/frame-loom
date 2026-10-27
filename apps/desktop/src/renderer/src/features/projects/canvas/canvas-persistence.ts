@@ -4,7 +4,12 @@ import {
   DEFAULT_VIEW,
   type CanvasHost,
 } from '@frame-loom/canvas';
-import { emptyCanvasDocument, type CanvasDocument, type CanvasView } from '@frame-loom/contracts';
+import {
+  emptyCanvasDocument,
+  type CanvasDocument,
+  type CanvasView,
+  type ProjectTag,
+} from '@frame-loom/contracts';
 import { EngineRequestError } from '@/lib/engine-client';
 
 type SaveState = {
@@ -17,6 +22,7 @@ type SaveState = {
 export function createCanvasPersistence(
   documents: NonNullable<CanvasHost['documents']>,
   id: string,
+  loadTags: () => Promise<ProjectTag[]> = () => Promise.resolve([]),
 ) {
   const store = createCanvasStore();
   const registry = createBuiltinRegistry();
@@ -58,16 +64,25 @@ export function createCanvasPersistence(
       update({ ready: false, status: 'loading' });
       const record = await documents.load(id);
       if (current !== loadId) return;
-      if (record)
-        store.getState().reset(
-          {
+      const tags = await loadTags();
+      if (current !== loadId) return;
+      const loaded = record
+        ? {
             ...record.document,
-            nodes: record.document.nodes.map((node) => registry.migrate(node)),
-          },
-          record.view ?? DEFAULT_VIEW,
-        );
-      // 不存在的记录也替换为干净文档，避免把旧内容误当作远端基线。
-      else store.getState().reset(emptyCanvasDocument(), DEFAULT_VIEW);
+            nodes: record.document.nodes
+              .map((node) => registry.migrate(node))
+              .map((node) => {
+                if (node.tagId && !tags.some((tag) => tag.id === node.tagId)) {
+                  const clean = { ...node };
+                  delete clean.tagId;
+                  return clean;
+                }
+                return node;
+              }),
+          }
+        : emptyCanvasDocument();
+      store.getState().reset(loaded, record?.view ?? DEFAULT_VIEW);
+      store.getState().setTags(tags);
       revision = record?.revision ?? 0;
       savedDocument = store.getState().document;
       savedView = store.getState().view;

@@ -29,6 +29,7 @@ import {
 } from '../interaction/clipboard';
 import { checkConnection } from '../registry/connections';
 import { useMediaImports } from './use-media-imports';
+import { resolveTags } from '../interaction/tags';
 import { adoptMedia } from '../interaction/adopt-media';
 import { activeVersion, appendVersion, emptyMedia, fitMediaSize } from '../nodes/media';
 
@@ -117,7 +118,7 @@ export function useCanvasActions() {
       },
       copy(): string | null {
         const { document, selectedNodes } = state();
-        const payload = copySelection(document, selectedNodes);
+        const payload = copySelection(document, selectedNodes, state().tags);
         if (!payload) return null;
         pasteState.count = 0;
         try {
@@ -131,16 +132,22 @@ export function useCanvasActions() {
       paste(text: string, at?: Point) {
         const payload = deserialize(text, registry);
         if (!payload) return false;
+        if (host.tags && state().tags === null) {
+          state().notify('标签尚未加载，请稍后重试');
+          return false;
+        }
         // 连续粘贴到同一位置时依次错开，避免完全重叠。
         const base = at ?? viewportCenter();
         if (pasteState.at && Math.hypot(base.x - pasteState.at.x, base.y - pasteState.at.y) < 1)
           pasteState.count++;
         else pasteState.count = 0;
         pasteState.at = base;
-        const { nodes, edges } = instantiate(payload, {
+        const instantiated = instantiate(payload, {
           x: base.x + pasteState.count * PASTE_OFFSET,
           y: base.y + pasteState.count * PASTE_OFFSET,
         });
+        const { edges } = instantiated;
+        const nodes = resolveTags(instantiated.nodes, payload.tags, state().tags ?? []);
         const insert = () => {
           const ok = run((document) => addNodes(document, nodes, edges));
           if (ok) state().select(nodes.filter((node) => !node.parentId).map((node) => node.id));
@@ -272,13 +279,15 @@ export function useCanvasActions() {
       },
       clipboardMime: CLIPBOARD_MIME,
       exportDocument() {
-        downloadCanvasDocument(state().document);
+        downloadCanvasDocument(state().document, state().tags);
       },
       async importDocument(file: File) {
         try {
+          if (host.tags && state().tags === null)
+            throw new CanvasCommandError('标签尚未加载，请稍后重试');
           if (file.size > CANVAS_LIMITS.bytes)
             throw new CanvasCommandError('画布 JSON 不能超过 8 MiB');
-          const next = parseDocument(await file.text(), registry);
+          const next = parseDocument(await file.text(), registry, state().tags ?? []);
           const missing = await adoptMedia(host, next.nodes);
           if (run(() => next)) {
             state().select([]);

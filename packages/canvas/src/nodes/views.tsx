@@ -20,6 +20,7 @@ import {
 import {
   executableGenerationModes,
   generationRoleReason,
+  type CanvasNode,
   type CanvasGroupData,
   type CanvasMediaData,
   type CanvasVideoMode,
@@ -27,7 +28,7 @@ import {
 import { cn } from '@frame-loom/ui/lib/utils';
 import { Button } from '@frame-loom/ui/components/button';
 import { NodeActionsContext, useCanvas, useCanvasState } from '../context';
-import { isNodeLocked, updateData, updateNode } from '../commands/commands';
+import { isNodeLocked, isTaggable, updateData, updateNode } from '../commands/commands';
 import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
 import { activeVersion, appendVersion, GROUP_COLORS, VIDEO_MODES, videoInputs } from './media';
 import { importMedia } from '../interaction/media-import';
@@ -178,7 +179,7 @@ export function NodeTitle({
     return !!node && isNodeLocked(state.document, node);
   });
   return (
-    <div className="flex h-6 min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+    <div className="flex h-6 min-w-0 flex-1 items-center gap-1.5 text-xs text-muted-foreground">
       <span aria-hidden="true" className="shrink-0 [&_svg]:size-3.5">
         {icon}
       </span>
@@ -199,6 +200,46 @@ export function NodeTitle({
   );
 }
 
+export function NodeHeader({ node, icon }: { node: CanvasNode; icon: ReactNode }) {
+  const { host, registry } = useCanvas();
+  const tag = useCanvasState((state) =>
+    host.tags && isTaggable(node)
+      ? state.tags?.find((entry) => entry.id === node.tagId)
+      : undefined,
+  );
+  const locked = useCanvasState((state) => isNodeLocked(state.document, node));
+  const inputCount = useCanvasState(
+    (state) => state.document.edges.filter((edge) => edge.target === node.id).length,
+  );
+  const edgeDisplay = useCanvasState((state) => state.view.edgeDisplay);
+  return (
+    <div className="absolute -top-7 right-0 left-0 flex items-center gap-2">
+      <NodeTitle
+        nodeId={node.id}
+        title={node.title ?? registry.get(node.type)?.label ?? node.type}
+        icon={icon}
+      />
+      {tag && (
+        <span
+          title={tag.name}
+          className={cn(
+            'canvas-tag-badge max-w-[45%] shrink-0 truncate rounded-full px-2 py-0.5 text-xs',
+            `canvas-tag-${tag.color}`,
+          )}
+        >
+          {tag.name}
+        </span>
+      )}
+      <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+        {locked && <Lock aria-label="已锁定" className="size-3" />}
+        {edgeDisplay !== 'all' && inputCount > 0 && (
+          <span title="参考数量">{inputCount} 个参考</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MediaFrame({
   node,
   selected,
@@ -213,10 +254,6 @@ function MediaFrame({
   const { registry, store } = useCanvas();
   const definition = registry.get(node.type)!;
   const locked = useCanvasState((state) => isNodeLocked(state.document, node));
-  const inputCount = useCanvasState(
-    (state) => state.document.edges.filter((edge) => edge.target === node.id).length,
-  );
-  const edgeDisplay = useCanvasState((state) => state.view.edgeDisplay);
   const { host } = useCanvas();
   const Generation = host.generation?.Panel ?? GenerationPanel;
   const single = useCanvasState((state) => state.selectedNodes.size <= 1);
@@ -254,19 +291,7 @@ function MediaFrame({
       : retained.map((port) => port.id);
   return (
     <div className="group/media flex size-full flex-col">
-      <div className="absolute -top-7 right-0 left-0 flex items-center justify-between gap-2">
-        <NodeTitle
-          nodeId={node.id}
-          title={node.title ?? definition.label}
-          icon={kind === 'image' ? <ImageIcon /> : <Film />}
-        />
-        <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-          {locked && <Lock aria-label="已锁定" className="size-3" />}
-          {edgeDisplay !== 'all' && inputCount > 0 && (
-            <span title="参考数量">{inputCount} 个参考</span>
-          )}
-        </div>
-      </div>
+      <NodeHeader node={node} icon={kind === 'image' ? <ImageIcon /> : <Film />} />
       <NodeResizer
         isVisible={selected && !locked}
         minWidth={definition.minSize.width}

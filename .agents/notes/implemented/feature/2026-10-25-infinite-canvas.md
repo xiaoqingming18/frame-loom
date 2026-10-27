@@ -79,6 +79,7 @@ apps/desktop/src/renderer/src/features/projects/canvas/   项目画布宿主与�
   ```
 
   项目画布宿主用 EngineClient 实现；画布持久化会话独立持有 revision 与串行保存队列，避免 Query 的缓存刷新覆盖尚未保存的编辑；其他服务端查询继续使用 Query。项目和页面 id 由路由注入，媒体与生成任务归属项目。
+- **项目标签**：可选 `CanvasHost.tags` 注入标签列表与增改删能力，store 的 `tags` 不进入文档历史。图片／视频共用 `NodeHeader` 徽标；批量打标签只修改可打标签且未锁定的节点，一次 apply 可撤销。剪贴板与导出 JSON 携带可选 id／名称旁表，导入／粘贴先保留本项目已有 id，否则按名称忽略大小写匹配，未匹配清空；项目标签尚未加载时阻止粘贴／导入，避免静默丢标签。没有注入标签能力时不显示菜单或徽标。宿主删除与剩余验收见[项目标签](../../proposed/feature/2026-10-27-project-tags.md)。
 - **ESLint**：renderer 的 React Hooks、Fast Refresh、Tailwind correctness 与颜色限制规则扩展到 `packages/ui/**`、`packages/canvas/**`；新增导入边界，`packages/*` 不能导入 `apps/*`，`packages/ui` 不能导入 `packages/canvas`。
 - **新增依赖**精确锁定：`@xyflow/react` 12.12.0、`zustand` 5.0.16（画布包自用；xyflow 内部另带 zustand 4，打包后多一份约 3 KB）。id 用 `crypto.randomUUID()`，快捷键自写，不引入热键库。dagre 留到"按依赖分层"再评估。
 

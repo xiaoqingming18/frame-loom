@@ -9,18 +9,27 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { CanvasEditorProps, CanvasHost } from '@frame-loom/canvas';
-import { ModelProfile, emptyCanvasDocument } from '@frame-loom/contracts';
+import type { CanvasEditorProps, CanvasHost, CanvasStore } from '@frame-loom/canvas';
+import {
+  ModelProfile,
+  ProjectTag,
+  ProjectTagUsage,
+  emptyCanvasDocument,
+} from '@frame-loom/contracts';
 import { EngineRequestError, type EngineClient } from '@/lib/engine-client';
 import { commandWindow, onEngineExited } from '@/lib/desktop-bridge';
 import { ProjectCanvas } from './project-canvas';
 
-const captured = vi.hoisted(() => ({ host: null as CanvasHost | null }));
+const captured = vi.hoisted(() => ({
+  host: null as CanvasHost | null,
+  store: null as CanvasStore | null,
+}));
 
 vi.mock('@frame-loom/canvas', async (original) => ({
   ...(await original<typeof import('@frame-loom/canvas')>()),
   CanvasEditor: ({ store, host }: CanvasEditorProps) => {
     captured.host = host;
+    captured.store = store ?? null;
     return (
       <button
         onClick={() =>
@@ -67,6 +76,104 @@ function render(node: ReactNode) {
     </QueryClientProvider>,
   );
 }
+const projectId = '00000000-0000-4000-8000-000000000001';
+const pageId = '00000000-0000-4000-8000-000000000002';
+const otherPageId = '00000000-0000-4000-8000-000000000003';
+const oldTag = ProjectTag.parse({ id: 'old', name: '旧标签', color: 'blue', builtin: false });
+const newTag = ProjectTag.parse({ id: 'new', name: '新标签', color: 'green', builtin: false });
+const tagUsages = ProjectTagUsage.array().parse([
+  {
+    pageId,
+    pageName: '当前页',
+    nodeId: 'one',
+    nodeType: 'image',
+    title: '锁定图片',
+    locked: true,
+    thumbnailSha256: null,
+  },
+  {
+    pageId: otherPageId,
+    pageName: '其他页',
+    nodeId: 'two',
+    nodeType: 'video',
+    title: '视频',
+    locked: false,
+    thumbnailSha256: null,
+  },
+]);
+
+function setupTags() {
+  let tags = [oldTag, newTag];
+  let usages = [...tagUsages];
+  const save = vi.fn().mockResolvedValue({ revision: 2, missing: [] });
+  const remove = vi.fn().mockImplementation(() => {
+    tags = [newTag];
+    return Promise.resolve(tags);
+  });
+  const scan = vi.fn().mockImplementation(() => Promise.resolve(usages));
+  const request = vi
+    .fn<EngineClient['request']>()
+    .mockImplementation(async (path, schema, init) => {
+      let value: unknown;
+      if (path.endsWith('/sessions/open') || path.endsWith('/sessions/close'))
+        value = { saved: true };
+      else if (path.endsWith('/usages')) value = await scan();
+      else if (path.endsWith('/delete')) value = await remove(init?.body);
+      else if (path.endsWith('/tags')) {
+        if (init?.method === 'POST') tags = [...tags, { ...newTag, id: 'third', name: '新增' }];
+        value = tags;
+      } else if (path.endsWith('/tags/new')) {
+        tags = tags.map((tag) => (tag.id === 'new' ? { ...tag, name: '改名' } : tag));
+        value = tags;
+      } else if (path.endsWith(`/pages/${pageId}`)) {
+        value =
+          init?.method === 'PUT'
+            ? await save(init.body)
+            : {
+                ...record,
+                document: {
+                  ...emptyCanvasDocument(),
+                  nodes: [
+                    {
+                      id: 'one',
+                      type: 'image',
+                      typeVersion: 2,
+                      title: '锁定图片',
+                      locked: true,
+                      tagId: 'old',
+                      position: { x: 0, y: 0 },
+                      size: { width: 280, height: 180 },
+                      data: { versions: [], activeVersion: 0, prompt: '', inputOrder: [] },
+                    },
+                  ],
+                },
+              };
+      } else throw new Error('本测试不读取其他资源');
+      return schema.parse(value);
+    });
+  const view = render(
+    <ProjectCanvas
+      projectId={projectId}
+      pageId={pageId}
+      engineClient={{
+        request: (path, schema, init) =>
+          request(path, schema, init).then((value) => schema.parse(value)),
+        stream: vi.fn(),
+      }}
+    />,
+  );
+  return {
+    ...view,
+    save,
+    remove,
+    scan,
+    request,
+    setUsages(value: ProjectTagUsage[]) {
+      usages = value;
+    },
+  };
+}
+
 const record = {
   format: 'frame-loom-page',
   formatVersion: 1,
@@ -85,6 +192,7 @@ function setup(initialFailure?: Error) {
       if (path === '/projects/00000000-0000-4000-8000-000000000001')
         return Promise.reject(new Error('不读取面包屑'));
       if (failure) return Promise.reject(failure);
+      if (path.endsWith('/tags')) return Promise.resolve(schema.parse([]));
       if (path === '/channels') return Promise.resolve(schema.parse([]));
       if (path === '/channel-models') return Promise.resolve(schema.parse([]));
       if (path === '/model-defaults')
@@ -114,6 +222,122 @@ function setup(initialFailure?: Error) {
     },
   };
 }
+
+it('标签增改通过宿主请求并同步查询与画布列表', async () => {
+  setupTags();
+  await screen.findByRole('button', { name: '编辑画布' });
+  await act(async () => {
+    await captured.host!.tags!.create({ name: '新增', color: 'green' });
+  });
+  await waitFor(() =>
+    expect(captured.store!.getState().tags?.map((tag) => tag.name)).toContain('新增'),
+  );
+  await act(async () => {
+    await captured.host!.tags!.update('new', { name: '改名' });
+  });
+  await waitFor(() =>
+    expect(captured.store!.getState().tags?.find((tag) => tag.id === 'new')?.name).toBe('改名'),
+  );
+});
+
+it('删除先保存，当前页锁定节点一次改派可撤销，其他页交由 engine', async () => {
+  const test = setupTags();
+  await screen.findByRole('button', { name: '编辑画布' });
+  act(() => {
+    captured
+      .store!.getState()
+      .apply((doc) => ({ ...doc, nodes: doc.nodes.map((node) => ({ ...node, title: '编辑后' })) }));
+  });
+  let result!: Promise<ProjectTag[] | null>;
+  act(() => {
+    result = captured.host!.tags!.remove(oldTag);
+  });
+  await screen.findByRole('dialog');
+  expect(test.save).toHaveBeenCalledOnce();
+  expect(test.save.mock.invocationCallOrder[0]).toBeLessThan(test.scan.mock.invocationCallOrder[0]);
+  const history = captured.store!.getState().past.length;
+  fireEvent.change(screen.getByRole('combobox', { name: '全部改为' }), {
+    target: { value: 'new' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '删除标签' }));
+  await act(async () => {
+    expect(await result).toEqual([newTag]);
+  });
+  expect(test.save).toHaveBeenCalledTimes(2);
+  expect(test.save.mock.invocationCallOrder[1]).toBeLessThan(
+    test.remove.mock.invocationCallOrder[0],
+  );
+  expect(test.remove).toHaveBeenCalledWith({
+    reassign: [{ pageId: otherPageId, nodeId: 'two', tagId: 'new' }],
+  });
+  expect(captured.store!.getState().document.nodes[0]).toMatchObject({
+    tagId: 'new',
+    locked: true,
+  });
+  expect(captured.store!.getState().past).toHaveLength(history + 1);
+  act(() => captured.store!.getState().undo());
+  expect(captured.store!.getState().document.nodes[0].tagId).toBe('old');
+});
+
+it('删除遇到 409 后重新扫描并重置选择，取消不再提交', async () => {
+  const test = setupTags();
+  test.remove.mockRejectedValueOnce(new EngineRequestError(409, 'TAG_IN_USE', '仍有引用'));
+  await screen.findByRole('button', { name: '编辑画布' });
+  let result!: Promise<ProjectTag[] | null>;
+  act(() => {
+    result = captured.host!.tags!.remove(oldTag);
+  });
+  await screen.findByRole('dialog');
+  test.setUsages([{ ...tagUsages[1], nodeId: 'three', title: '新增引用' }]);
+  fireEvent.change(screen.getByRole('combobox', { name: '全部改为' }), {
+    target: { value: '__none' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '删除标签' }));
+  await screen.findByRole('combobox', { name: '新增引用的改派标签' });
+  expect(test.scan).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('alert').textContent).toContain('引用已变化');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '删除标签' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  await act(async () => {
+    expect(await result).toBeNull();
+  });
+  expect(test.remove).toHaveBeenCalledOnce();
+});
+
+it('保存失败中止删除，既不扫描引用也不提交', async () => {
+  const test = setupTags();
+  await screen.findByRole('button', { name: '编辑画布' });
+  test.save.mockRejectedValueOnce(new Error('磁盘写入失败'));
+  fireEvent.click(screen.getByRole('button', { name: '编辑画布' }));
+  await act(async () => {
+    expect(await captured.host!.tags!.remove(oldTag)).toBeNull();
+  });
+  expect(screen.getByRole('alert').textContent).toContain('磁盘写入失败');
+  expect(test.scan).not.toHaveBeenCalled();
+  expect(test.remove).not.toHaveBeenCalled();
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('当前页改派后保存失败保留本地修改，但不发送删除请求', async () => {
+  const test = setupTags();
+  await screen.findByRole('button', { name: '编辑画布' });
+  let result!: Promise<ProjectTag[] | null>;
+  act(() => {
+    result = captured.host!.tags!.remove(oldTag);
+  });
+  await screen.findByRole('dialog');
+  test.save.mockRejectedValueOnce(new Error('改派保存失败'));
+  fireEvent.change(screen.getByRole('combobox', { name: '全部改为' }), {
+    target: { value: '__none' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '删除标签' }));
+  await act(async () => {
+    expect(await result).toBeNull();
+  });
+  expect(captured.store!.getState().document.nodes[0]).not.toHaveProperty('tagId');
+  expect(test.remove).not.toHaveBeenCalled();
+  expect(screen.getByRole('alert').textContent).toContain('改派保存失败');
+});
 
 it('宿主使用服务端有效档案而不按别名推断，单张重试调用 resubmit', async () => {
   const base = ModelProfile.parse({
@@ -188,6 +412,7 @@ it('宿主使用服务端有效档案而不按别名推断，单张重试调用 
       '/model-defaults': { chat: null, image: null, video: null, tts: null },
       '/model-profiles': profiles,
       '/object-storage': null,
+      '/projects/00000000-0000-4000-8000-000000000001/tags': [],
       '/projects/00000000-0000-4000-8000-000000000001/pages/00000000-0000-4000-8000-000000000002':
         null,
       '/projects/00000000-0000-4000-8000-000000000001/sessions/open': { saved: true },

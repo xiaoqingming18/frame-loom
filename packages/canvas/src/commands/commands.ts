@@ -5,7 +5,7 @@ import type {
   CanvasNode,
   CanvasMediaData,
 } from '@frame-loom/contracts';
-import { CANVAS_LIMITS } from '@frame-loom/contracts';
+import { CANVAS_LIMITS, TAGGABLE_NODE_TYPES } from '@frame-loom/contracts';
 import { checkConnection, invalidEdges, type ConnectionAttempt } from '../registry/connections';
 import type { NodeRegistry } from '../registry/registry';
 
@@ -29,6 +29,33 @@ export function absoluteRect(document: CanvasDocument, node: CanvasNode): Rect {
 
 export function isNodeLocked(document: CanvasDocument, node: CanvasNode): boolean {
   return !!(node.locked || document.nodes.find((item) => item.id === node.parentId)?.locked);
+}
+
+export function isTaggable(node: CanvasNode): boolean {
+  return TAGGABLE_NODE_TYPES.some((type) => type === node.type);
+}
+
+export function setTag(
+  document: CanvasDocument,
+  ids: ReadonlySet<string>,
+  tagId: string | null,
+): CanvasDocument {
+  let changed = false;
+  const nodes = document.nodes.map((node) => {
+    if (
+      !ids.has(node.id) ||
+      !isTaggable(node) ||
+      isNodeLocked(document, node) ||
+      (node.tagId ?? null) === tagId
+    )
+      return node;
+    changed = true;
+    const next = { ...node };
+    if (tagId === null) delete next.tagId;
+    else next.tagId = tagId;
+    return next;
+  });
+  return changed ? { ...document, nodes } : document;
 }
 
 export function boundsOf(rects: Rect[]): Rect | null {

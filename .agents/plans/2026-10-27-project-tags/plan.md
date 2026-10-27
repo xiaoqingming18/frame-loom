@@ -35,8 +35,8 @@ Note: ../../notes/proposed/feature/2026-10-27-project-tags.md
 | --- | --- | --- | --- | --- |
 | 01 | [标签契约](01-contracts.md) | done | — | 标签 schema、内置列表、`tagId` 字段与校验、单测 |
 | 02 | [engine 标签接口](02-engine.md) | done | 01 | 标签增删改查、引用扫描、带改派的删除、集成测试 |
-| 03 | [画布标签交互](03-canvas.md) | draft | 01 | host 接口、store、`setTag` 命令、`NodeHeader` 徽标、标签卡片、剪贴板／导入匹配 |
-| 04 | [宿主与删除弹窗](04-desktop.md) | draft | 02、03 | 主题 token、`host.tags` 注入、加载清理、删除引用弹窗 |
+| 03 | [画布标签交互](03-canvas.md) | done | 01 | host 接口、store、`setTag` 命令、`NodeHeader` 徽标、标签卡片、剪贴板／导入匹配 |
+| 04 | [宿主与删除弹窗](04-desktop.md) | done | 02、03 | 主题 token、`host.tags` 注入、加载清理、删除引用弹窗 |
 | 05 | [验收与收尾](05-acceptance.md) | draft | 04 | e2e、明暗与小窗口人工检查、笔记转 implemented、计划 done |
 
 ## 依赖与顺序
@@ -46,15 +46,16 @@ Note: ../../notes/proposed/feature/2026-10-27-project-tags.md
 
 ## 验收
 
-- [ ] contracts、engine、canvas、desktop 单测与组件测试通过，`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 通过 — 证据：各子计划验证
+- [x] contracts、engine、canvas、desktop 单测与组件测试通过，`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check` 通过 — 证据：2026-10-27 全仓 736 项测试通过，各子计划验证
 - [ ] e2e 覆盖两页同标签、删除时全部改派、重启后徽标正确 — 证据：05 验证
 - [ ] 明暗、720×560、键盘路径人工检查通过 — 证据：05 验证
 - [ ] 笔记转入 `implemented/`，相关笔记同步，计划转 `done`，`pnpm run verify` 通过 — 证据：05 收尾
 
 ## 发现与偏差
 
-- 01、02 已完成；03–05 尚未执行。
+- 01–04 已完成；05 尚未执行。03、04 的代码与自动验证已通过，实际明暗、720×560、Electron 键盘／焦点与两页改派重启验收仍留给 05。标签笔记暂保留 proposed，05 完成后再转 implemented。
 
 ## 进度
 
 - 2026-10-27：完成 01 标签契约与 02 engine 标签接口；contracts 191 项、engine 228 项测试通过，typecheck、lint、格式检查和 `pnpm run verify` 通过。
+- 2026-10-27：续完 03、04，保留现有实现并补齐交互、标签未加载保护、宿主删除与加载清理回归；全仓 `pnpm test` 736 项（contracts 191、engine 228、canvas 128、desktop 189）、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm run verify` 与 `git diff --check` 均通过。相关活跃笔记已同步事实，修改未提交；下一步执行 05 的 Electron e2e、实际视觉与键盘验收，再完成总笔记生命周期收尾。

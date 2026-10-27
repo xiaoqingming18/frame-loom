@@ -12,6 +12,8 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 
 - 项目存储阶段新增 `projects.ts`：项目清单／页面文件保留未知顶层字段，版本上限为 1，名称与资产路径规则共用；`desktop.ts` 增加偏好（沿用 `theme`）和目录／项目 IPC 参数，`GenerationRequest` 增加可选项目与页面 id。新契约及现有请求兼容测试通过；资产、IPC 与项目画布已按[项目库方案](../../implemented/feature/2026-10-26-project-library.md)接入。
 
+- 项目标签使用 `ProjectTag`、`TagColor`、`TagId`、`TagName` 与增改删／引用 schema；`projectTags(manifest)` 统一解释缺省内置列表与显式空列表。`CanvasNode.tagId` 可选，仅 `TAGGABLE_NODE_TYPES` 中的图片、视频节点可携带，画布命令与文档校验共用该常量，不另设注册表白名单；不升级格式版本。规则与验收见[项目标签](../../proposed/feature/2026-10-27-project-tags.md)。
+
 - `packages/contracts` 发布为私有 ESM workspace 包 `@frame-loom/contracts`，由 tsc 输出 `dist/index.js` 与 `.d.ts`；入口 `exports` 只有 `types`、`default`，分发文件只含 `dist`。相对导出写 `.js` 后缀。
 - `image-params.ts` 与 `image-references.ts` 提供图片语义参数常量／标签、尺寸换算、模型切换回退和提示词引用解析／替换纯函数；`ModelProfile.params[].notes` 是可选的取值说明，不参与生成请求校验。这些跨 engine 与画布的无 IO 规则仍由 contracts 持有，避免两端维护不同的尺寸或编号算法；完整交互与适配器改造见[画布图片节点](../feature/2026-10-26-canvas-image-node.md)。
 - 用 zod 定义同名的 schema 值和推导类型 `HealthResponse`、`EngineConnection`、`ErrorResponse`、`ThemeSource`、`WindowCommand`、`EngineEvent`。调用方使用 `parse` 检查外部数据，类型直接从 schema 推导。

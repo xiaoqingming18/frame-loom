@@ -6,6 +6,7 @@ import {
   type CanvasDocument,
   type CanvasEdgeDisplay,
   type CanvasView,
+  type ProjectTag,
   type GenerationJob,
 } from '@frame-loom/contracts';
 import type { CanvasGenerationConfig } from '../host';
@@ -43,6 +44,7 @@ export interface CanvasState {
   spaceHeld: boolean;
   view: CanvasView;
   notice: { id: number; text: string } | null;
+  tags: ProjectTag[] | null;
   generationConfig: CanvasGenerationConfig | null;
   generationJobs: ReadonlyMap<string, GenerationJob>;
   generationSubmitting: ReadonlySet<string>;
@@ -71,6 +73,7 @@ export interface CanvasActions {
   setView(patch: Partial<CanvasView>): void;
   setEdgeDisplay(display: CanvasEdgeDisplay): void;
   notify(text: string): void;
+  setTags(tags: ProjectTag[] | null): void;
   setGenerationConfig(config: CanvasGenerationConfig): void;
   setGenerationJob(job: GenerationJob): void;
   setGenerationSubmitting(nodeId: string, submitting: boolean): void;
@@ -98,6 +101,7 @@ export function createCanvasStore(
     spaceHeld: false,
     view: view ?? DEFAULT_VIEW,
     notice: null,
+    tags: null,
     generationConfig: null,
     generationJobs: new Map(),
     generationSubmitting: new Set(),
@@ -190,6 +194,9 @@ export function createCanvasStore(
     },
     notify(text) {
       set({ notice: { id: ++noticeId, text } });
+    },
+    setTags(tags) {
+      set({ tags });
     },
     setGenerationConfig(config) {
       set({ generationConfig: config });

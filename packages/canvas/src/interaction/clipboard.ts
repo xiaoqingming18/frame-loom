@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CanvasDocument, CanvasEdge, CanvasNode } from '@frame-loom/contracts';
+import { CanvasDocument, CanvasEdge, CanvasNode, type ProjectTag } from '@frame-loom/contracts';
 import {
   absolutePosition,
   boundsOf,
@@ -10,6 +10,8 @@ import {
 import { checkConnection } from '../registry/connections';
 import type { NodeRegistry } from '../registry/registry';
 
+import { SourceTags, usedTags } from './tags';
+
 export const CLIPBOARD_MIME = 'application/x-frame-loom-canvas';
 export const CLIPBOARD_PREFIX = 'frame-loom-canvas/v1:';
 export const CLIPBOARD_MAX_BYTES = 4 * 1024 * 1024;
@@ -17,6 +19,7 @@ export const CLIPBOARD_MAX_BYTES = 4 * 1024 * 1024;
 const Payload = z.strictObject({
   nodes: z.array(CanvasNode).min(1).max(500),
   edges: z.array(CanvasEdge).max(1000),
+  tags: SourceTags.optional(),
 });
 export type ClipboardPayload = z.infer<typeof Payload>;
 
@@ -24,6 +27,7 @@ export type ClipboardPayload = z.infer<typeof Payload>;
 export function copySelection(
   document: CanvasDocument,
   ids: ReadonlySet<string>,
+  tags: ProjectTag[] | null = null,
 ): ClipboardPayload | null {
   const picked = new Set(
     document.nodes
@@ -40,7 +44,7 @@ export function copySelection(
       return copy;
     });
   const edges = document.edges.filter((edge) => picked.has(edge.source) && picked.has(edge.target));
-  return { nodes, edges };
+  return { nodes, edges, tags: usedTags(nodes, tags) };
 }
 
 export function serialize(payload: ClipboardPayload): string {
@@ -93,7 +97,7 @@ export function deserialize(text: string, registry?: NodeRegistry): ClipboardPay
         accepted.push(edge);
       }
     }
-    return payload;
+    return { ...payload, tags: parsed.data.tags };
   } catch {
     return null;
   }

@@ -36,7 +36,7 @@ Status: proposed
 - `CanvasNode` 是 `strictObject`。旧版本应用读到带新字段的文档会拒绝打开；应用尚未发布，用户已接受这一点。
 - 当前页由 desktop 宿主的 `createCanvasPersistence` 持有 revision 与保存队列，其他页没有打开的编辑器。应用是单窗口单实例。
 - UI 规范禁止任意值颜色，新颜色要在 `theme.css` 中同时定义明暗值（[UI 规范](../../../../docs/ui-guidelines.md)）。
-- 剪贴板载荷与导出 JSON 只包含节点、连线和文档，不包含项目信息。
+- 剪贴板载荷与导出 JSON 仍不包含项目信息；标签实现增加可选的 id／名称旁表，供目标项目匹配。
 
 ## Proposal
 
@@ -105,7 +105,7 @@ ProjectManifest.tags?: ProjectTag[]                      // 最多 50，id 与�
   ```
 
   没有注入 `tags` 时，菜单项和徽标都不出现。
-- store 增加 `tags: ProjectTag[] | null`。编辑器挂载时加载，每次宿主操作后用返回的列表替换。
+- store 增加 `tags: ProjectTag[] | null`。编辑器挂载时加载，每次宿主操作后用返回的列表替换。注入标签能力但列表尚未加载时阻止粘贴和导入并提示，避免用空列表匹配而静默丢失标签；加载失败后也保持这一保护。
 - 命令 `setTag(document, nodeIds, tagId | null)`：
   - 只作用于可打标签、未锁定（含所在分组未锁定）的节点。
   - 一次 `apply` 完成，可撤销。
@@ -156,6 +156,14 @@ ProjectManifest.tags?: ProjectTag[]                      // 最多 50，id 与�
 
 - 页面文件中节点的 `tagId` 只能引用本项目清单中的标签；悬空引用一律视为「无标签」。
 - engine 只在删除接口中、按 `reassign` 改写未打开的页面。当前打开的页面只经画布 store 修改，避免与打开中的编辑器产生 revision 冲突。
+
+## 实施现状
+
+契约、engine 接口、画布交互与 desktop 宿主均已落地。画布标签卡片复用 Popover，删除引用弹窗复用 Dialog 与 NativeSelect；加载清理不产生脏状态。宿主测试覆盖增改同步、保存先于扫描、当前页锁定节点改派且可撤销、只向 engine 提交其他页、409 刷新与重新选择，以及两次保存失败均不发送删除。画布组件测试覆盖 Popover 交给宿主 Dialog 的焦点，不能替代原生桌面检查。
+
+明暗 10 色徽标 token 的文字对比度均由主题单测检查，阈值为 4.5:1；明亮黄色前景调整为 `#854d0e`，避免原值对浅底仅 4.42:1。全仓 `pnpm test` 736 项通过（contracts 191、engine 228、canvas 128、desktop 189），`pnpm typecheck`、`pnpm lint` 通过。
+
+本篇仍为 proposed，等待 Electron 两页删除／改派／重启 e2e、明暗及 720×560 实际截图、键盘与焦点路径验收后再转 implemented；当前没有将这些检查写成已通过。旧版本格式兼容风险与下文保持一致。
 
 ## Alternatives considered
 

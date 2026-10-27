@@ -1,12 +1,59 @@
+import { z } from 'zod';
 import { queryOptions } from '@tanstack/react-query';
 import {
   ProjectList,
   ProjectManifest,
+  ProjectTag,
+  ProjectTagCreateRequest,
+  ProjectTagDeleteRequest,
+  ProjectTagUpdateRequest,
+  ProjectTagUsage,
+  type ProjectTagDeleteRequest as ProjectTagDeleteRequestType,
   type ProjectSort,
   type ProjectSummary,
 } from '@frame-loom/contracts';
 import { getPreferences } from './desktop-bridge';
 import type { EngineClient } from './engine-client';
+
+export const projectTagsQuery = (client: EngineClient, id: string) =>
+  queryOptions({
+    queryKey: ['projects', id, 'tags'],
+    queryFn: ({ signal }) =>
+      client.request(`/projects/${id}/tags`, z.array(ProjectTag), { signal }),
+  });
+export const projectTagUsagesQuery = (client: EngineClient, projectId: string, tagId: string) =>
+  queryOptions({
+    queryKey: ['projects', projectId, 'tags', tagId, 'usages'],
+    queryFn: ({ signal }) =>
+      client.request(`/projects/${projectId}/tags/${tagId}/usages`, ProjectTagUsage.array(), {
+        signal,
+      }),
+  });
+export const createProjectTag = (client: EngineClient, projectId: string, input: unknown) =>
+  client.request(`/projects/${projectId}/tags`, z.array(ProjectTag), {
+    method: 'POST',
+    body: ProjectTagCreateRequest.parse(input),
+  });
+export const updateProjectTag = (
+  client: EngineClient,
+  projectId: string,
+  tagId: string,
+  patch: unknown,
+) =>
+  client.request(`/projects/${projectId}/tags/${tagId}`, z.array(ProjectTag), {
+    method: 'PATCH',
+    body: ProjectTagUpdateRequest.parse(patch),
+  });
+export const deleteProjectTag = (
+  client: EngineClient,
+  projectId: string,
+  tagId: string,
+  reassign: ProjectTagDeleteRequestType['reassign'],
+) =>
+  client.request(`/projects/${projectId}/tags/${tagId}/delete`, z.array(ProjectTag), {
+    method: 'POST',
+    body: ProjectTagDeleteRequest.parse({ reassign }),
+  });
 
 export const preferencesQuery = () =>
   queryOptions({ queryKey: ['preferences'], queryFn: getPreferences });

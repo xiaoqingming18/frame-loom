@@ -76,3 +76,14 @@ describe('canvas store 历史', () => {
     expect(store.getState().past).toEqual([]);
   });
 });
+
+it('标签列表独立于文档与历史，空列表和未加载状态可区分', () => {
+  const store = createCanvasStore(doc([media('a')]));
+  const document = store.getState().document;
+  expect(store.getState().tags).toBeNull();
+  store.getState().setTags([{ id: 'tag', name: '标签', color: 'blue', builtin: false }]);
+  store.getState().setTags([]);
+  expect(store.getState().tags).toEqual([]);
+  expect(store.getState().document).toBe(document);
+  expect(store.getState().past).toEqual([]);
+});

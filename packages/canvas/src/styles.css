@@ -2,6 +2,54 @@
 @import '@xyflow/react/dist/base.css' layer(base);
 
 @layer components {
+  .canvas-tag-red {
+    --canvas-tag: var(--tag-red);
+    --canvas-tag-bg: var(--tag-red-bg);
+  }
+  .canvas-tag-orange {
+    --canvas-tag: var(--tag-orange);
+    --canvas-tag-bg: var(--tag-orange-bg);
+  }
+  .canvas-tag-yellow {
+    --canvas-tag: var(--tag-yellow);
+    --canvas-tag-bg: var(--tag-yellow-bg);
+  }
+  .canvas-tag-green {
+    --canvas-tag: var(--tag-green);
+    --canvas-tag-bg: var(--tag-green-bg);
+  }
+  .canvas-tag-cyan {
+    --canvas-tag: var(--tag-cyan);
+    --canvas-tag-bg: var(--tag-cyan-bg);
+  }
+  .canvas-tag-blue {
+    --canvas-tag: var(--tag-blue);
+    --canvas-tag-bg: var(--tag-blue-bg);
+  }
+  .canvas-tag-indigo {
+    --canvas-tag: var(--tag-indigo);
+    --canvas-tag-bg: var(--tag-indigo-bg);
+  }
+  .canvas-tag-purple {
+    --canvas-tag: var(--tag-purple);
+    --canvas-tag-bg: var(--tag-purple-bg);
+  }
+  .canvas-tag-pink {
+    --canvas-tag: var(--tag-pink);
+    --canvas-tag-bg: var(--tag-pink-bg);
+  }
+  .canvas-tag-gray {
+    --canvas-tag: var(--tag-gray);
+    --canvas-tag-bg: var(--tag-gray-bg);
+  }
+  .canvas-tag-dot {
+    background: var(--canvas-tag);
+  }
+  .canvas-tag-badge {
+    color: var(--canvas-tag);
+    background: var(--canvas-tag-bg);
+  }
+
   .canvas-prompt-editor:empty::before {
     color: var(--muted-foreground);
     content: attr(data-placeholder);

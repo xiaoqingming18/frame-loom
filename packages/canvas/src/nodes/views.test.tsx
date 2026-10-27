@@ -6,7 +6,7 @@ import { CanvasContext, NodeActionsContext, useCanvasState } from '../context';
 import { createCanvasStore } from '../store/store';
 import { doc, edge, media, sha, generationJob } from '../test-utils';
 import { createBuiltinRegistry } from './builtin';
-import { ImageNodeView, VideoNodeView } from './views';
+import { ImageNodeView, VideoNodeView, NodeHeader } from './views';
 
 const zoom = vi.hoisted(() => ({ value: 1 }));
 
@@ -231,4 +231,30 @@ it('模式切换保留首尾帧连线和提示词，文生模式保留端口但�
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'first_frame' }).disabled).toBe(
     true,
   );
+});
+
+it('公共头部显示标签并先截断标题；悬空 id 和未注入宿主时隐藏徽标', () => {
+  const node = media('a', 'image', { tagId: 'tag', title: '很长的节点标题' });
+  const store = createCanvasStore(doc([node]));
+  store.getState().setTags([{ id: 'tag', name: '场景', color: 'orange', builtin: false }]);
+  const api = { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() };
+  const view = (tags = true, current = node) => (
+    <CanvasContext.Provider
+      value={{
+        store,
+        registry: createBuiltinRegistry(),
+        host: { media: { upload: vi.fn(), url: (hash) => hash }, ...(tags ? { tags: api } : {}) },
+      }}
+    >
+      <NodeHeader node={current} icon={null} />
+    </CanvasContext.Provider>
+  );
+  const { rerender } = render(view());
+  expect(screen.getByText('场景').className).toContain('canvas-tag-orange');
+  expect(screen.getByText('很长的节点标题').className).toContain('truncate');
+  expect(screen.getByText('场景').className).toContain('shrink-0');
+  rerender(view(true, { ...node, tagId: 'missing' }));
+  expect(screen.queryByText('场景')).toBeNull();
+  rerender(view(false));
+  expect(screen.queryByText('场景')).toBeNull();
 });

@@ -45,6 +45,8 @@ import {
   CanvasCommandError,
   connect,
   moveNodes,
+  isNodeLocked,
+  isTaggable,
   reconnect,
   reparentAfterDrag,
   updateNode,
@@ -68,6 +70,7 @@ import {
   Notice,
   TopRightBar,
 } from './chrome';
+import { TagPopover } from './tag-popover';
 import { PointMenu } from './point-menu';
 import { UploadNode } from './upload-node';
 import { useCanvasActions, ZOOM_LIMITS, type PendingConnection } from './use-actions';
@@ -121,6 +124,23 @@ export function CanvasEditor({
   );
   const store = externalStore ?? ownStore;
   const value = useMemo(() => ({ store, registry, host }), [store, registry, host]);
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!host.tags) {
+      store.getState().setTags(null);
+      return;
+    }
+    void host.tags
+      .list(controller.signal)
+      .then((tags) => {
+        if (!controller.signal.aborted) store.getState().setTags(tags);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted)
+          store.getState().notify(error instanceof Error ? error.message : '加载标签失败');
+      });
+    return () => controller.abort();
+  }, [host.tags, store]);
   return (
     <CanvasContext.Provider value={value}>
       <GenerationRuntime />
@@ -157,6 +177,7 @@ function Editor({ className }: { className?: string }) {
   const reconnecting = useRef<string | undefined>(undefined);
   const [connectingNode, setConnectingNode] = useState<string | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  const [tagAt, setTagAt] = useState<Point | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -741,6 +762,21 @@ function Editor({ className }: { className?: string }) {
             <DropdownMenuItem disabled={selectedCount !== 1} onSelect={() => actions.rename()}>
               重命名<DropdownMenuShortcut>F2</DropdownMenuShortcut>
             </DropdownMenuItem>
+            {host.tags && (
+              <DropdownMenuItem
+                disabled={
+                  !document.nodes.some(
+                    (node) =>
+                      selectedNodes.has(node.id) &&
+                      isTaggable(node) &&
+                      !isNodeLocked(document, node),
+                  )
+                }
+                onSelect={() => setTagAt(menu.screen)}
+              >
+                标签
+              </DropdownMenuItem>
+            )}
             {host.assets &&
               selectedCount === 1 &&
               document.nodes.some(
@@ -791,6 +827,7 @@ function Editor({ className }: { className?: string }) {
           </>
         )}
       </PointMenu>
+      {tagAt && host.tags && <TagPopover at={tagAt} onClose={() => setTagAt(null)} />}
     </div>
   );
   return (
