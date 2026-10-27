@@ -7,12 +7,15 @@ import { ProjectFilesService } from './project-files.service.js';
 import { ProjectMediaService } from './project-media.service.js';
 import { ProjectAssetsService } from './project-assets.service.js';
 import { ProjectContentController } from './project-content.controller.js';
+import { ProjectTagsController } from './project-tags.controller.js';
+import { ProjectTagsService } from './project-tags.service.js';
 import { MediaService } from '../generation/media.service.js';
 
 @Module({
-  controllers: [ProjectsController, ProjectContentController],
+  controllers: [ProjectsController, ProjectContentController, ProjectTagsController],
   providers: [
     ProjectsService,
+    ProjectTagsService,
     ProjectFilesService,
     MediaService,
     ProjectMediaService,

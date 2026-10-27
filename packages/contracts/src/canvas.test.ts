@@ -121,6 +121,17 @@ describe('CanvasDocument', () => {
     expect(CanvasDocument.safeParse(value).success).toBe(false);
   });
 
+  it('仅图片和视频节点可携带标签', () => {
+    const tagged = node('a', 'image', { tagId: 'builtin-final' });
+    expect(CanvasDocument.safeParse(doc([tagged])).success).toBe(true);
+    expect(
+      CanvasDocument.safeParse(doc([node('g', 'group', { tagId: 'builtin-final' })])).success,
+    ).toBe(false);
+    expect(
+      CanvasDocument.safeParse(doc([node('x', 'plugin:note', { tagId: 'builtin-final' })])).success,
+    ).toBe(false);
+  });
+
   it('限制节点数量', () => {
     const nodes = Array.from({ length: CANVAS_LIMITS.nodes + 1 }, (_, i) => node(`n${i}`, 'x'));
     expect(CanvasDocument.safeParse(doc(nodes)).success).toBe(false);

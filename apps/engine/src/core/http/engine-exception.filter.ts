@@ -27,7 +27,11 @@ export class EngineExceptionFilter implements ExceptionFilter {
     let body: ErrorResponse = { code: 'INTERNAL', message: '本地服务内部错误' };
     if (error instanceof DomainError) {
       status = error.status;
-      body = { code: error.code, message: error.message };
+      body = {
+        code: error.code,
+        message: error.message,
+        ...(error.details === undefined ? {} : { details: error.details }),
+      };
     } else if (error instanceof ZodError) {
       status = 400;
       body = {

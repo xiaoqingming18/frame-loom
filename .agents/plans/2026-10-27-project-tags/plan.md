@@ -1,6 +1,6 @@
 # Plan: 项目标签
 
-Status: draft
+Status: active
 Note: ../../notes/proposed/feature/2026-10-27-project-tags.md
 
 ## 目标
@@ -33,8 +33,8 @@ Note: ../../notes/proposed/feature/2026-10-27-project-tags.md
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [标签契约](01-contracts.md) | draft | — | 标签 schema、内置列表、`tagId` 字段与校验、单测 |
-| 02 | [engine 标签接口](02-engine.md) | draft | 01 | 标签增删改查、引用扫描、带改派的删除、集成测试 |
+| 01 | [标签契约](01-contracts.md) | done | — | 标签 schema、内置列表、`tagId` 字段与校验、单测 |
+| 02 | [engine 标签接口](02-engine.md) | done | 01 | 标签增删改查、引用扫描、带改派的删除、集成测试 |
 | 03 | [画布标签交互](03-canvas.md) | draft | 01 | host 接口、store、`setTag` 命令、`NodeHeader` 徽标、标签卡片、剪贴板／导入匹配 |
 | 04 | [宿主与删除弹窗](04-desktop.md) | draft | 02、03 | 主题 token、`host.tags` 注入、加载清理、删除引用弹窗 |
 | 05 | [验收与收尾](05-acceptance.md) | draft | 04 | e2e、明暗与小窗口人工检查、笔记转 implemented、计划 done |
@@ -53,4 +53,8 @@ Note: ../../notes/proposed/feature/2026-10-27-project-tags.md
 
 ## 发现与偏差
 
-无。
+- 01、02 已完成；03–05 尚未执行。
+
+## 进度
+
+- 2026-10-27：完成 01 标签契约与 02 engine 标签接口；contracts 191 项、engine 228 项测试通过，typecheck、lint、格式检查和 `pnpm run verify` 通过。

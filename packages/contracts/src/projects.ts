@@ -4,6 +4,45 @@ import { Sha256 } from './generation.js';
 
 export const ProjectId = z.string().uuid();
 export const ProjectPageId = z.string().uuid();
+export const TagColor = z.enum([
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'cyan',
+  'blue',
+  'indigo',
+  'purple',
+  'pink',
+  'gray',
+]);
+export type TagColor = z.infer<typeof TagColor>;
+export const TagId = z.string().regex(/^[a-z0-9-]{1,64}$/);
+export type TagId = z.infer<typeof TagId>;
+export const TagName = z
+  .string()
+  .trim()
+  .refine((name) => [...name].length >= 1 && [...name].length <= 10, '标签名须为 1–10 个字符');
+export type TagName = z.infer<typeof TagName>;
+export const ProjectTag = z.strictObject({
+  id: TagId,
+  name: TagName,
+  color: TagColor,
+  builtin: z.boolean(),
+});
+export type ProjectTag = z.infer<typeof ProjectTag>;
+export const BUILTIN_TAGS: ProjectTag[] = [
+  { id: 'builtin-prop', name: '道具', color: 'blue', builtin: true },
+  { id: 'builtin-voice', name: '音色', color: 'purple', builtin: true },
+  { id: 'builtin-scene', name: '场景', color: 'orange', builtin: true },
+  { id: 'builtin-costume', name: '服装', color: 'indigo', builtin: true },
+  { id: 'builtin-character', name: '人物', color: 'pink', builtin: true },
+  { id: 'builtin-final', name: '最终版', color: 'green', builtin: true },
+  { id: 'builtin-pending', name: '待定版', color: 'yellow', builtin: true },
+];
+export function projectTags(manifest: { tags?: ProjectTag[] }): ProjectTag[] {
+  return manifest.tags ?? BUILTIN_TAGS;
+}
 
 export function validateEntryName(name: string): string | null {
   if (!name.trim() || [...name].length > 80) return '名称须为 1–80 个字符';
@@ -54,6 +93,7 @@ export const ProjectManifest = z
     createdAt: Timestamp,
     updatedAt: Timestamp,
     pages: z.array(ProjectPageSummary),
+    tags: z.array(ProjectTag).max(50).optional(),
   })
   .passthrough()
   .superRefine((manifest, ctx) => {
@@ -65,6 +105,15 @@ export const ProjectManifest = z
         ctx.addIssue({ code: 'custom', message: '创作页 id 或名称重复' });
       ids.add(page.id);
       names.add(name);
+    }
+    const tagIds = new Set<string>();
+    const tagNames = new Set<string>();
+    for (const tag of manifest.tags ?? []) {
+      const name = tag.name.toLowerCase();
+      if (tagIds.has(tag.id) || tagNames.has(name))
+        ctx.addIssue({ code: 'custom', message: '标签 id 或名称重复' });
+      tagIds.add(tag.id);
+      tagNames.add(name);
     }
   });
 export type ProjectManifest = z.infer<typeof ProjectManifest>;
@@ -127,6 +176,35 @@ export const ProjectPageViewRequest = CanvasView;
 export type ProjectPageViewRequest = z.infer<typeof ProjectPageViewRequest>;
 export const ProjectMutationResult = z.strictObject({ saved: z.literal(true) });
 export type ProjectMutationResult = z.infer<typeof ProjectMutationResult>;
+
+export const ProjectTagCreateRequest = z.strictObject({ name: TagName, color: TagColor });
+export type ProjectTagCreateRequest = z.infer<typeof ProjectTagCreateRequest>;
+export const ProjectTagUpdateRequest = z
+  .strictObject({ name: TagName.optional(), color: TagColor.optional() })
+  .refine((patch) => patch.name !== undefined || patch.color !== undefined, '至少修改一个字段');
+export type ProjectTagUpdateRequest = z.infer<typeof ProjectTagUpdateRequest>;
+export const ProjectTagUsage = z.strictObject({
+  pageId: ProjectPageId,
+  pageName: EntryName,
+  nodeId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  nodeType: z.string(),
+  title: z.string(),
+  locked: z.boolean(),
+  thumbnailSha256: Sha256.nullable(),
+});
+export type ProjectTagUsage = z.infer<typeof ProjectTagUsage>;
+export const ProjectTagDeleteRequest = z.strictObject({
+  reassign: z
+    .array(
+      z.strictObject({
+        pageId: ProjectPageId,
+        nodeId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+        tagId: TagId.nullable(),
+      }),
+    )
+    .max(2000),
+});
+export type ProjectTagDeleteRequest = z.infer<typeof ProjectTagDeleteRequest>;
 
 export const AssetEntry = z.strictObject({
   name: z.string().min(1),

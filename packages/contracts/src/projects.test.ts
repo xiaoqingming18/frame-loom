@@ -12,11 +12,62 @@ import {
   ProjectPageSaveResult,
   ProjectName,
   ProjectTrashRequest,
+  ProjectTag,
+  ProjectTagCreateRequest,
+  ProjectTagUpdateRequest,
+  ProjectTagDeleteRequest,
+  BUILTIN_TAGS,
+  projectTags,
   emptyCanvasDocument,
   validateEntryName,
 } from './index.js';
 
 const randomUUID = () => '123e4567-e89b-42d3-a456-426614174000';
+
+it('项目标签校验名称、颜色、唯一性、数量和请求边界', () => {
+  const tag = { id: 'custom-tag', name: ' 测试标签 ', color: 'cyan', builtin: false };
+  expect(ProjectTag.parse(tag).name).toBe('测试标签');
+  expect(ProjectTag.safeParse({ ...tag, name: '😀'.repeat(11) }).success).toBe(false);
+  expect(ProjectTagCreateRequest.safeParse({ name: 'x'.repeat(10), color: 'red' }).success).toBe(
+    true,
+  );
+  expect(ProjectTagCreateRequest.safeParse({ name: 'x'.repeat(11), color: 'red' }).success).toBe(
+    false,
+  );
+  expect(ProjectTagUpdateRequest.safeParse({}).success).toBe(false);
+  expect(
+    ProjectTagDeleteRequest.safeParse({
+      reassign: Array(2001).fill({ pageId: randomUUID(), nodeId: 'n', tagId: null }),
+    }).success,
+  ).toBe(false);
+  expect(BUILTIN_TAGS).toHaveLength(7);
+  const manifest = {
+    format: 'frame-loom-project',
+    formatVersion: 1,
+    id: randomUUID(),
+    name: '项目',
+    createdAt: '2026-10-27T00:00:00Z',
+    updatedAt: '2026-10-27T00:00:00Z',
+    pages: [],
+  };
+  expect(projectTags(ProjectManifest.parse(manifest))).toEqual(BUILTIN_TAGS);
+  expect(projectTags(ProjectManifest.parse({ ...manifest, tags: [] }))).toEqual([]);
+  expect(
+    ProjectManifest.safeParse({
+      ...manifest,
+      tags: [
+        { ...tag, name: 'Tag' },
+        { ...tag, id: 'different', name: 'tag' },
+      ],
+    }).success,
+  ).toBe(false);
+  expect(
+    ProjectManifest.safeParse({
+      ...manifest,
+      tags: Array.from({ length: 51 }, (_, i) => ({ ...tag, id: `tag-${i}`, name: `t${i}` })),
+    }).success,
+  ).toBe(false);
+});
 
 it('资产条目校验大小和类型，搜索必须明确是否截断，移动可指向根目录', () => {
   expect(ProjectPageSaveResult.parse({ revision: 2, missing: ['a'.repeat(64)] }).missing).toEqual([

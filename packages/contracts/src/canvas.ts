@@ -92,9 +92,14 @@ export const CanvasNode = z.strictObject({
   parentId: Id.optional(),
   title: z.string().max(200).optional(),
   locked: z.boolean().optional(),
+  tagId: z
+    .string()
+    .regex(/^[a-z0-9-]{1,64}$/)
+    .optional(),
   data: z.unknown(),
 });
 export type CanvasNode = z.infer<typeof CanvasNode>;
+export const TAGGABLE_NODE_TYPES = ['image', 'video'] as const;
 const HandleId = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
 export const CanvasEdge = z.strictObject({
   id: Id,
@@ -117,6 +122,15 @@ export const CanvasDocument = z
     const seen = new Map<string, CanvasNode>();
     document.nodes.forEach((node, index) => {
       const path = ['nodes', index];
+      if (
+        node.tagId !== undefined &&
+        !TAGGABLE_NODE_TYPES.includes(node.type as (typeof TAGGABLE_NODE_TYPES)[number])
+      )
+        context.addIssue({
+          code: 'custom',
+          path: [...path, 'tagId'],
+          message: '此节点类型不支持标签',
+        });
       if (seen.has(node.id)) context.addIssue({ code: 'custom', path, message: '节点 id 重复' });
       if (node.parentId) {
         const parent = seen.get(node.parentId);

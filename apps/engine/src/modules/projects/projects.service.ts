@@ -6,6 +6,7 @@ import { isAbsolute, join, normalize } from 'node:path';
 import {
   CanvasMediaData,
   CanvasView,
+  BUILTIN_TAGS,
   ProjectName,
   ProjectId,
   ProjectPageId,
@@ -194,6 +195,7 @@ export class ProjectsService {
           createdAt: now,
           updatedAt: now,
           pages: [],
+          tags: BUILTIN_TAGS,
         };
         await this.store.writeManifest(root, manifest);
         return this.register(await this.canonical(root), manifest);

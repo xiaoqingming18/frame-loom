@@ -62,6 +62,140 @@ async function setup() {
   };
 }
 
+it('项目标签 CRUD、跨页引用和带改派删除按 revision 更新锁定节点', async () => {
+  const { call, create } = await setup();
+  const project = await create();
+  const base = `/projects/${project.id}`;
+  const tags = await call(`${base}/tags`);
+  expect(tags.body).toHaveLength(7);
+  expect(ProjectManifest.parse((await call(base)).body).tags).toHaveLength(7);
+  expect(await call(`${base}/tags`, 'POST', { name: '重点', color: 'red' })).toMatchObject({
+    status: 201,
+  });
+  const created = (await call(`${base}/tags`)).body as { id: string; name: string }[];
+  const custom = created.find((tag) => tag.name === '重点')!;
+  expect(
+    await call(`${base}/tags/${custom.id}`, 'PATCH', { name: '关键', color: 'cyan' }),
+  ).toMatchObject({ status: 200 });
+  expect(await call(`${base}/tags/${created[0].id}`, 'PATCH', { name: '不可改' })).toMatchObject({
+    status: 409,
+    body: { code: 'TAG_BUILTIN_READONLY' },
+  });
+  expect(await call(`${base}/tags`, 'POST', { name: '关键', color: 'blue' })).toMatchObject({
+    status: 409,
+    body: { code: 'TAG_NAME_CONFLICT' },
+  });
+
+  const pages = await Promise.all(
+    ['第一集', '第二集'].map(async (name) =>
+      ProjectPageSummary.parse((await call(`${base}/pages`, 'POST', { name })).body),
+    ),
+  );
+  const tagId = created[0].id;
+  for (const [index, page] of pages.entries()) {
+    const document = {
+      ...emptyCanvasDocument(),
+      nodes: [
+        {
+          id: `image-${index}`,
+          type: 'image',
+          typeVersion: 1,
+          position: { x: 0, y: 0 },
+          size: { width: 100, height: 100 },
+          title: `画面${index}`,
+          locked: true,
+          tagId,
+          data: { versions: [], activeVersion: 0, prompt: '', inputOrder: [] },
+        },
+      ],
+    };
+    expect((await call(`${base}/pages/${page.id}`, 'PUT', { revision: 1, document })).status).toBe(
+      200,
+    );
+  }
+  const usages = await call(`${base}/tags/${tagId}/usages`);
+  expect(usages.body).toMatchObject([
+    { pageId: pages[0].id, nodeId: 'image-0', locked: true, thumbnailSha256: null },
+    { pageId: pages[1].id, nodeId: 'image-1', locked: true, thumbnailSha256: null },
+  ]);
+  const first = { pageId: pages[0].id, nodeId: 'image-0', tagId: created[1].id };
+  const failed = await call(`${base}/tags/${tagId}/delete`, 'POST', { reassign: [first] });
+  expect(failed).toMatchObject({
+    status: 409,
+    body: { code: 'TAG_IN_USE', details: { usages: [{ nodeId: 'image-1' }] } },
+  });
+  expect(ProjectPageRecord.parse((await call(`${base}/pages/${pages[0].id}`)).body).revision).toBe(
+    3,
+  );
+  expect(
+    await call(`${base}/tags/${tagId}/delete`, 'POST', {
+      reassign: [{ pageId: pages[1].id, nodeId: 'image-1', tagId: null }],
+    }),
+  ).toMatchObject({ status: 201 });
+  expect(ProjectPageRecord.parse((await call(`${base}/pages/${pages[1].id}`)).body)).toMatchObject({
+    revision: 3,
+    document: { nodes: [{ locked: true }] },
+  });
+  const remainingTags = (await call(`${base}/tags`)).body as { id: string }[];
+  expect(remainingTags.some((tag) => tag.id === tagId)).toBe(false);
+});
+
+it('删除改派拒绝无效目标，页面先迁移而清单失败后重试可完成', async () => {
+  const { call, create, store } = await setup();
+  const project = await create();
+  const base = `/projects/${project.id}`;
+  const [tag] = (await call(`${base}/tags`)).body as { id: string }[];
+  const page = ProjectPageSummary.parse(
+    (await call(`${base}/pages`, 'POST', { name: '引用页' })).body,
+  );
+  const document = {
+    ...emptyCanvasDocument(),
+    nodes: [
+      {
+        id: 'tagged',
+        type: 'image',
+        typeVersion: 1,
+        position: { x: 0, y: 0 },
+        size: { width: 100, height: 100 },
+        tagId: tag.id,
+        data: { versions: [], activeVersion: 0, prompt: '', inputOrder: [] },
+      },
+    ],
+  };
+  await call(`${base}/pages/${page.id}`, 'PUT', { revision: 1, document });
+  const reassignment = { pageId: page.id, nodeId: 'tagged', tagId: null };
+  expect(
+    await call(`${base}/tags/${tag.id}/delete`, 'POST', {
+      reassign: [{ ...reassignment, tagId: 'missing-target' }],
+    }),
+  ).toMatchObject({ status: 400 });
+  vi.spyOn(store(), 'writeManifest').mockRejectedValueOnce(new Error('清单写入失败'));
+  expect(
+    await call(`${base}/tags/${tag.id}/delete`, 'POST', { reassign: [reassignment] }),
+  ).toMatchObject({ status: 500 });
+  const migrated = ProjectPageRecord.parse((await call(`${base}/pages/${page.id}`)).body);
+  expect(migrated.revision).toBe(3);
+  expect(migrated.document.nodes[0]).not.toHaveProperty('tagId');
+  expect(
+    await call(`${base}/tags/${tag.id}/delete`, 'POST', { reassign: [reassignment] }),
+  ).toMatchObject({ status: 201 });
+  expect((await call(`${base}/tags`)).body).toHaveLength(6);
+});
+
+it('旧项目清单缺少 tags 时默认返回内置列表，首次写入时补齐', async () => {
+  const { call, create } = await setup();
+  const project = await create();
+  const manifestPath = join(project.rootPath, '.frameloom/project.json');
+  const manifest = ProjectManifest.parse(JSON.parse(await fs.readFile(manifestPath, 'utf8')));
+  delete manifest.tags;
+  await fs.writeFile(manifestPath, JSON.stringify(manifest));
+  expect((await call(`/projects/${project.id}/tags`)).body).toHaveLength(7);
+  await call(`/projects/${project.id}/tags`, 'POST', { name: '自定义', color: 'gray' });
+  expect(
+    ProjectManifest.parse(JSON.parse(await fs.readFile(manifestPath, 'utf8'))).tags,
+  ).toHaveLength(8);
+});
+
 it('新建、重命名、移除与打开：项目文件独立于注册表且重启保留', async () => {
   const { call, create, restart, directory } = await setup();
   const project = await create();
