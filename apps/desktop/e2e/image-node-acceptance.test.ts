@@ -66,6 +66,7 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
       await api(page, '/channels', 'POST', {
         name: '验收模拟渠道',
         apiFormat: 'openai-completions',
+        apiKey: 'sk-image-acceptance-local',
         baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`,
         enabled: true,
         models: ['gpt-image-2.5', 'gpt-image-1'].map((id) => ({

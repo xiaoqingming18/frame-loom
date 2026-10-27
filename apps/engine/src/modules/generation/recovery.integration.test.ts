@@ -27,7 +27,7 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
   let badDownload = false;
   const violations: string[] = [];
   const upstream = createServer((req, res) => {
-    if (req.url?.startsWith('/result.mp4')) {
+    if (req.method === 'GET' && req.url?.startsWith('/result.mp4')) {
       downloads++;
       if (req.headers.authorization || req.headers['x-private'])
         violations.push('CDN 收到渠道凭据');
@@ -41,7 +41,7 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
     req.on('end', () => {
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('x-request-id', 'request-safe');
-      if (req.url === '/api/v1/uploads') {
+      if (req.method === 'POST' && req.url === '/api/v1/uploads') {
         uploads++;
         if (
           !req.headers['content-type']?.includes('multipart/form-data') ||
@@ -53,11 +53,11 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
             url: badUpload ? 'http://127.0.0.1/private' : `https://8.8.8.8/ref-${uploads}.mp4`,
           }),
         );
-      } else if (req.method === 'POST') {
-        submissions.push({ path: req.url!, key: String(req.headers['idempotency-key']), body });
+      } else if (req.method === 'POST' && req.url === '/v1/videos/generations') {
+        submissions.push({ path: req.url, key: String(req.headers['idempotency-key']), body });
         if (loseSubmit) res.destroy();
         else res.end(JSON.stringify({ id: 'remote-1', status: 'processing' }));
-      } else {
+      } else if (req.method === 'GET' && req.url === '/v1/videos/remote-1') {
         polls++;
         res.end(
           JSON.stringify({
@@ -65,7 +65,7 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
             video_url: `${origin}/result.mp4?signature=private-signed-value`,
           }),
         );
-      }
+      } else res.writeHead(404).end();
     });
   });
   await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
@@ -182,6 +182,13 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
     await wait(fourth.id, 'succeeded');
     expect(uploads).toBe(3);
     const before = submissions.length;
+    const deletedKey = await create();
+    repository().saveChannel({ apiKey: '' }, channel.id);
+    await wait(deletedKey.id, 'paused');
+    expect(service().get(deletedKey.id).errorCode).toBe('MODEL_DISABLED');
+    expect(submissions).toHaveLength(before);
+    repository().saveChannel({ apiKey: 'original-secret' }, channel.id);
+    service().cancel(deletedKey.id);
     const result = service().get(first.id);
     db()
       .update(generationJobs)

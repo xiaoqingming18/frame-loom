@@ -1,4 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { GenerationRequest } from '@frame-loom/contracts';
 import { arkVideoTasks, fastaitokenVideo, minimaxVideoV2, openaiVideos } from './video-tasks.js';
 import type { AdapterContext } from './types.js';
@@ -16,6 +18,137 @@ const context: AdapterContext = {
   model: 'video-model',
   signal: AbortSignal.timeout(5000),
 };
+
+it.each([arkVideoTasks, minimaxVideoV2, openaiVideos, fastaitokenVideo])(
+  '$protocol：严格 HTTP 方法、部署前缀、鉴权、请求体、查询与内容路由',
+  async (adapter) => {
+    const prefix = '/gateway';
+    const route =
+      adapter === arkVideoTasks
+        ? 'contents/generations/tasks'
+        : adapter === minimaxVideoV2
+          ? 'minimax/v2/video_generation'
+          : adapter === openaiVideos
+            ? 'videos'
+            : 'v1/videos/generations';
+    const query =
+      adapter === minimaxVideoV2
+        ? 'minimax/v2/query/video_generation/remote-1'
+        : adapter === fastaitokenVideo
+          ? 'v1/videos/remote-1'
+          : `${route}/remote-1`;
+    const seen: string[] = [];
+    const bodies: string[] = [];
+    const contentTypes: (string | undefined)[] = [];
+    const server = createServer((req, res) => {
+      if (req.headers.authorization !== 'Bearer secret') {
+        res.writeHead(401).end();
+        return;
+      }
+      const key = `${req.method} ${req.url}`;
+      if (![`POST ${prefix}/${route}`, `GET ${prefix}/${query}`].includes(key)) {
+        res.writeHead(404).end();
+        return;
+      }
+      seen.push(key);
+      let body = '';
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        if (req.method === 'POST') {
+          bodies.push(body);
+          contentTypes.push(req.headers['content-type']);
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify(
+            req.method === 'POST'
+              ? adapter === minimaxVideoV2
+                ? { task_id: 'remote-1', base_resp: { status_code: 0 } }
+                : { id: 'remote-1', status: 'queued' }
+              : adapter === minimaxVideoV2
+                ? {
+                    task_id: 'remote-1',
+                    task: {
+                      status: 'completed',
+                      content: { video_url: 'https://cdn.test/result.mp4' },
+                    },
+                  }
+                : {
+                    id: 'remote-1',
+                    status: 'completed',
+                    content: { video_url: 'https://cdn.test/result.mp4' },
+                  },
+          ),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const ctx = {
+      ...context,
+      baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}${prefix}`,
+      signal: AbortSignal.timeout(10_000),
+    };
+    try {
+      await expect(adapter.submit(ctx, request)).resolves.toMatchObject({
+        status: 'running',
+        remoteTaskId: 'remote-1',
+      });
+      await expect(adapter.query!(ctx, 'remote-1')).resolves.toMatchObject({ status: 'succeeded' });
+      expect(seen).toEqual([`POST ${prefix}/${route}`, `GET ${prefix}/${query}`]);
+      expect(contentTypes[0]).toContain(
+        adapter === openaiVideos ? 'multipart/form-data' : 'application/json',
+      );
+      if (adapter === openaiVideos) {
+        expect(bodies[0]).toContain('name="model"');
+        expect(bodies[0]).toContain('video-model');
+      } else expect(JSON.parse(bodies[0])).toMatchObject({ model: 'video-model', duration: 5 });
+      if (adapter.contentUrl)
+        expect(adapter.contentUrl(ctx, 'remote/1')).toBe(
+          `${ctx.baseUrl}/${adapter === fastaitokenVideo ? 'v1/' : ''}videos/remote%2F1/content`,
+        );
+      await expect(
+        adapter.submit({ ...ctx, connection: { routes: { submit: 'wrong' } } }, request),
+      ).rejects.toMatchObject({ code: 'HTTP_404' });
+      await expect(adapter.submit({ ...ctx, apiKey: 'wrong' }, request)).rejects.toMatchObject({
+        category: 'auth',
+      });
+      expect(seen).toHaveLength(2);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+);
+
+it.each(['submit', 'query'] as const)(
+  'H3 %s 拒绝 HTTP 200 的业务错误，保留安全码而不透传正文',
+  async (stage) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            task_id: 'remote-1',
+            task: { status: 'completed', content: { video_url: 'https://cdn.test/result.mp4' } },
+            base_resp: { status_code: 1008, status_msg: 'secret prompt must stay private' },
+          }),
+        ),
+      ),
+    );
+    const result =
+      stage === 'submit'
+        ? minimaxVideoV2.submit(context, request)
+        : minimaxVideoV2.query!(context, 'remote-1');
+    await expect(result).rejects.toMatchObject({
+      code: '1008',
+      uncertain: false,
+      safeRetry: false,
+    });
+    await expect(result).rejects.not.toHaveProperty('message', expect.stringContaining('secret'));
+  },
+);
 afterEach(() => vi.unstubAllGlobals());
 
 it.each([

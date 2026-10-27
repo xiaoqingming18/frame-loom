@@ -23,6 +23,16 @@ const requests: {
 }[] = [];
 beforeAll(async () => {
   server = createServer((req, res) => {
+    if (
+      req.method !== 'POST' ||
+      !(
+        /^\/images\/(generations|edits)$/.test(req.url ?? '') ||
+        /^\/models\/[^/]+:generateContent$/.test(req.url ?? '')
+      )
+    ) {
+      res.writeHead(404).end();
+      return;
+    }
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
@@ -108,6 +118,9 @@ for (const adapter of [openaiImages, arkImages, geminiImage]) {
     const result = await adapter.submit(context, request);
     expect(result.status).toBe('succeeded');
     if (result.status === 'succeeded') expect(result.outputs).toHaveLength(1);
+    await expect(
+      adapter.submit({ ...context, connection: { routes: { submit: 'wrong' } } }, request),
+    ).rejects.toMatchObject({ code: 'HTTP_404' });
     expect(requests.at(-1)).toMatchObject(
       adapter.protocol === 'gemini-image'
         ? { geminiKey: 'sk-private' }

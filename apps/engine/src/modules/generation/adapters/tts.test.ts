@@ -11,6 +11,13 @@ const mp3 = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0]);
 let unauthorized = false;
 beforeAll(async () => {
   server = createServer((request, response) => {
+    if (
+      request.method !== 'POST' ||
+      !['/v1/t2a_v2', '/v1/audio/speech'].includes(request.url ?? '')
+    ) {
+      response.writeHead(404).end();
+      return;
+    }
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {

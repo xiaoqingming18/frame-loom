@@ -145,3 +145,70 @@ it('数据库损坏时拒绝启动，关闭失败连接后仍可清理文件', (
   writeFileSync(join(config.dataDir, 'data/frame-loom.sqlite'), '损坏的数据库');
   expect(() => new DatabaseService(config)).toThrow();
 });
+
+it('0008 旧库升级保留地址和历史任务，失败迁移整批回滚且备份可恢复', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'frame-loom-upgrade-'));
+  directories.push(directory);
+  const source = fileURLToPath(new URL('drizzle/', packageRoot));
+  const legacy = join(directory, 'legacy-drizzle');
+  cpSync(source, legacy, { recursive: true });
+  const journalPath = join(legacy, 'meta/_journal.json');
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries: unknown[] };
+  writeFileSync(journalPath, JSON.stringify({ ...journal, entries: journal.entries.slice(0, 9) }));
+  mkdirSync(join(directory, 'data'));
+  const path = join(directory, 'data/frame-loom.sqlite');
+  const sqlite = new Database(path);
+  try {
+    migrate(drizzle(sqlite), { migrationsFolder: legacy });
+    sqlite.exec(`INSERT INTO channels (id,name,api_format,base_url,header_names,enabled,created_at,updated_at)
+      VALUES ('channel','旧渠道','openai-completions','https://example.test/v1','[]',1,'','');
+      INSERT INTO channel_models (id,channel_id,upstream_model_id,display_name,kind,protocol,overrides_json,enabled)
+      VALUES ('model','channel','MiniMax-H3','H3','video','minimax-video-v2','{}',1);
+      INSERT INTO generation_jobs (id,kind,channel_model_id,profile_id,profile_json,status,request_json,outputs_json,source,created_at,updated_at,deadline_at)
+      VALUES ('old-job','video','model','profile','{}','failed','{}','[]','canvas','','','');`);
+    const backup = join(directory, 'backup.sqlite');
+    await sqlite.backup(backup);
+    const failing = join(directory, 'failing-drizzle');
+    cpSync(source, failing, { recursive: true });
+    const migration = join(failing, '0010_generation_recovery.sql');
+    writeFileSync(
+      migration,
+      readFileSync(migration, 'utf8') +
+        '\n--> statement-breakpoint\nINSERT INTO missing_table VALUES (1);',
+    );
+    const before = sqlite.prepare('SELECT * FROM generation_jobs').all();
+    expect(() => migrate(drizzle(sqlite), { migrationsFolder: failing })).toThrow();
+    expect(sqlite.prepare('SELECT * FROM generation_jobs').all()).toEqual(before);
+    expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({
+      count: 9,
+    });
+    expect(sqlite.prepare('PRAGMA table_info(channel_models)').all()).not.toContainEqual(
+      expect.objectContaining({ name: 'connection_json' }),
+    );
+    expect(sqlite.prepare('PRAGMA table_info(generation_jobs)').all()).not.toContainEqual(
+      expect.objectContaining({ name: 'snapshot_json' }),
+    );
+    const restored = new Database(backup);
+    try {
+      expect(restored.prepare('SELECT * FROM generation_jobs').all()).toEqual(before);
+    } finally {
+      restored.close();
+    }
+  } finally {
+    sqlite.close();
+  }
+  const database = new DatabaseService(new EngineConfig('a'.repeat(64), directory, []));
+  databases.push(database);
+  expect(database.getSchemaVersion()).toBe('6');
+  expect(database.db.get(sql`SELECT base_url FROM channels WHERE id = 'channel'`)).toEqual({
+    base_url: 'https://example.test/v1',
+  });
+  expect(
+    database.db.get(sql`SELECT connection_json FROM channel_models WHERE id = 'model'`),
+  ).toEqual({ connection_json: '{}' });
+  expect(
+    database.db.get(
+      sql`SELECT status, snapshot_json, diagnostic_json FROM generation_jobs WHERE id = 'old-job'`,
+    ),
+  ).toEqual({ status: 'failed', snapshot_json: null, diagnostic_json: null });
+});

@@ -95,6 +95,15 @@ function content(ctx: AdapterContext, request: GenerationRequest) {
     }),
   ];
 }
+function checkMinimaxResponse(json: unknown) {
+  const parsed = z
+    .object({ base_resp: z.object({ status_code: z.number().int() }).optional() })
+    .safeParse(json);
+  if (!parsed.success) return invalid();
+  const code = parsed.data.base_resp?.status_code;
+  if (code !== undefined && code !== 0)
+    throw new GenerationFailure('upstream', String(code), 'H3 请求被上游拒绝');
+}
 export const arkVideoTasks: GenerationAdapter = {
   protocol: 'ark-video-tasks',
   async submit(ctx, request) {
@@ -140,6 +149,7 @@ export const minimaxVideoV2: GenerationAdapter = {
         ...request.params,
       },
     );
+    checkMinimaxResponse(json);
     const result = z.object({ task_id: z.string().min(1) }).safeParse(json);
     if (!result.success) return invalid();
     return { status: 'running', remoteTaskId: result.data.task_id, remoteStatus: 'queued' };
@@ -155,6 +165,7 @@ export const minimaxVideoV2: GenerationAdapter = {
         encodeURIComponent(id),
       ),
     );
+    checkMinimaxResponse(json);
     if (json && typeof json === 'object' && 'task' in json) {
       const task = json.task;
       return parseTask(task && typeof task === 'object' ? { ...task, id } : task);
