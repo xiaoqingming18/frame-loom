@@ -126,7 +126,7 @@ export class LlmService {
       name: row.displayName,
       provider: channel.id,
       api,
-      baseUrl: channel.baseUrl.replace(/\/+$/, ''),
+      baseUrl: row.connection?.baseUrl?.replace(/\/+$/, '') ?? channel.baseUrl.replace(/\/+$/, ''),
       input: metadata.imageInput ? ['text', 'image'] : ['text'],
       headers,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -139,7 +139,7 @@ export class LlmService {
     models.setProvider(
       createProvider({
         id: channel.id,
-        baseUrl: channel.baseUrl,
+        baseUrl: row.connection?.baseUrl ?? channel.baseUrl,
         headers,
         auth: {
           apiKey: { name: channel.name, resolve: () => Promise.resolve({ auth: { apiKey } }) },

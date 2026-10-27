@@ -66,6 +66,43 @@ const BaseUrl = z
       !url.hash
     );
   }, '地址只允许 HTTP(S)，不能包含凭据、查询参数或片段');
+export const ServiceOperation = z.enum(['submit', 'query', 'content', 'upload', 'catalog']);
+export type ServiceOperation = z.infer<typeof ServiceOperation>;
+export const RelativePath = z
+  .string()
+  .min(1)
+  .max(2048)
+  .refine(
+    (value) => !value.includes('://') && !value.split('/').some((part) => part === '..'),
+    '操作路径必须是安全的相对路径',
+  )
+  .transform((value) => value.replace(/^\/+|\/+$/g, ''));
+export const ModelConnection = z.object({
+  baseUrl: BaseUrl.optional(),
+  routes: z.record(ServiceOperation, RelativePath).optional(),
+  templateVersion: z
+    .string()
+    .regex(/^v\d+$/)
+    .optional(),
+});
+export type ModelConnection = z.infer<typeof ModelConnection>;
+export function resolveServiceUrl(
+  baseUrl: string,
+  path: string,
+  params: Record<string, string> = {},
+) {
+  const base = BaseUrl.parse(baseUrl);
+  const relative = RelativePath.parse(path)
+    .split('/')
+    .map((part) =>
+      part.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (_, key: string) => {
+        if (!(key in params)) throw new Error(`缺少路径参数: ${key}`);
+        return encodeURIComponent(params[key]);
+      }),
+    )
+    .join('/');
+  return new URL(`${base.replace(/\/+$/, '')}/${relative}`).toString();
+}
 const HeaderName = z
   .string()
   .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/)
@@ -152,6 +189,7 @@ export const ChannelModelWrite = z.strictObject({
   protocol: z.string().min(1).max(100).nullable(),
   profileId: z.string().min(1).max(100).nullable(),
   overrides: ModelOverrides,
+  connection: ModelConnection.optional(),
   enabled: z.boolean(),
 });
 export type ChannelModelWrite = z.infer<typeof ChannelModelWrite>;

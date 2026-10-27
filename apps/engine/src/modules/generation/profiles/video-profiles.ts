@@ -170,6 +170,25 @@ export const videoProfiles: ModelProfile[] = [
   ...seedance,
   ...minimax,
   sora,
+  ModelProfile.parse({
+    id: 'fastaitoken-video-generic',
+    name: 'FastAIToken 视频',
+    kind: 'video',
+    protocol: 'fastaitoken-video',
+    matchIds: [
+      'seedance-2.5-token',
+      'seedance-2.5-pro-token',
+      'seedance-2.0-token',
+      'minimax-h3-time',
+      'wan-3.0-time',
+    ],
+    generic: true,
+    modes: modes.map((mode) => (mode.id === 'frames' ? { ...mode, name: '首尾帧' } : mode)),
+    params: [],
+    constraints: [],
+    inputs: [image, video, audio],
+    runtime,
+  }),
   ...(['ark-video-tasks', 'minimax-video-v2', 'openai-videos'] as const).map((protocol) =>
     ModelProfile.parse({
       id: `${protocol}-generic`,

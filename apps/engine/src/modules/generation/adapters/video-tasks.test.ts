@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { GenerationRequest } from '@frame-loom/contracts';
-import { arkVideoTasks, minimaxVideoV2, openaiVideos } from './video-tasks.js';
+import { arkVideoTasks, fastaitokenVideo, minimaxVideoV2, openaiVideos } from './video-tasks.js';
 import type { AdapterContext } from './types.js';
 
 const request = GenerationRequest.parse({
@@ -91,6 +91,53 @@ it('视频任务审核拒绝不暴露远端正文', async () => {
     code: '1026',
     message: '内容未通过审核',
   });
+});
+
+it('H3 查询接受外层 task_id 和 base_resp', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          task_id: 'task-h3',
+          base_resp: { status_code: 0 },
+          task: { status: 'completed', content: { video_url: 'https://cdn.test/h3.mp4' } },
+        }),
+      ),
+    ),
+  );
+  await expect(minimaxVideoV2.query!(context, 'task-h3')).resolves.toMatchObject({
+    status: 'succeeded',
+  });
+});
+
+it('H3 兼容旧渠道的 /v1 地址并改用 minimax/v2 路由', async () => {
+  const fetchMock = vi
+    .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+    .mockResolvedValue(
+      new Response(JSON.stringify({ task: { id: 'task-h3', status: 'running' } }), { status: 200 }),
+    );
+  vi.stubGlobal('fetch', fetchMock);
+  await minimaxVideoV2.query!({ ...context, baseUrl: 'https://provider.test/v1' }, 'task-h3');
+  expect(fetchMock.mock.calls[0]?.[0]).toBe(
+    'https://provider.test/minimax/v2/query/video_generation/task-h3',
+  );
+});
+
+it('FastAIToken 视频使用 JSON 任务并映射 processing/completed', async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'fast-1', status: 'processing' })))
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id: 'fast-1', status: 'completed', video_url: 'https://cdn.test/f.mp4' }),
+      ),
+    );
+  vi.stubGlobal('fetch', fetchMock);
+  const submitted = await fastaitokenVideo.submit(context, request);
+  expect(submitted).toMatchObject({ status: 'running', remoteTaskId: 'fast-1' });
+  expect(await fastaitokenVideo.query!(context, 'fast-1')).toMatchObject({ status: 'succeeded' });
+  expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ 'Content-Type': 'application/json' });
 });
 
 it.each([

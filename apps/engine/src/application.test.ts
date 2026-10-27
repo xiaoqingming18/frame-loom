@@ -88,7 +88,7 @@ describe('真实 HTTP 边界', () => {
     expect(response.status).toBe(200);
     expect(HealthResponse.parse(JSON.parse(response.body))).toMatchObject({
       engineVersion: '0.1.0',
-      schemaVersion: '4',
+      schemaVersion: '5',
     });
   });
 

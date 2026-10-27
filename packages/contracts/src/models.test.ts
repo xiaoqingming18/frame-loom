@@ -1,5 +1,11 @@
 import { expect, it } from 'vitest';
-import { Channel, ChannelWrite, ChannelModelWrite, TestChatRequest } from './models.js';
+import {
+  Channel,
+  ChannelWrite,
+  ChannelModelWrite,
+  TestChatRequest,
+  resolveServiceUrl,
+} from './models.js';
 
 const channel = {
   name: '测试',
@@ -52,4 +58,11 @@ it('允许未分类禁用模型，限制覆盖项和聊天边界', () => {
     false,
   );
   expect(TestChatRequest.safeParse({ modelId: 'bad', messages: [] }).success).toBe(false);
+});
+it('统一解析部署前缀、占位符并拒绝路径逃逸', () => {
+  expect(resolveServiceUrl('https://example.com/gateway/', 'v1/videos/{id}', { id: 'a/b' })).toBe(
+    'https://example.com/gateway/v1/videos/a%2Fb',
+  );
+  expect(() => resolveServiceUrl('https://example.com', '../admin')).toThrow();
+  expect(() => resolveServiceUrl('https://example.com', 'https://evil.test')).toThrow();
 });

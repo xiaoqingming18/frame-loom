@@ -153,9 +153,17 @@ export class ChannelsRepository {
     const removed = [...previous.keys()].filter((id) => !kept.has(id));
     if (removed.length) tx.delete(channelModels).where(inArray(channelModels.id, removed)).run();
     for (const { id, ...model } of models) {
-      const values = { ...model, protocol: model.protocol ?? '', lastCheck: null };
+      const values = {
+        ...model,
+        protocol: model.protocol ?? '',
+        connection: model.connection ?? {},
+        lastCheck: null,
+      };
       if (id) {
-        tx.update(channelModels).set(values).where(eq(channelModels.id, id)).run();
+        tx.update(channelModels)
+          .set({ ...values, connection: model.connection ?? {} })
+          .where(eq(channelModels.id, id))
+          .run();
         if (!model.enabled || previous.get(id)?.kind !== model.kind)
           tx.delete(modelDefaults).where(eq(modelDefaults.channelModelId, id)).run();
       } else
@@ -176,19 +184,25 @@ export class ChannelsRepository {
       .from(channelModels)
       .where(channelId ? eq(channelModels.channelId, channelId) : undefined)
       .all()
-      .map((row) => ({ ...row, protocol: row.protocol || null }));
+      .map((row) => ({ ...row, protocol: row.protocol || null, connection: row.connection ?? {} }));
   }
   getModel(id: string) {
     const row = this.db.select().from(channelModels).where(eq(channelModels.id, id)).get();
     if (!row) throw new DomainError('MODEL_NOT_FOUND', 404, '模型不存在');
-    return { ...row, protocol: row.protocol || null };
+    return { ...row, protocol: row.protocol || null, connection: row.connection ?? {} };
   }
   saveModel(channelId: string, input: ChannelModelWrite, id = randomUUID()) {
     this.channelRow(channelId);
     try {
       this.db
         .insert(channelModels)
-        .values({ ...input, id, channelId, protocol: input.protocol ?? '' })
+        .values({
+          ...input,
+          id,
+          channelId,
+          protocol: input.protocol ?? '',
+          connection: input.connection ?? {},
+        })
         .run();
     } catch (error) {
       this.rethrowConstraint(error);
@@ -200,7 +214,12 @@ export class ChannelsRepository {
     try {
       this.db.transaction((tx) => {
         tx.update(channelModels)
-          .set({ ...input, protocol: input.protocol ?? '', lastCheck: null })
+          .set({
+            ...input,
+            protocol: input.protocol ?? '',
+            connection: input.connection ?? {},
+            lastCheck: null,
+          })
           .where(eq(channelModels.id, id))
           .run();
         if (!input.enabled || previous.kind !== input.kind)

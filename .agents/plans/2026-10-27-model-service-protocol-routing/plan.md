@@ -1,6 +1,6 @@
 # Plan: 模型服务接入契约与路由优化
 
-Status: draft
+Status: active
 Note: ../../notes/proposed/architecture/2026-10-27-model-service-protocol-routing.md
 
 ## 目标
@@ -21,8 +21,8 @@ Note: ../../notes/proposed/architecture/2026-10-27-model-service-protocol-routin
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [契约、路由与兼容迁移](01-contracts-routing.md) | draft | — | 模型连接配置、统一解析器、模板与迁移测试 |
-| 02 | [协议适配与能力档案](02-adapters-profiles.md) | draft | 01 | H3 修复、FastAIToken 视频适配、标准协议契约测试 |
+| 01 | [契约、路由与兼容迁移](01-contracts-routing.md) | done | — | 模型连接配置、统一解析器、模板与迁移测试 |
+| 02 | [协议适配与能力档案](02-adapters-profiles.md) | done | 01 | H3 修复、FastAIToken 视频适配、标准协议契约测试 |
 | 03 | [素材交付与任务恢复](03-assets-lifecycle.md) | draft | 01、02 | 上传持久化、任务快照、安全恢复与诊断 |
 | 04 | [模型设置与画布状态](04-settings-canvas.md) | draft | 01、02、03 | 模板配置、地址预览、分层验证、恢复状态界面 |
 | 05 | [迁移回归与接入验收](05-acceptance.md) | draft | 01、02、03、04 | 回归证据、受控联调记录、明确未支持范围 |

@@ -2,7 +2,12 @@ import { z } from 'zod';
 
 export const ImageProtocol = z.enum(['openai-images', 'gemini-image', 'ark-images']);
 export type ImageProtocol = z.infer<typeof ImageProtocol>;
-export const VideoProtocol = z.enum(['ark-video-tasks', 'minimax-video-v2', 'openai-videos']);
+export const VideoProtocol = z.enum([
+  'ark-video-tasks',
+  'minimax-video-v2',
+  'openai-videos',
+  'fastaitoken-video',
+]);
 export type VideoProtocol = z.infer<typeof VideoProtocol>;
 export const MediaProtocol = z.enum([
   ...ImageProtocol.options,

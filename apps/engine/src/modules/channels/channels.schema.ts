@@ -4,6 +4,7 @@ import type {
   LlmProtocol,
   ModelKind,
   ModelOverrides,
+  ModelConnection,
 } from '@frame-loom/contracts';
 
 export const channels = sqliteTable('channels', {
@@ -34,6 +35,7 @@ export const channelModels = sqliteTable(
     protocol: text('protocol').notNull(),
     profileId: text('profile_id'),
     overrides: text('overrides_json', { mode: 'json' }).$type<ModelOverrides>().notNull(),
+    connection: text('connection_json', { mode: 'json' }).$type<ModelConnection>().notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull(),
     lastCheck: text('last_check_json', { mode: 'json' }).$type<ConnectionCheck>(),
   },

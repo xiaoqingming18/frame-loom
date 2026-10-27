@@ -21,7 +21,12 @@ import { ProjectFilesService } from '../projects/project-files.service.js';
 import { ProjectMediaService } from '../projects/project-media.service.js';
 import { mediaProfile } from './profiles/media-profiles.js';
 import { ObjectStorageService } from '../object-storage/object-storage.service.js';
-import { arkVideoTasks, minimaxVideoV2, openaiVideos } from './adapters/video-tasks.js';
+import {
+  arkVideoTasks,
+  fastaitokenVideo,
+  minimaxVideoV2,
+  openaiVideos,
+} from './adapters/video-tasks.js';
 import { openaiImages } from './adapters/openai-images.js';
 import { arkImages } from './adapters/ark-images.js';
 import { geminiImage } from './adapters/gemini-image.js';
@@ -45,6 +50,7 @@ export class GenerationAdapters {
       arkVideoTasks,
       minimaxVideoV2,
       openaiVideos,
+      fastaitokenVideo,
       openaiSpeech,
       minimaxT2a,
     ].map((adapter) => [adapter.protocol, adapter]),
@@ -334,6 +340,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       headers,
       model: model.upstreamModelId,
       profile: row.profile,
+      connection: model.connection ?? {},
       signal,
     };
   }
@@ -358,7 +365,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         };
         for (const output of row.rawResponse) {
           if (output.providerContent) {
-            if (row.profile.protocol !== 'openai-videos')
+            if (!adapter.contentUrl)
               throw new GenerationFailure(
                 'upstream',
                 'INVALID_CONTENT_ENDPOINT',
@@ -368,7 +375,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
             await this.media.save(
               {
                 ...output,
-                url: `${ctx.baseUrl}/videos/${encodeURIComponent(output.providerContent)}/content`,
+                url: adapter.contentUrl(ctx, output.providerContent),
               },
               signal,
               { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },

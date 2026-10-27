@@ -12,6 +12,7 @@ export type AdapterContext = {
   model: string;
   signal: AbortSignal;
   profile?: ModelProfile;
+  connection?: import('@frame-loom/contracts').ModelConnection;
   referenceUrls?: Record<string, string>;
 };
 export type AdapterOutput = { url?: string; data?: string; mime: string; providerContent?: string };
@@ -24,6 +25,7 @@ export interface GenerationAdapter {
   submit(ctx: AdapterContext, request: GenerationRequest): Promise<AdapterResult>;
   query?(ctx: AdapterContext, remoteTaskId: string): Promise<AdapterResult>;
   cancel?(ctx: AdapterContext, remoteTaskId: string): Promise<void>;
+  contentUrl?(ctx: AdapterContext, remoteTaskId: string): string;
 }
 export class GenerationFailure extends Error {
   constructor(
