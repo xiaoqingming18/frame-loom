@@ -41,7 +41,7 @@ export const GenerationRequest = z.strictObject({
   prompt: z.string().trim().min(1).max(32_000),
   params: z.record(z.string().max(100), Value).default({}),
   inputs: z.array(GenerationInput).max(50).default([]),
-  source: z.enum(['manual', 'agent', 'canvas']).default('manual'),
+  source: z.enum(['manual', 'agent', 'canvas', 'test']).default('manual'),
 });
 export type GenerationRequest = z.infer<typeof GenerationRequest>;
 export const ModelProfile = z.strictObject({
@@ -271,6 +271,8 @@ export const MediaFile = z.object({
   fps: z.number().positive().nullable().optional(),
   codec: z.string().nullable().optional(),
   audioCodec: z.string().nullable().optional(),
+  sampleRate: z.number().int().positive().nullable().optional(),
+  channels: z.number().int().positive().nullable().optional(),
   createdAt: z.string().datetime(),
 });
 export type MediaFile = z.infer<typeof MediaFile>;
@@ -304,6 +306,9 @@ export const GenerationJob = z.object({
     .nullable()
     .optional(),
   outputs: z.array(MediaFile),
+  usage: z.unknown().optional(),
+  configVersion: z.string().optional(),
+  definitionVersion: z.string().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   finishedAt: z.string().datetime().nullable(),

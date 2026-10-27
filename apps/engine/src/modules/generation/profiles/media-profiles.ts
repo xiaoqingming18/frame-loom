@@ -35,6 +35,27 @@ export function mediaProfile(
     effectiveProfile?: ModelProfile | null;
   },
 ): ModelProfile {
+  if (model.kind === 'tts') {
+    const exact = ttsProfiles.find(
+      (profile) =>
+        profile.protocol === model.protocol && profile.matchIds.includes(model.upstreamModelId),
+    );
+    if (exact) {
+      const profile = model.effectiveProfile ?? exact;
+      const voices = exact.params.find((param) => param.key === 'voice')?.values;
+      return executionProfile({
+        ...profile,
+        params: profile.params.map((param) =>
+          param.key === 'voice' && voices
+            ? {
+                ...param,
+                values: (param.values ?? voices).filter((value) => voices.includes(value)),
+              }
+            : param,
+        ),
+      });
+    }
+  }
   if (model.effectiveProfile) return executionProfile(model.effectiveProfile);
   if (model.kind === 'image') return executionProfile(imageProfile(model));
   const profiles = mediaProfiles.filter(

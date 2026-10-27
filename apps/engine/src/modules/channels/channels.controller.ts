@@ -18,6 +18,8 @@ import { LlmService } from '../llm/llm.service.js';
 import { z } from 'zod';
 import { ModelImportPackage } from '@frame-loom/contracts';
 import { ModelCatalogService } from './model-catalog.service.js';
+import { VoicesService } from './voices.service.js';
+import { VoiceWrite } from '@frame-loom/contracts';
 
 @Controller()
 export class ChannelsController {
@@ -26,9 +28,31 @@ export class ChannelsController {
     private readonly channels: ChannelsService,
     private readonly llm: LlmService,
     private readonly catalog: ModelCatalogService,
+    private readonly voices: VoicesService,
   ) {}
+  @Get('channel-models/:id/voices') voiceList(@Param('id') id: string) {
+    return this.voices.list(id);
+  }
+  @Post('channel-models/:id/voices') saveVoice(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(VoiceWrite)) input: VoiceWrite,
+  ) {
+    return this.voices.save(id, input);
+  }
+  @Post('channel-models/:id/voice-catalog') voiceCatalog(@Param('id') id: string) {
+    return this.voices.fetch(id);
+  }
+  @Delete('channel-models/:id/voices/:voiceId') removeVoice(
+    @Param('id') id: string,
+    @Param('voiceId') voiceId: string,
+  ) {
+    return this.voices.remove(id, voiceId);
+  }
   @Get('model-catalog') catalogList() {
     return this.catalog.get();
+  }
+  @Get('model-upgrade-report') upgradeReport() {
+    return this.repository.retirementReport();
   }
   @Post('model-catalog/preview') previewImport(
     @Body(new ZodValidationPipe(ModelImportPackage)) input: ModelImportPackage,

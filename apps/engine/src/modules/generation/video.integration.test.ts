@@ -60,11 +60,11 @@ it.each(['openai-videos', 'fastaitoken-video'] as const)(
         enabled: true,
       });
       const model = channels.saveModel(channel.id, {
-        upstreamModelId: protocol === 'openai-videos' ? 'sora-2' : 'seedance-2.5-token',
+        upstreamModelId: 'seedance-2.5-token',
         displayName: '视频',
         kind: 'video',
         protocol,
-        profileId: null,
+        profileId: protocol === 'openai-videos' ? 'openai-videos-default' : null,
         overrides: {},
         enabled: true,
         connection: { baseUrl: `${origin}/gateway` },

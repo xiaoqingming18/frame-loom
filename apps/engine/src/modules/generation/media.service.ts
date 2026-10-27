@@ -192,6 +192,7 @@ export class MediaService {
   }
 
   async describe(temporary: string, expectedKind?: string, expectedMime?: string) {
+    expectedKind ??= expectedMime?.split('/')[0];
     const bytes = (await fs.stat(temporary)).size;
     let metadata: Omit<StoredMedia, 'sha256' | 'bytes' | 'createdAt'>;
     const headerFile = await open(temporary, 'r');
@@ -228,32 +229,6 @@ export class MediaService {
         fps: null,
         codec: null,
         audioCodec: null,
-      };
-    } else if (
-      expectedMime === 'audio/mpeg' ||
-      expectedMime === 'audio/wav' ||
-      expectedMime === 'audio/ogg'
-    ) {
-      const ext =
-        expectedMime === 'audio/mpeg' ? 'mp3' : expectedMime === 'audio/wav' ? 'wav' : 'ogg';
-      const valid =
-        ext === 'mp3'
-          ? header[0] === 0xff && (header[1] & 0xe0) === 0xe0
-          : ext === 'wav'
-            ? header.toString('ascii', 0, 4) === 'RIFF' &&
-              header.toString('ascii', 8, 12) === 'WAVE'
-            : header.toString('ascii', 0, 4) === 'OggS';
-      if (!valid)
-        throw new GenerationFailure('invalid_params', 'INVALID_AUDIO', '语音产物格式无效');
-      metadata = {
-        mime: expectedMime,
-        ext,
-        width: null,
-        height: null,
-        durationMs: null,
-        fps: null,
-        codec: null,
-        audioCodec: ext,
       };
     } else {
       metadata = await probeMedia(temporary);

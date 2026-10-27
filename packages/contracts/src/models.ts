@@ -271,6 +271,17 @@ export const ChannelModel = z.strictObject({
 export type ChannelModel = z.infer<typeof ChannelModel>;
 export const ChannelList = z.array(Channel);
 export const ChannelModelList = z.array(ChannelModel);
+export const ModelUpgradeReport = z.array(
+  z.object({
+    id: z.string(),
+    channelId: z.string(),
+    name: z.string(),
+    upstreamModelId: z.string(),
+    reason: z.string(),
+    bindingPresent: z.boolean(),
+    tasks: z.array(z.object({ id: z.string(), status: z.string(), canRecover: z.boolean() })),
+  }),
+);
 export const ModelDefaults = z.object({
   chat: z.string().uuid().nullable(),
   image: z.string().uuid().nullable(),

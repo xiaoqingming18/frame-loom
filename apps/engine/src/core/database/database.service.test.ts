@@ -31,11 +31,11 @@ function openDatabase() {
 
 it('迁移创建 app_meta、schema 版本和迁移日志，并启用 WAL 与外键', () => {
   const { database } = openDatabase();
-  expect(database.getSchemaVersion()).toBe('6');
+  expect(database.getSchemaVersion()).toBe('7');
   expect(database.db.get(sql`PRAGMA journal_mode`)).toEqual({ journal_mode: 'wal' });
   expect(database.db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 });
   expect(database.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 12,
+    count: 15,
   });
 });
 
@@ -91,7 +91,7 @@ it('重复迁移不丢已有元数据且不重复执行，关闭后连接不可�
     value: '保留数据',
   });
   expect(reopened.db.get(sql`SELECT count(*) AS count FROM __drizzle_migrations`)).toEqual({
-    count: 12,
+    count: 15,
   });
 });
 
@@ -113,7 +113,7 @@ it('从 0005 升级删除旧画布表，保留任务并新增项目注册表与�
   sqlite.close();
   const database = new DatabaseService(new EngineConfig('a'.repeat(64), directory, []));
   databases.push(database);
-  expect(database.getSchemaVersion()).toBe('6');
+  expect(database.getSchemaVersion()).toBe('7');
   expect(
     database.db.get(sql`SELECT staged_outputs_json FROM generation_jobs WHERE id = 'old-job'`),
   ).toEqual({ staged_outputs_json: '[]' });
@@ -199,7 +199,7 @@ it('0008 旧库升级保留地址和历史任务，失败迁移整批回滚且�
   }
   const database = new DatabaseService(new EngineConfig('a'.repeat(64), directory, []));
   databases.push(database);
-  expect(database.getSchemaVersion()).toBe('6');
+  expect(database.getSchemaVersion()).toBe('7');
   expect(database.db.get(sql`SELECT base_url FROM channels WHERE id = 'channel'`)).toEqual({
     base_url: 'https://example.test/v1',
   });

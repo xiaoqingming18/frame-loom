@@ -80,6 +80,8 @@ export const mediaFiles = sqliteTable('media_files', {
   fps: real('fps'),
   codec: text('codec'),
   audioCodec: text('audio_codec'),
+  sampleRate: integer('sample_rate'),
+  channels: integer('channels'),
   createdAt: text('created_at').notNull(),
   ext: text('ext').notNull(),
 });

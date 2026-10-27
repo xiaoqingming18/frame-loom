@@ -5,12 +5,15 @@ import { GenerationFailure, adapterFetch } from './types.js';
 import { imageResponse } from './image-response.js';
 
 const AudioResult = z.object({
-  data: z.object({ audio: z.string().regex(/^[a-f0-9]+$/i) }),
+  data: z.object({ audio: z.string().regex(/^(?:[a-f0-9]{2})+$/i) }),
+  base_resp: z.object({ status_code: z.literal(0) }).optional(),
   extra_info: z
     .object({
       audio_format: z.string().optional(),
       audio_length: z.number().optional(),
       audio_sample_rate: z.number().optional(),
+      usage_characters: z.number().int().nonnegative().optional(),
+      word_count: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });
@@ -49,8 +52,10 @@ export const openaiSpeech: GenerationAdapter = {
 export const minimaxT2a: GenerationAdapter = {
   protocol: 'minimax-t2a',
   async submit(ctx, request) {
-    const { voice_id, speed, format, ...params } = request.params;
-    const baseUrl = ctx.baseUrl.replace(/\/anthropic$/, '');
+    const { voice_id, speed, format, sample_rate } = request.params;
+    const baseUrl = ctx.connection?.contractVersion
+      ? ctx.baseUrl
+      : ctx.baseUrl.replace(/\/anthropic$/, '');
     const response = await adapterFetch(
       ctx,
       resolveModelOperation(baseUrl, ctx.connection, 'minimax-t2a', 'submit'),
@@ -65,7 +70,7 @@ export const minimaxT2a: GenerationAdapter = {
           model: ctx.model,
           text: request.prompt,
           voice_setting: { voice_id, speed },
-          audio_setting: { format, ...params },
+          audio_setting: { format, sample_rate },
         }),
         signal: ctx.signal,
         redirect: 'error',

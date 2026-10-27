@@ -35,6 +35,8 @@ import type { EngineClient } from '@/lib/engine-client';
 import { catalogQuery, channelsQuery, modelsQuery } from '@/lib/model-queries';
 import { kindLabels } from './labels';
 import { CatalogImport } from './catalog-import';
+import { VoicePicker } from './voice-picker';
+import { ModelUpgradeNotice } from './model-upgrade-report';
 
 const protocolLabels: Record<string, string> = {
   'openai-responses': 'OpenAI Responses',
@@ -191,6 +193,7 @@ export function ModelServices({ engineClient: client }: { engineClient: EngineCl
         })}
       </ul>
       <CatalogImport client={client} />
+      <ModelUpgradeNotice client={client} />
     </section>
   );
 }
@@ -612,10 +615,14 @@ function ChannelEditor({
                 !apiKey &&
                 !clearKey &&
                 (headers === null || (!channel.headerNames.length && !headers.length)) &&
-                JSON.stringify(draft) ===
+                JSON.stringify({ ...draft, lastCheck: undefined, lastMediaCheck: undefined }) ===
                   JSON.stringify(
                     models.find((item) => item.id === draft.id)
-                      ? draftFrom(models.find((item) => item.id === draft.id)!)
+                      ? {
+                          ...draftFrom(models.find((item) => item.id === draft.id)!),
+                          lastCheck: undefined,
+                          lastMediaCheck: undefined,
+                        }
                       : null,
                   )
               }
@@ -1013,6 +1020,7 @@ function ModelCard({
       )}
       {draft.id && profile && (
         <MediaTest
+          key={`${draft.id}:${draft.definitionId}:${draft.connectionId}:${draft.upstreamModelId}`}
           client={client}
           modelId={draft.id}
           profile={profile}
@@ -1040,7 +1048,7 @@ function MediaTest({
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('测试');
   const [mode, setMode] = useState(profile.modes[0].id);
-  const [jobId, setJobId] = useState<string>();
+  const [jobId, setJobId] = useState<string | undefined>(check?.jobId);
   const [error, setError] = useState('');
   const [inputs, setInputs] = useState<GenerationRequest['inputs']>([]);
   const [busy, setBusy] = useState(false);
@@ -1068,7 +1076,7 @@ function MediaTest({
     try {
       const result = await client.request('/generation-jobs', GenerationJob, {
         method: 'POST',
-        body: { modelId, mode, prompt, inputs, params, source: 'manual' },
+        body: { modelId, mode, prompt, inputs, params, source: 'test' },
       });
       setJobId(result.id);
       setOpen(false);
@@ -1093,7 +1101,7 @@ function MediaTest({
         }
         onClick={() => setOpen(true)}
       >
-        实际媒体调用测试
+        {profile.kind === 'tts' ? '音色管理与试听' : '实际媒体调用测试'}
       </Button>
       <p className="text-muted-foreground">
         {job.data
@@ -1103,10 +1111,89 @@ function MediaTest({
             : '尚未验证实际媒体调用'}
       </p>
       {job.error && <p role="alert">{job.error.message}</p>}
+      {job.data && (
+        <div className="space-y-2">
+          <p className="break-all text-muted-foreground">
+            调用版本：{job.data.configVersion ?? '历史版本未记录'}
+            {job.data.definitionVersion && ` · 定义 ${job.data.definitionVersion}`}
+          </p>
+          {job.data.outputs.map(
+            (media) =>
+              media.mime.startsWith('audio/') && (
+                <div key={media.sha256} className="space-y-1">
+                  <audio
+                    controls
+                    preload="metadata"
+                    aria-label="语音测试结果"
+                    src={`frame-media://${media.sha256}`}
+                    className="w-full"
+                  />
+                  <p className="text-muted-foreground">
+                    {media.mime} ·{' '}
+                    {media.durationMs == null ? '时长未知' : `${media.durationMs / 1000} 秒`} ·{' '}
+                    {media.sampleRate ?? '未知'} Hz · {media.channels ?? '未知'} 声道
+                  </p>
+                </div>
+              ),
+          )}
+          {job.data.usage != null && (
+            <details>
+              <summary>供应商用量</summary>
+              <pre className="overflow-auto">{JSON.stringify(job.data.usage, null, 2)}</pre>
+            </details>
+          )}
+          {job.data.recoveryAction && job.data.recoveryAction !== 'none' && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void client
+                  .request(`/generation-jobs/${jobId}/resubmit`, GenerationJob, { method: 'POST' })
+                  .then((result) => {
+                    setJobId(result.id);
+                    return job.refetch();
+                  })
+                  .catch((failure: Error) => setError(failure.message))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              恢复测试任务
+            </Button>
+          )}
+          {!['succeeded', 'cancelled'].includes(job.data.status) && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void client
+                  .request(`/generation-jobs/${jobId}/cancel`, GenerationJob, { method: 'POST' })
+                  .then(() => job.refetch())
+                  .catch((failure: Error) => setError(failure.message))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              本地放弃（远端可能仍计费）
+            </Button>
+          )}
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent overlayClassName="z-[51]" className="z-[52] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>实际媒体调用测试</DialogTitle>
+            <DialogTitle>
+              {profile.kind === 'tts' ? '音色管理与试听' : '实际媒体调用测试'}
+            </DialogTitle>
             <DialogDescription>
               将使用已保存的配置向供应商发起一次真实调用，可能计费。草稿改动不会用于测试；成功仅证明本次绑定、模式与参数。
             </DialogDescription>
@@ -1129,52 +1216,63 @@ function MediaTest({
           <Field label="测试提示词">
             <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
           </Field>
-          {profile.params.map((param) => (
-            <Field key={param.key} label={`测试${param.name}`}>
-              {param.type === 'boolean' ? (
-                <NativeSelect
-                  value={String(params[param.key] ?? param.default ?? false)}
-                  onChange={(event) =>
-                    setParams({ ...params, [param.key]: event.target.value === 'true' })
-                  }
-                >
-                  <option value="true">开启</option>
-                  <option value="false">关闭</option>
-                </NativeSelect>
-              ) : param.values ? (
-                <NativeSelect
-                  value={String(params[param.key] ?? param.default)}
-                  onChange={(event) =>
-                    setParams({
-                      ...params,
-                      [param.key]:
-                        param.type === 'number' ? Number(event.target.value) : event.target.value,
-                    })
-                  }
-                >
-                  {param.values.map((value) => (
-                    <option key={String(value)} value={String(value)}>
-                      {String(value)}
-                    </option>
-                  ))}
-                </NativeSelect>
-              ) : (
-                <Input
-                  type={param.type === 'number' ? 'number' : 'text'}
-                  min={param.min}
-                  max={param.max}
-                  value={String(params[param.key] ?? param.default ?? '')}
-                  onChange={(event) =>
-                    setParams({
-                      ...params,
-                      [param.key]:
-                        param.type === 'number' ? Number(event.target.value) : event.target.value,
-                    })
-                  }
-                />
-              )}
-            </Field>
-          ))}
+          {profile.kind === 'tts' && (
+            <VoicePicker
+              key={modelId}
+              client={client}
+              modelId={modelId}
+              value={String(params.voice ?? params.voice_id ?? '')}
+              onChange={(key, value) => setParams({ ...params, [key]: value })}
+            />
+          )}
+          {profile.params
+            .filter((param) => profile.kind !== 'tts' || !['voice', 'voice_id'].includes(param.key))
+            .map((param) => (
+              <Field key={param.key} label={`测试${param.name}`}>
+                {param.type === 'boolean' ? (
+                  <NativeSelect
+                    value={String(params[param.key] ?? param.default ?? false)}
+                    onChange={(event) =>
+                      setParams({ ...params, [param.key]: event.target.value === 'true' })
+                    }
+                  >
+                    <option value="true">开启</option>
+                    <option value="false">关闭</option>
+                  </NativeSelect>
+                ) : param.values ? (
+                  <NativeSelect
+                    value={String(params[param.key] ?? param.default)}
+                    onChange={(event) =>
+                      setParams({
+                        ...params,
+                        [param.key]:
+                          param.type === 'number' ? Number(event.target.value) : event.target.value,
+                      })
+                    }
+                  >
+                    {param.values.map((value) => (
+                      <option key={String(value)} value={String(value)}>
+                        {String(value)}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                ) : (
+                  <Input
+                    type={param.type === 'number' ? 'number' : 'text'}
+                    min={param.min}
+                    max={param.max}
+                    value={String(params[param.key] ?? param.default ?? '')}
+                    onChange={(event) =>
+                      setParams({
+                        ...params,
+                        [param.key]:
+                          param.type === 'number' ? Number(event.target.value) : event.target.value,
+                      })
+                    }
+                  />
+                )}
+              </Field>
+            ))}
           {mode !== 'text' && profile.inputs.length > 0 && (
             <Field label="参考素材（按选择顺序上传）">
               <Input
@@ -1259,6 +1357,7 @@ function MediaTest({
               disabled={
                 busy ||
                 !prompt.trim() ||
+                (profile.kind === 'tts' && !String(params.voice ?? params.voice_id ?? '').trim()) ||
                 (mode !== 'text' && !!profile.inputs.length && !inputs.length)
               }
               onClick={() => void submit()}

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -10,8 +10,8 @@ import {
   ModelOverrides,
   checkGenerationRequest,
   type ChannelModelWrite,
-  type ModelDefinition,
-  type ServiceConnectionDefinition,
+  ModelDefinition,
+  ServiceConnectionDefinition,
 } from '@frame-loom/contracts';
 import { DatabaseService } from '../../core/database/database.service.js';
 import { DomainError } from '../../core/http/domain-error.js';
@@ -19,6 +19,11 @@ import { mediaProfiles, executionProfile } from '../generation/profiles/media-pr
 import { modelCatalog, channelModels, channels, modelDefaults } from './channels.schema.js';
 import { isPublicAddress } from '../generation/public-reference.js';
 import { isIP } from 'node:net';
+import { assertVideoBinding, retiredVideoIds } from './video-retirement.js';
+import { legacyVideoDefinitions } from './video-retirement.js';
+import { appMeta } from '../../core/database/app-meta.schema.js';
+import { mediaProfile } from '../generation/profiles/media-profiles.js';
+import { executionContract } from '../generation/execution-contract.js';
 
 const videoIds: Record<string, string> = {
   'doubao-seedance-2-5-260628': 'seedance-2.5',
@@ -84,8 +89,154 @@ const builtins = (): ModelImportPackage =>
   });
 
 @Injectable()
-export class ModelCatalogService {
+export class ModelCatalogService implements OnModuleInit {
   constructor(private readonly database: DatabaseService) {}
+  onModuleInit() {
+    if (this.database.db.select().from(appMeta).where(eq(appMeta.key, 'model_bindings_v1')).get())
+      return;
+    this.database.db.transaction((tx) => {
+      const current = this.get();
+      const defaults = builtins();
+      const merged = ModelImportPackage.parse({
+        ...current,
+        definitions: [
+          ...new Map(
+            [...defaults.definitions, ...current.definitions].map((value) => [value.id, value]),
+          ).values(),
+        ],
+        connections: [
+          ...new Map(
+            [...defaults.connections, ...current.connections].map((value) => [value.id, value]),
+          ).values(),
+        ],
+      });
+      for (const row of tx.select().from(channelModels).all()) {
+        if (
+          row.kind === 'video' &&
+          (retiredVideoIds.includes(row.upstreamModelId) ||
+            (!row.definitionId && !legacyVideoDefinitions[row.upstreamModelId]))
+        ) {
+          tx.update(channelModels)
+            .set({
+              retired: retiredVideoIds.includes(row.upstreamModelId) ? 'retired' : 'unconfirmed',
+              enabled: false,
+            })
+            .where(eq(channelModels.id, row.id))
+            .run();
+          tx.delete(modelDefaults).where(eq(modelDefaults.channelModelId, row.id)).run();
+          continue;
+        }
+        if (row.definitionId && row.connectionId) continue;
+        if (!row.kind || !row.protocol) continue;
+        const channel = tx.select().from(channels).where(eq(channels.id, row.channelId)).get()!;
+        let baseUrl = row.connection.baseUrl ?? channel.baseUrl;
+        // 仅将旧版本的地址语义固化为显式地址，新配置不继承这些兼容规则。
+        if (!row.connection.contractVersion && !row.connection.baseUrl) {
+          if (row.protocol === 'minimax-t2a') baseUrl = baseUrl.replace(/\/anthropic$/, '');
+          if (row.protocol === 'minimax-video-v2') baseUrl = baseUrl.replace(/\/v1\/?$/, '');
+        }
+        const profile =
+          row.kind === 'chat' ? undefined : mediaProfile({ ...row, protocol: row.protocol });
+        const connectionId = `migrated-${row.id}`;
+        const definitionId = profile ? `migrated-model-${row.id}` : row.protocol;
+        const runtime = profile ? executionContract(row.connection, profile) : undefined;
+        const routes = { ...serviceRoutes[row.protocol], ...row.connection.routes };
+        merged.connections.push(
+          ServiceConnectionDefinition.parse({
+            id: connectionId,
+            name: `${channel.name} · ${row.displayName}`.slice(0, 120),
+            version: 'v1',
+            protocol: row.protocol,
+            baseUrl,
+            routes,
+            auth: 'bearer',
+            operations: [...new Set(['submit', ...Object.keys(routes)])],
+            capabilities: runtime
+              ? { upload: runtime.upload, idempotency: runtime.idempotency, cancel: runtime.cancel }
+              : { upload: 'inline', idempotency: false, cancel: false },
+            ...(runtime ? { runtime } : {}),
+            ...(row.connection.credentialRef
+              ? { credentialRef: row.connection.credentialRef }
+              : {}),
+          }),
+        );
+        if (profile)
+          merged.definitions.push(
+            ModelDefinition.parse({
+              id: definitionId,
+              name: row.displayName.slice(0, 120),
+              version: 'v1',
+              capabilityVersion: 'v1',
+              kind: row.kind,
+              protocol: row.protocol,
+              aliases: row.upstreamModelId.length <= 200 ? [row.upstreamModelId] : [],
+              profile,
+              operations: Object.keys(routes).map((id) => ({
+                id,
+                status: 'supported',
+              })) as ModelDefinition['operations'],
+            }),
+          );
+        tx.update(channelModels)
+          .set({ definitionId, connectionId, lastCheck: null, lastMediaCheck: null })
+          .where(eq(channelModels.id, row.id))
+          .run();
+      }
+      const activeDefinitions = new Set(
+        tx
+          .select()
+          .from(channelModels)
+          .all()
+          .filter((row) => !row.retired)
+          .map((row) => row.definitionId),
+      );
+      merged.definitions = merged.definitions.flatMap((definition) => {
+        if (definition.kind !== 'video') return [definition];
+        const profile = ModelProfile.parse(definition.profile);
+        const matchIds = profile.matchIds.filter((id) => !retiredVideoIds.includes(id));
+        if (
+          retiredVideoIds.includes(definition.id) ||
+          (profile.matchIds.length && !matchIds.length && !activeDefinitions.has(definition.id))
+        )
+          return [];
+        return [
+          {
+            ...definition,
+            aliases: definition.aliases.filter((id) => !retiredVideoIds.includes(id)),
+            profile: { ...profile, matchIds },
+          },
+        ];
+      });
+      merged.bindings = merged.bindings.filter(
+        (binding) =>
+          merged.definitions.some((definition) => definition.id === binding.modelDefinitionId) &&
+          !retiredVideoIds.includes(binding.upstreamModelId),
+      );
+      const report = tx
+        .select()
+        .from(channelModels)
+        .all()
+        .filter((row) => row.retired)
+        .map((row) => ({
+          id: row.id,
+          channelId: row.channelId,
+          name: row.displayName,
+          upstreamModelId: row.upstreamModelId,
+          reason: row.retired,
+        }));
+      tx.insert(appMeta)
+        .values({ key: 'model_upgrade_report', value: JSON.stringify(report) })
+        .run();
+      tx.insert(modelCatalog)
+        .values({ id: 'catalog', package: ModelImportPackage.parse(merged) })
+        .onConflictDoUpdate({
+          target: modelCatalog.id,
+          set: { package: ModelImportPackage.parse(merged) },
+        })
+        .run();
+      tx.insert(appMeta).values({ key: 'model_bindings_v1', value: '1' }).run();
+    });
+  }
   get() {
     return (
       this.database.db.select().from(modelCatalog).where(eq(modelCatalog.id, 'catalog')).get()
@@ -230,12 +381,16 @@ export class ModelCatalogService {
       throw new DomainError('INVALID_DEFINITION', 422, '模型尚无可执行的提交操作');
   }
   resolve(input: ChannelModelWrite, catalog = this.get()): ChannelModelWrite {
-    if (!input.definitionId && !input.connectionId) return input;
+    if (!input.definitionId && !input.connectionId) {
+      assertVideoBinding(input);
+      return input;
+    }
     const definition = catalog.definitions.find((item) => item.id === input.definitionId);
     const connection = catalog.connections.find((item) => item.id === input.connectionId);
     if (!definition || !connection || definition.protocol !== connection.protocol)
       throw new DomainError('INVALID_BINDING', 422, '模型定义或接入不存在，或协议不匹配');
     this.validateDefinition(definition);
+    assertVideoBinding({ ...input, kind: definition.kind });
     if (!connection.operations.includes('submit'))
       throw new DomainError('INVALID_BINDING', 422, '接入未声明提交能力');
     const profile = definition.kind === 'chat' ? undefined : ModelProfile.parse(definition.profile);
@@ -312,6 +467,15 @@ export class ModelCatalogService {
       return [...result.values()];
     };
     for (const definition of incoming.definitions) {
+      if (
+        definition.kind === 'video' &&
+        [
+          definition.id,
+          ...(definition.aliases ?? []),
+          ...ModelProfile.parse(definition.profile).matchIds,
+        ].some((id) => retiredVideoIds.includes(id))
+      )
+        throw new DomainError('VIDEO_MODEL_RETIRED', 422, '导入不能恢复已退出的视频型号');
       this.validateDefinition(definition);
       const previous = current.definitions.find((item) => item.id === definition.id);
       if (
@@ -387,7 +551,7 @@ export class ModelCatalogService {
     };
     // 校验现有绑定，防止定义更新把正常配置变成半可用状态。
     for (const row of this.database.db.select().from(channelModels).all())
-      if (row.definitionId || row.connectionId)
+      if (!row.retired && (row.definitionId || row.connectionId))
         this.resolve({ ...row, protocol: row.protocol || null }, merged);
     // 账号引用只能指向本机已有渠道，不从包内接收密钥。
     const ids = incoming.bindings.flatMap((binding) => (binding.id ? [binding.id] : []));
@@ -416,6 +580,16 @@ export class ModelCatalogService {
         },
         merged,
       );
+      if (
+        binding.id &&
+        this.database.db.select().from(channelModels).where(eq(channelModels.id, binding.id)).get()
+          ?.retired
+      )
+        throw new DomainError(
+          'VIDEO_MODEL_RETIRED',
+          422,
+          '退出绑定只能恢复历史任务，不能通过导入重新启用',
+        );
       if (
         binding.id &&
         this.database.db.select().from(channelModels).where(eq(channelModels.id, binding.id)).get()

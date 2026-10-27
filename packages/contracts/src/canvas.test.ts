@@ -5,7 +5,30 @@ import {
   CanvasDocument,
   CanvasMediaData,
   CanvasView,
+  CanvasMediaVersion,
 } from './canvas.js';
+import { MediaFile } from './generation.js';
+
+it('媒体上传结果可直接存为画布版本，保留音频元数据并兼容非音频空值', () => {
+  const uploaded = MediaFile.parse({
+    sha256: 'a'.repeat(64),
+    mime: 'audio/wav',
+    bytes: 32044,
+    width: null,
+    height: null,
+    durationMs: 1000,
+    sampleRate: 16000,
+    channels: 1,
+    createdAt: '2026-10-27T00:00:00Z',
+  });
+  expect(CanvasMediaVersion.parse({ ...uploaded })).toMatchObject({
+    sampleRate: 16000,
+    channels: 1,
+  });
+  expect(
+    CanvasMediaVersion.parse({ ...uploaded, mime: 'image/png', sampleRate: null, channels: null }),
+  ).toMatchObject({ sampleRate: null, channels: null });
+});
 
 const sha = 'a'.repeat(64);
 const media = (extra = {}) => ({

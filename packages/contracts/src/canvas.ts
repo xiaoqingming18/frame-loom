@@ -32,6 +32,8 @@ export const CanvasMediaVersion = z.strictObject({
   fps: z.number().positive().nullable().optional(),
   codec: z.string().nullable().optional(),
   audioCodec: z.string().nullable().optional(),
+  sampleRate: z.number().int().positive().nullable().optional(),
+  channels: z.number().int().positive().nullable().optional(),
   posterSha256: Sha256.optional(),
   jobId: z.string().uuid().optional(),
   createdAt: z.string().datetime(),

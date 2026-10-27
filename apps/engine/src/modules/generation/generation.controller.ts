@@ -6,6 +6,7 @@ import { GenerationService } from './generation.service.js';
 import { mediaProfiles } from './profiles/media-profiles.js';
 import { MediaService } from './media.service.js';
 import { DomainError } from '../../core/http/domain-error.js';
+import { retiredVideoIds } from '../channels/video-retirement.js';
 
 @Controller()
 export class GenerationController {
@@ -14,7 +15,10 @@ export class GenerationController {
     private readonly media: MediaService,
   ) {}
   @Get('model-profiles') profiles() {
-    return mediaProfiles;
+    return mediaProfiles.filter(
+      (profile) =>
+        profile.kind !== 'video' || !profile.matchIds.some((id) => retiredVideoIds.includes(id)),
+    );
   }
   @Post('media') upload(@Req() request: Request) {
     if (request.headers['content-type'] !== 'application/octet-stream')

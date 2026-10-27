@@ -9,6 +9,7 @@ let baseUrl = '';
 const requests: { url?: string; authorization?: string; body: string }[] = [];
 const mp3 = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0]);
 let unauthorized = false;
+let audioResponse: unknown;
 beforeAll(async () => {
   server = createServer((request, response) => {
     if (
@@ -33,10 +34,12 @@ beforeAll(async () => {
       } else if (request.url === '/v1/t2a_v2') {
         response.setHeader('Content-Type', 'application/json');
         response.end(
-          JSON.stringify({
-            data: { audio: mp3.toString('hex') },
-            extra_info: { audio_format: 'mp3' },
-          }),
+          JSON.stringify(
+            audioResponse ?? {
+              data: { audio: mp3.toString('hex') },
+              extra_info: { audio_format: 'mp3' },
+            },
+          ),
         );
       } else {
         response.setHeader('Content-Type', 'audio/mpeg');
@@ -103,6 +106,29 @@ it('posts MiniMax T2A settings and decodes the hex audio payload', async () => {
     text: '你好',
     voice_setting: { voice_id: 'male-qn-qingse', speed: 1 },
   });
+});
+it.each([
+  { data: { audio: 'abc' } },
+  { data: { audio: mp3.toString('hex') }, base_resp: { status_code: 1000 } },
+])('rejects malformed hex or provider business errors', async (payload) => {
+  audioResponse = payload;
+  try {
+    await expect(
+      minimaxT2a.submit(
+        { ...context, baseUrl: baseUrl.replace(/\/v1$/, '') },
+        {
+          modelId: '00000000-0000-4000-8000-000000000000',
+          mode: 'text',
+          prompt: '测试',
+          params: { voice_id: 'private' },
+          inputs: [],
+          source: 'test',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  } finally {
+    audioResponse = undefined;
+  }
 });
 it('classifies authentication failures without exposing the upstream body', async () => {
   unauthorized = true;

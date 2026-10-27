@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, isNull, and, notInArray } from 'drizzle-orm';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -18,6 +18,8 @@ import { channels, channelModels, modelDefaults } from './channels.schema.js';
 import { ModelCatalogService } from './model-catalog.service.js';
 import { mediaProfile } from '../generation/profiles/media-profiles.js';
 import { executionContract } from '../generation/execution-contract.js';
+import { generationJobs } from '../generation/generation.schema.js';
+import { appMeta } from '../../core/database/app-meta.schema.js';
 
 @Injectable()
 export class ChannelsRepository {
@@ -72,6 +74,87 @@ export class ChannelsRepository {
         : {},
     };
   }
+  isRetired(id: string) {
+    const row = this.db.select().from(channelModels).where(eq(channelModels.id, id)).get();
+    return !row || !!row.retired;
+  }
+  private retainedJobs() {
+    return this.db
+      .select()
+      .from(generationJobs)
+      .where(notInArray(generationJobs.status, ['succeeded', 'cancelled']))
+      .all()
+      .filter(
+        (row) =>
+          row.status !== 'failed' ||
+          !!row.rawResponse?.length ||
+          (!!row.remoteTaskId && row.remoteStatus !== 'failed'),
+      );
+  }
+  private protectChannel(id: string) {
+    const models = this.db
+      .select()
+      .from(channelModels)
+      .where(eq(channelModels.channelId, id))
+      .all();
+    if (
+      this.retainedJobs().some(
+        (job) =>
+          job.snapshot?.channelId === id ||
+          job.snapshot?.connection.credentialRef === id ||
+          (!job.snapshot && models.some((model) => model.id === job.channelModelId)),
+      )
+    )
+      throw new DomainError(
+        'RECOVERY_REFERENCE',
+        409,
+        '历史任务仍需该渠道与凭据，请先恢复或本地放弃任务',
+      );
+  }
+  retirementReport() {
+    this.cleanupRetired();
+    const report = this.db
+      .select()
+      .from(appMeta)
+      .where(eq(appMeta.key, 'model_upgrade_report'))
+      .get();
+    const entries = z
+      .array(
+        z.object({
+          id: z.string(),
+          channelId: z.string(),
+          name: z.string(),
+          upstreamModelId: z.string(),
+          reason: z.string(),
+        }),
+      )
+      .parse(report ? JSON.parse(report.value) : []);
+    const jobs = this.retainedJobs();
+    const present = new Set(
+      this.db
+        .select({ id: channelModels.id })
+        .from(channelModels)
+        .all()
+        .map((model) => model.id),
+    );
+    return entries.map((entry) => ({
+      ...entry,
+      bindingPresent: present.has(entry.id),
+      tasks: jobs
+        .filter((job) => job.channelModelId === entry.id)
+        .map((job) => ({
+          id: job.id,
+          status: job.status,
+          canRecover: !!job.snapshot && (!!job.remoteTaskId || !!job.rawResponse?.length),
+        })),
+    }));
+  }
+  cleanupRetired() {
+    const jobs = this.retainedJobs();
+    for (const model of this.db.select().from(channelModels).all())
+      if (model.retired === 'retired' && !jobs.some((job) => job.channelModelId === model.id))
+        this.db.delete(channelModels).where(eq(channelModels.id, model.id)).run();
+  }
   credentialFingerprint(id: string) {
     const { apiKey, headers } = this.credentials(id);
     return createHash('sha256')
@@ -115,6 +198,20 @@ export class ChannelsRepository {
   }
   saveChannel(input: Partial<ChannelWrite>, existingId?: string) {
     if (existingId) this.channelRow(existingId);
+    if (
+      existingId &&
+      (input.apiKey !== undefined || input.headers !== undefined || input.enabled === false)
+    ) {
+      const current = this.credentials(existingId);
+      const canonical = (headers: Record<string, string>) =>
+        JSON.stringify(Object.entries(headers).sort(([a], [b]) => a.localeCompare(b)));
+      if (
+        (input.apiKey !== undefined && input.apiKey !== current.apiKey) ||
+        (input.headers !== undefined && canonical(input.headers) !== canonical(current.headers)) ||
+        (input.enabled === false && current.channel.enabled)
+      )
+        this.protectChannel(existingId);
+    }
     const id = existingId ?? randomUUID();
     const now = new Date().toISOString();
     const { apiKey, headers, models, ...values } = input;
@@ -187,7 +284,7 @@ export class ChannelsRepository {
       tx
         .select()
         .from(channelModels)
-        .where(eq(channelModels.channelId, channelId))
+        .where(and(eq(channelModels.channelId, channelId), isNull(channelModels.retired)))
         .all()
         .map((row) => [row.id, row]),
     );
@@ -197,6 +294,12 @@ export class ChannelsRepository {
         throw new DomainError('MODEL_NOT_FOUND', 404, '模型不存在或不属于该渠道');
     // 先删除再写入，避免改名或换协议时与即将删除的行冲突唯一约束。
     const removed = [...previous.keys()].filter((id) => !kept.has(id));
+    if (this.retainedJobs().some((job) => removed.includes(job.channelModelId)))
+      throw new DomainError(
+        'RECOVERY_REFERENCE',
+        409,
+        '待删除模型仍有未处理任务，请先恢复或本地放弃',
+      );
     if (removed.length) tx.delete(channelModels).where(inArray(channelModels.id, removed)).run();
     for (const { id, ...model } of models) {
       const values = {
@@ -223,20 +326,38 @@ export class ChannelsRepository {
   }
   deleteChannel(id: string) {
     this.channelRow(id);
+    this.protectChannel(id);
+    if (
+      this.listModels().some(
+        (model) => model.connection?.credentialRef === id && model.channelId !== id,
+      )
+    )
+      throw new DomainError(
+        'CREDENTIAL_REFERENCE',
+        409,
+        '其他模型仍引用该渠道凭据，请先更改其接入',
+      );
     this.db.delete(channels).where(eq(channels.id, id)).run();
     return { deleted: true as const };
   }
   listModels(channelId?: string) {
+    this.cleanupRetired();
     if (channelId) this.channelRow(channelId);
     return this.db
       .select()
       .from(channelModels)
-      .where(channelId ? eq(channelModels.channelId, channelId) : undefined)
+      .where(
+        channelId
+          ? and(eq(channelModels.channelId, channelId), isNull(channelModels.retired))
+          : isNull(channelModels.retired),
+      )
       .all()
       .map((row) => this.effectiveModel(row));
   }
   private effectiveModel(row: typeof channelModels.$inferSelect) {
-    const input = { ...row, protocol: row.protocol || null, connection: row.connection ?? {} };
+    const { retired, ...fields } = row;
+    if (retired) throw new DomainError('VIDEO_MODEL_RETIRED', 422, '旧型号已退出');
+    const input = { ...fields, protocol: row.protocol || null, connection: row.connection ?? {} };
     const resolved = this.catalog.resolve(input);
     let effectiveProfile;
     if (resolved.kind && resolved.kind !== 'chat' && resolved.protocol) {
@@ -265,6 +386,8 @@ export class ChannelsRepository {
   getModel(id: string) {
     const row = this.db.select().from(channelModels).where(eq(channelModels.id, id)).get();
     if (!row) throw new DomainError('MODEL_NOT_FOUND', 404, '模型不存在');
+    if (row.retired)
+      throw new DomainError('VIDEO_MODEL_RETIRED', 422, '旧型号已退出，仅可恢复历史任务');
     return this.effectiveModel(row);
   }
   saveModel(channelId: string, input: ChannelModelWrite, id = randomUUID()) {
@@ -317,7 +440,10 @@ export class ChannelsRepository {
     throw error;
   }
   deleteModel(id: string) {
-    this.getModel(id);
+    const row = this.db.select().from(channelModels).where(eq(channelModels.id, id)).get();
+    if (!row) return { deleted: true as const };
+    if (this.retainedJobs().some((job) => job.channelModelId === id))
+      throw new DomainError('RECOVERY_REFERENCE', 409, '任务仍引用该绑定，请先恢复或本地放弃任务');
     this.db.delete(channelModels).where(eq(channelModels.id, id)).run();
     return { deleted: true as const };
   }

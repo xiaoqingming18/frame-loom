@@ -142,7 +142,7 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
     expect(uploads).toBe(1);
     repository().updateModel(model.id, {
       ...model,
-      upstreamModelId: 'changed-model',
+      upstreamModelId: 'seedance-2.0-token',
       connection: { baseUrl: 'http://127.0.0.1:1/wrong' },
     });
     await app!.close();
@@ -171,24 +171,22 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
     expect(uploads).toBe(2);
     // 凭据变更隔离上传记录；旧任务暂停，恢复原凭据才能继续。
     const fourth = await create();
+    expect(() => repository().saveChannel({ apiKey: 'new-secret' }, channel.id)).toThrow(
+      '历史任务仍需',
+    );
+    await wait(fourth.id, 'succeeded');
     repository().saveChannel({ apiKey: 'new-secret' }, channel.id);
-    await wait(fourth.id, 'paused');
-    expect(service().get(fourth.id).errorCode).toBe('MODEL_DISABLED');
     const fifth = await create();
     await wait(fifth.id, 'succeeded');
     expect(uploads).toBe(3);
     repository().saveChannel({ apiKey: 'original-secret' }, channel.id);
-    await service().resubmit(fourth.id);
-    await wait(fourth.id, 'succeeded');
     expect(uploads).toBe(3);
     const before = submissions.length;
     const deletedKey = await create();
-    repository().saveChannel({ apiKey: '' }, channel.id);
-    await wait(deletedKey.id, 'paused');
-    expect(service().get(deletedKey.id).errorCode).toBe('MODEL_DISABLED');
+    expect(() => repository().saveChannel({ apiKey: '' }, channel.id)).toThrow('历史任务仍需');
+    service().cancel(deletedKey.id);
     expect(submissions).toHaveLength(before);
     repository().saveChannel({ apiKey: 'original-secret' }, channel.id);
-    service().cancel(deletedKey.id);
     const result = service().get(first.id);
     db()
       .update(generationJobs)

@@ -25,6 +25,7 @@ export const channelModels = sqliteTable(
   'channel_models',
   {
     id: text('id').primaryKey(),
+    retired: text('retired'),
     definitionId: text('definition_id'),
     connectionId: text('connection_id'),
     lastMediaCheck: text('last_media_check_json', { mode: 'json' }).$type<
@@ -64,4 +65,13 @@ export const modelCatalog = sqliteTable('model_catalog', {
   package: text('package_json', { mode: 'json' })
     .$type<import('@frame-loom/contracts').ModelImportPackage>()
     .notNull(),
+});
+
+export const ttsVoices = sqliteTable('tts_voices', {
+  id: text('id').primaryKey(),
+  owner: text('owner').notNull(),
+  protocol: text('protocol').notNull(),
+  model: text('model').notNull(),
+  voiceId: text('voice_id').notNull(),
+  name: text('name').notNull(),
 });

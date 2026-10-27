@@ -16,6 +16,8 @@ import { GenerationAdapters, GenerationService } from './generation.service.js';
 import { generationJobs, mediaFiles } from './generation.schema.js';
 import { MediaService } from './media.service.js';
 import { GenerationFailure, type AdapterResult } from './adapters/types.js';
+import { SecretCipher } from '../../core/crypto/secret-cipher.js';
+import { channels } from '../channels/channels.schema.js';
 
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1cAAAAASUVORK5CYII=';
@@ -572,8 +574,17 @@ it('两个渠道的模型共享接入账号配额，冻结凭据引用且换账�
   expect(context.job(second.id).status).toBe('pending');
   release!();
   await context.waitStatus(first.id, 'running');
-  repository.saveChannel({ ...account, apiKey: 'changed-secret' }, account.id);
+  expect(() =>
+    repository.saveChannel({ ...account, apiKey: 'changed-secret' }, account.id),
+  ).toThrow('历史任务仍需');
+  // 绕过正常写入口模拟数据库被外部修改，仍保留指纹失效保护。
   const db = context.app.get(DatabaseService).db;
+  db.update(channels)
+    .set({
+      apiKeyCipher: context.app.get(SecretCipher).encrypt('changed-secret', 'channels', account.id),
+    })
+    .where(eq(channels.id, account.id))
+    .run();
   db.update(generationJobs).set({ nextPollAt: null }).where(eq(generationJobs.id, first.id)).run();
   await context.waitStatus(first.id, 'paused');
   expect(context.job(first.id).errorMessage).toContain('凭据');

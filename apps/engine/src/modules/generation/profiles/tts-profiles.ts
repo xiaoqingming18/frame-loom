@@ -48,7 +48,7 @@ const definitions = [
     name: 'MiniMax T2A',
     ids: ['speech-2.6-hd', 'speech-2.6-turbo', 'speech-02-hd', 'speech-02-turbo'],
     params: [
-      { key: 'voice_id', name: '音色 ID', type: 'string', default: 'male-qn-qingse' },
+      { key: 'voice_id', name: '音色 ID', type: 'string', default: '' },
       { key: 'format', name: '格式', type: 'enum', values: ['mp3', 'wav'], default: 'mp3' },
       { key: 'speed', name: '语速', type: 'number', min: 0.5, max: 2, default: 1 },
       {
@@ -89,3 +89,18 @@ export const ttsProfiles = definitions.flatMap((item) => [
     runtime,
   }),
 ]);
+
+// 旧版 tts-1 不支持新增音色；能力按精确型号分开，避免默认选择不可用音色。
+const openai = ttsProfiles.find((profile) => profile.id === 'openai-speech-default')!;
+openai.matchIds = ['gpt-4o-mini-tts'];
+ttsProfiles.push({
+  ...structuredClone(openai),
+  id: 'openai-speech-tts-1',
+  name: 'OpenAI TTS 1',
+  matchIds: ['tts-1', 'tts-1-hd'],
+  params: openai.params.map((param) =>
+    param.key === 'voice'
+      ? { ...param, values: ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer'] }
+      : param,
+  ),
+});

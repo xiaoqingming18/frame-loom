@@ -108,6 +108,8 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     const row = this.row(id);
     return GenerationJob.parse({
       ...row,
+      configVersion: row.snapshot?.configVersion,
+      definitionVersion: row.snapshot?.definitionVersion,
       recoveryAction: this.recoveryAction(row),
       canCancelRemote:
         !!row.snapshot &&
@@ -131,6 +133,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     )
       return 'none';
     if (row.remoteTaskId) return this.registry.get(row.profile.protocol).query ? 'query' : 'none';
+    if (this.channels.isRetired(row.channelModelId)) return 'none';
     if (row.status === 'submit_unknown')
       return executionContract(row.snapshot.connection, row.profile).idempotency
         ? 'idempotent_submit'
@@ -198,6 +201,11 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     request.params = Object.fromEntries(
       profile.params.map((param) => [param.key, request.params[param.key] ?? param.default]),
     );
+    if (
+      profile.kind === 'tts' &&
+      !String(request.params.voice ?? request.params.voice_id ?? '').trim()
+    )
+      throw new DomainError('VOICE_REQUIRED', 422, '请选择或填写音色 ID');
     for (const item of request.inputs) {
       const stored = item.sha256
         ? (await this.media.resolveAt(item.sha256, root)).media
@@ -315,7 +323,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   }
   cancel(id: string) {
     const row = this.row(id);
-    if (['succeeded', 'failed', 'cancelled'].includes(row.status)) return this.get(id);
+    if (['succeeded', 'cancelled'].includes(row.status)) return this.get(id);
     this.update(id, {
       status: 'cancelled',
       finishedAt: new Date().toISOString(),
@@ -324,6 +332,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       errorMessage: '已在本地放弃；远端可能仍在运行并计费',
     });
     this.active.get(id)?.controller.abort();
+    this.channels.cleanupRetired();
     return this.get(id);
   }
   async cancelRemote(id: string) {
@@ -442,6 +451,8 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       !row.rawResponse?.length &&
       row.errorCode !== 'UPLOAD_UNKNOWN'
     ) {
+      if (this.channels.isRetired(row.channelModelId))
+        throw new DomainError('VIDEO_MODEL_RETIRED', 422, '旧型号只可查询或下载，不能继续提交');
       this.context(row, new AbortController().signal);
       this.update(id, {
         status: 'pending',
@@ -689,6 +700,16 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   }
   private async execute(row: JobRow, signal: AbortSignal) {
     try {
+      if (
+        this.channels.isRetired(row.channelModelId) &&
+        !row.remoteTaskId &&
+        !row.rawResponse?.length
+      )
+        throw new GenerationFailure(
+          'invalid_params',
+          'VIDEO_MODEL_RETIRED',
+          '旧型号已退出，只允许查询、下载或本地放弃；不会重新提交',
+        );
       if (Date.now() > Date.parse(row.deadlineAt) && row.status !== 'downloading')
         throw new GenerationFailure('timeout', 'WAIT_TIMEOUT', '等待超时，可尝试重新查询');
       const adapter = this.registry.get(row.profile.protocol);
@@ -861,6 +882,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       if (result.status === 'failed') {
         this.update(row.id, {
           status: 'failed',
+          remoteStatus: 'failed',
           errorCategory: result.category,
           errorCode: result.code,
           errorMessage: result.message,

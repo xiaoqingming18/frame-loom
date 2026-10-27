@@ -13,6 +13,8 @@ const Probe = z.object({
       width: z.number().optional(),
       height: z.number().optional(),
       avg_frame_rate: z.string().optional(),
+      sample_rate: z.string().optional(),
+      channels: z.number().int().positive().optional(),
     }),
   ),
 });
@@ -64,6 +66,8 @@ export async function probeMedia(path: string) {
       fps,
       codec: video?.codec_name ?? audio?.codec_name ?? null,
       audioCodec: audio?.codec_name ?? null,
+      sampleRate: audio?.sample_rate ? Number(audio.sample_rate) : null,
+      channels: audio?.channels ?? null,
     };
   } catch {
     throw new GenerationFailure(
