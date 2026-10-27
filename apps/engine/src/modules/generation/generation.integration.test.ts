@@ -5,7 +5,7 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { GenerationJob, GenerationRequest, type ImageProtocol } from '@frame-loom/contracts';
 import { createEngine } from '../../application.js';
 import { EngineConfig } from '../../core/config/config.js';
@@ -15,7 +15,7 @@ import { ChannelsRepository } from '../channels/channels.repository.js';
 import { GenerationAdapters, GenerationService } from './generation.service.js';
 import { generationJobs, mediaFiles } from './generation.schema.js';
 import { MediaService } from './media.service.js';
-import type { AdapterResult } from './adapters/types.js';
+import { GenerationFailure, type AdapterResult } from './adapters/types.js';
 
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1cAAAAASUVORK5CYII=';
@@ -45,6 +45,16 @@ async function setup(
     'success';
   let release: (() => void) | undefined;
   const upstream = createServer((req, res) => {
+    if (req.url === '/cancel/remote-1') {
+      res
+        .writeHead(200, { 'Content-Type': 'application/json' })
+        .end(JSON.stringify({ status: 'cancelled' }));
+      return;
+    }
+    if (req.url === '/cancel-unknown/remote-1') {
+      res.destroy();
+      return;
+    }
     if (req.url === '/result.jpg') {
       downloads++;
       // 故意声明错误类型，入库必须以真实字节为准。
@@ -385,4 +395,240 @@ it('重新提交产生新任务；同步图片不提供重新查询；非法参�
   expect(context.submissions).toBe(2);
   const output = await context.app.get(MediaService).save({ data: png, mime: 'image/png' });
   expect(output.width).toBe(1);
+});
+it('部分产物恢复只下载未完成项，删除记录保留媒体，本地放弃与远端取消分离', async () => {
+  const context = await setup();
+  const service = context.app.get(GenerationService);
+  const media = context.app.get(MediaService);
+  const original = media.save.bind(media);
+  let downloads = 0;
+  const save = vi.spyOn(media, 'save').mockImplementation(async (...args) => {
+    downloads++;
+    if (downloads === 2)
+      throw new GenerationFailure('invalid_params', 'FIXTURE_DOWNLOAD', '下载失败');
+    return original(...args);
+  });
+  context.app.get(GenerationAdapters).adapters.set('openai-images', {
+    protocol: 'openai-images',
+    submit() {
+      return Promise.resolve({
+        status: 'succeeded',
+        outputs: [
+          { data: png, mime: 'image/png' },
+          { data: arkFixture.jpegBase64, mime: 'image/jpeg' },
+        ],
+      });
+    },
+  });
+  const first = await context.create();
+  await context.waitStatus(first.id, 'download_failed');
+  expect(context.job(first.id).outputs).toHaveLength(1);
+  service.requery(first.id);
+  const completed = await context.waitStatus(first.id, 'succeeded');
+  expect(downloads).toBe(3);
+  expect(completed.outputs).toHaveLength(2);
+  const hashes = completed.outputs.map((item) => item.sha256);
+  service.remove(first.id);
+  expect(() => service.get(first.id)).toThrow('不存在');
+  for (const hash of hashes) expect(media.get(hash).bytes).toBeGreaterThan(0);
+  save.mockRestore();
+
+  context.setMode('hold');
+  context.app.get(GenerationAdapters).adapters.set('openai-images', {
+    protocol: 'openai-images',
+    submit() {
+      return Promise.resolve({
+        status: 'running',
+        remoteTaskId: 'remote-1',
+        remoteStatus: 'processing',
+      });
+    },
+    query() {
+      return Promise.resolve({
+        status: 'running',
+        remoteTaskId: 'remote-1',
+        remoteStatus: 'processing',
+      });
+    },
+  });
+  const second = await context.create();
+  await context.waitStatus(second.id, 'running');
+  expect(() => service.remove(second.id)).toThrow('先本地放弃');
+  await expect(service.cancelRemote(second.id)).rejects.toMatchObject({
+    code: 'CANCEL_UNAVAILABLE',
+  });
+  expect(service.cancel(second.id).errorMessage).toContain('可能仍在运行并计费');
+  await expect
+    .poll(() => {
+      try {
+        service.remove(second.id);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .toBe(true);
+});
+
+it('产物链接过期后只查询，刷新列表换序仍归档全部产物且不重复生成', async () => {
+  const context = await setup();
+  const media = context.app.get(MediaService);
+  const original = media.save.bind(media);
+  let submissions = 0;
+  let queries = 0;
+  const first = { data: png, mime: 'image/png' };
+  const second = { data: arkFixture.jpegBase64, mime: 'image/jpeg' };
+  vi.spyOn(media, 'save').mockImplementation((...args) => {
+    if (args[0].url?.endsWith('/expired'))
+      return Promise.reject(new GenerationFailure('upstream', 'DOWNLOAD_410', '链接过期'));
+    return original(...args);
+  });
+  context.app.get(GenerationAdapters).adapters.set('openai-images', {
+    protocol: 'openai-images',
+    submit() {
+      submissions++;
+      return Promise.resolve({
+        status: 'running',
+        remoteTaskId: 'remote-1',
+        remoteStatus: 'processing',
+      });
+    },
+    query() {
+      queries++;
+      return Promise.resolve({
+        status: 'succeeded',
+        outputs:
+          queries === 1
+            ? [first, { url: `${context.remote}/expired`, mime: 'image/jpeg' }]
+            : [second, first],
+      });
+    },
+  });
+  const job = await context.create();
+  const result = await context.waitStatus(job.id, 'succeeded');
+  expect(submissions).toBe(1);
+  expect(queries).toBe(2);
+  expect(result.outputs.map((item) => item.mime).sort()).toEqual(['image/jpeg', 'image/png']);
+});
+
+it('两个渠道的模型共享接入账号配额，冻结凭据引用且换账号密钥后暂停', async () => {
+  const context = await setup();
+  const repository = context.app.get(ChannelsRepository);
+  const account = repository.saveChannel({
+    name: '共享账号',
+    apiFormat: 'openai-completions',
+    baseUrl: 'https://unused.example',
+    apiKey: 'shared-secret',
+    enabled: true,
+  });
+  const connection = {
+    credentialRef: account.id,
+    runtime: {
+      upload: 'inline' as const,
+      idempotency: false,
+      cancel: false,
+      concurrency: 1,
+      downloadAuth: 'none' as const,
+      uploadReuseMs: 3600000,
+    },
+  };
+  const firstModel = repository.updateModel(context.model.id, { ...context.model, connection });
+  const other = repository.saveChannel({
+    name: '另一渠道',
+    apiFormat: 'openai-completions',
+    baseUrl: context.remote,
+    apiKey: 'other-secret',
+    enabled: true,
+  });
+  const secondModel = repository.saveModel(other.id, {
+    ...firstModel,
+    upstreamModelId: 'gpt-image-1-other',
+  });
+  let submissions = 0;
+  let release: (() => void) | undefined;
+  context.app.get(GenerationAdapters).adapters.set('openai-images', {
+    protocol: 'openai-images',
+    async submit(ctx) {
+      submissions++;
+      expect(ctx.apiKey).toBe('shared-secret');
+      expect(ctx.baseUrl).toBe(context.remote);
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { status: 'running', remoteTaskId: 'shared-remote', remoteStatus: 'processing' };
+    },
+    query() {
+      return Promise.resolve({
+        status: 'running',
+        remoteTaskId: 'shared-remote',
+        remoteStatus: 'processing',
+      });
+    },
+  });
+  const first = await context.create();
+  const second = await context.create({ modelId: secondModel.id });
+  await expect.poll(() => submissions).toBe(1);
+  await context.waitStatus(first.id, 'submitting');
+  expect(context.job(second.id).status).toBe('pending');
+  release!();
+  await context.waitStatus(first.id, 'running');
+  repository.saveChannel({ ...account, apiKey: 'changed-secret' }, account.id);
+  const db = context.app.get(DatabaseService).db;
+  db.update(generationJobs).set({ nextPollAt: null }).where(eq(generationJobs.id, first.id)).run();
+  await context.waitStatus(first.id, 'paused');
+  expect(context.job(first.id).errorMessage).toContain('凭据');
+  // 换密钥后第二个任务也不能使用已冻结的旧凭据继续提交。
+  await context.waitStatus(second.id, 'paused');
+  expect(submissions).toBe(1);
+});
+it('远端取消只在明确回执后终止，未知回执保留可查询状态且不自动重发', async () => {
+  const context = await setup();
+  const service = context.app.get(GenerationService);
+  const db = context.app.get(DatabaseService).db;
+  const repository = context.app.get(ChannelsRepository);
+  repository.updateModel(context.model.id, {
+    ...context.model,
+    connection: {
+      routes: { cancel: 'cancel/{id}' },
+      runtime: {
+        upload: 'inline',
+        concurrency: 1,
+        idempotency: false,
+        cancel: true,
+        downloadAuth: 'none',
+        uploadReuseMs: 3600000,
+      },
+    },
+  });
+  for (const confirmed of [true, false]) {
+    const job = await context.create();
+    const row = db.select().from(generationJobs).where(eq(generationJobs.id, job.id)).get()!;
+    db.update(generationJobs)
+      .set({
+        status: 'paused',
+        remoteTaskId: 'remote-1',
+        snapshot: {
+          ...row.snapshot!,
+          connection: {
+            ...row.snapshot!.connection,
+            routes: {
+              ...row.snapshot!.connection.routes,
+              cancel: confirmed ? 'cancel/{id}' : 'cancel-unknown/{id}',
+            },
+          },
+        },
+      })
+      .where(eq(generationJobs.id, job.id))
+      .run();
+    const result = await service.cancelRemote(job.id);
+    expect(result.status).toBe(confirmed ? 'cancelled' : 'paused');
+    expect(result.diagnostic?.stage).toBe('cancel');
+    const saved = db.select().from(generationJobs).where(eq(generationJobs.id, job.id)).get()!;
+    expect(saved.snapshot?.cancellation).toBe(confirmed ? 'confirmed' : 'unknown');
+    if (!confirmed) {
+      expect(result.errorMessage).toContain('不会自动重发');
+      expect(result.recoveryAction).toBe('none');
+      service.cancel(job.id);
+    }
+  }
 });

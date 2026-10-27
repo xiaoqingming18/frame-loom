@@ -22,7 +22,17 @@ export const generationJobs = sqliteTable(
     status: text('status').$type<GenerationStatus>().notNull(),
     request: text('request_json', { mode: 'json' }).$type<GenerationRequest>().notNull(),
     snapshot: text('snapshot_json', { mode: 'json' }).$type<{
-      version: 1;
+      version: 1 | 2;
+      definitionId?: string | null;
+      connectionId?: string | null;
+      definitionVersion?: string;
+      capabilityVersion?: string;
+      adapterVersion?: 'v1';
+      requestVersion?: 'v1';
+      configVersion?: string;
+      preparedRequest?: GenerationRequest;
+      completedDownloads?: number[];
+      cancellation?: 'requested' | 'confirmed' | 'unknown';
       channelId: string;
       credentialFingerprint: string;
       baseUrl: string;

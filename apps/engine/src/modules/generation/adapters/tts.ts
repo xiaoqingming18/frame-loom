@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolveModelOperation } from '@frame-loom/contracts';
 import type { GenerationAdapter } from './types.js';
 import { GenerationFailure, adapterFetch } from './types.js';
 import { imageResponse } from './image-response.js';
@@ -17,17 +18,21 @@ const AudioResult = z.object({
 export const openaiSpeech: GenerationAdapter = {
   protocol: 'openai-speech',
   async submit(ctx, request) {
-    const response = await adapterFetch(ctx, `${ctx.baseUrl}/audio/speech`, {
-      method: 'POST',
-      headers: {
-        ...ctx.headers,
-        Authorization: `Bearer ${ctx.apiKey}`,
-        'Content-Type': 'application/json',
+    const response = await adapterFetch(
+      ctx,
+      resolveModelOperation(ctx.baseUrl, ctx.connection, 'openai-speech', 'submit'),
+      {
+        method: 'POST',
+        headers: {
+          ...ctx.headers,
+          Authorization: `Bearer ${ctx.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: ctx.model, input: request.prompt, ...request.params }),
+        signal: ctx.signal,
+        redirect: 'error',
       },
-      body: JSON.stringify({ model: ctx.model, input: request.prompt, ...request.params }),
-      signal: ctx.signal,
-      redirect: 'error',
-    });
+    );
     if (!response.ok) await imageResponse(response);
     const data = Buffer.from(await response.arrayBuffer());
     if (!data.length) throw new GenerationFailure('upstream', 'EMPTY_AUDIO', '语音接口未返回音频');
@@ -46,22 +51,26 @@ export const minimaxT2a: GenerationAdapter = {
   async submit(ctx, request) {
     const { voice_id, speed, format, ...params } = request.params;
     const baseUrl = ctx.baseUrl.replace(/\/anthropic$/, '');
-    const response = await adapterFetch(ctx, `${baseUrl}/v1/t2a_v2`, {
-      method: 'POST',
-      headers: {
-        ...ctx.headers,
-        Authorization: `Bearer ${ctx.apiKey}`,
-        'Content-Type': 'application/json',
+    const response = await adapterFetch(
+      ctx,
+      resolveModelOperation(baseUrl, ctx.connection, 'minimax-t2a', 'submit'),
+      {
+        method: 'POST',
+        headers: {
+          ...ctx.headers,
+          Authorization: `Bearer ${ctx.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: ctx.model,
+          text: request.prompt,
+          voice_setting: { voice_id, speed },
+          audio_setting: { format, ...params },
+        }),
+        signal: ctx.signal,
+        redirect: 'error',
       },
-      body: JSON.stringify({
-        model: ctx.model,
-        text: request.prompt,
-        voice_setting: { voice_id, speed },
-        audio_setting: { format, ...params },
-      }),
-      signal: ctx.signal,
-      redirect: 'error',
-    });
+    );
     const json = await imageResponse(response);
     const parsed = AudioResult.safeParse(json);
     if (!parsed.success)

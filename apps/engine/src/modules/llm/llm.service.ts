@@ -113,8 +113,10 @@ export class LlmService {
   }
   private async prepare(id: string) {
     const row = this.repository.getModel(id);
-    const { channel, apiKey, headers } = this.repository.credentials(row.channelId);
-    if (!channel.enabled || !row.enabled)
+    const channel = this.repository.getChannel(row.channelId);
+    const credentials = this.repository.credentials(row.connection?.credentialRef ?? row.channelId);
+    const { apiKey, headers } = credentials;
+    if (!channel.enabled || !credentials.channel.enabled || !row.enabled)
       throw new DomainError('MODEL_DISABLED', 422, '渠道或模型已禁用');
     if (row.kind !== 'chat' || !row.protocol)
       throw new DomainError('NOT_CHAT_MODEL', 422, '请选择文本模型');

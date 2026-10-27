@@ -1,6 +1,16 @@
 import { queryOptions } from '@tanstack/react-query';
-import { ChannelList, ChannelModelList, ModelDefaults } from '@frame-loom/contracts';
+import {
+  ChannelList,
+  ChannelModelList,
+  ModelDefaults,
+  ModelImportPackage,
+} from '@frame-loom/contracts';
 import type { EngineClient } from './engine-client';
+export const catalogQuery = (client: EngineClient) =>
+  queryOptions({
+    queryKey: ['models', 'catalog'],
+    queryFn: ({ signal }) => client.request('/model-catalog', ModelImportPackage, { signal }),
+  });
 
 export const channelsQuery = (client: EngineClient) =>
   queryOptions({

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { GenerationRequest } from '@frame-loom/contracts';
 import { ZodValidationPipe } from '../../core/http/zod-validation.pipe.js';
@@ -40,6 +40,12 @@ export class GenerationController {
   }
   @Post('generation-jobs/:id/cancel') cancel(@Param('id') id: string) {
     return this.generation.cancel(id);
+  }
+  @Delete('generation-jobs/:id') remove(@Param('id') id: string) {
+    return this.generation.remove(id);
+  }
+  @Post('generation-jobs/:id/cancel-remote') cancelRemote(@Param('id') id: string) {
+    return this.generation.cancelRemote(id);
   }
   @Post('generation-jobs/:id/resubmit') resubmit(@Param('id') id: string) {
     return this.generation.resubmit(id);

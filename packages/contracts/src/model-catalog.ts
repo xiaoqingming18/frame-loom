@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ImageProtocol, MediaProtocol, VideoProtocol } from './generation.js';
-import { LlmProtocol, RelativePath } from './models.js';
+import { ImageProtocol, VideoProtocol } from './generation.js';
+import { LlmProtocol, RelativePath, ModelConnection } from './models.js';
 
 const Identifier = z.string().regex(/^[a-z][a-z0-9._-]{1,127}$/);
 const Version = z.string().regex(/^v\d+(?:\.\d+){0,2}$/);
@@ -29,20 +29,21 @@ export const ServiceConnectionDefinition = z
     version: Version,
     name: z.string().trim().min(1).max(120),
     protocol: ServiceConnectionProtocol,
-    baseUrl: CatalogUrl,
+    baseUrl: CatalogUrl.optional(),
     routes: z.record(z.string().min(1).max(40), RelativePath).default({}),
-    credentialRef: Identifier.optional(),
+    credentialRef: z.string().uuid().optional(),
     auth: z.enum(['bearer', 'api-key', 'custom-header', 'none']).default('bearer'),
     operations: z
-      .array(z.enum(['submit', 'edit', 'query', 'content', 'upload', 'catalog']))
+      .array(z.enum(['submit', 'edit', 'query', 'content', 'upload', 'catalog', 'cancel']))
       .max(20),
     capabilities: z
       .strictObject({
-        upload: z.enum(['inline', 'url', 'provider-file']).default('inline'),
+        upload: z.enum(['inline', 'file', 'url', 'provider-file']).default('inline'),
         idempotency: z.boolean().default(false),
         cancel: z.boolean().default(false),
       })
       .default({ upload: 'inline', idempotency: false, cancel: false }),
+    runtime: ModelConnection.shape.runtime,
   })
   .superRefine((value, ctx) => {
     if (value.routes.submit?.includes('{') && !value.routes.submit.includes('{model}'))
@@ -129,6 +130,14 @@ export const ModelImportPackage = z.strictObject({
   mappings: z.record(Identifier, MappingDefinition).default({}),
 });
 export type ModelImportPackage = z.infer<typeof ModelImportPackage>;
+export const ModelImportPreview = z.object({
+  incoming: ModelImportPackage,
+  conflicts: z.array(z.string()),
+  revision: z.string(),
+  affectedModels: z.array(z.string()),
+  before: ModelImportPackage,
+});
+export type ModelImportPreview = z.infer<typeof ModelImportPreview>;
 
 export function validateMapping(mapping: MappingDefinition) {
   const parsed = MappingDefinition.parse(mapping);

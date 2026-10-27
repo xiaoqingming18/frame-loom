@@ -194,6 +194,12 @@ it('持久化上传、调用快照与同键恢复不重复生成，下载重试�
       .update(generationJobs)
       .set({
         status: 'download_failed',
+        outputs: [],
+        snapshot: {
+          ...db().select().from(generationJobs).where(eq(generationJobs.id, result.id)).get()!
+            .snapshot!,
+          completedDownloads: [],
+        },
         rawResponse: [
           { url: `${origin}/result.mp4?signature=private-signed-value`, mime: 'video/mp4' },
         ],

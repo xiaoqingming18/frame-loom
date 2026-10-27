@@ -1,6 +1,8 @@
 import { resolveServiceUrl, type ModelConnection, type ServiceOperation } from './models.js';
 
 export const serviceRoutes: Record<string, Partial<Record<ServiceOperation, string>>> = {
+  'openai-speech': { submit: 'audio/speech' },
+  'minimax-t2a': { submit: 'v1/t2a_v2' },
   'openai-images': { submit: 'images/generations', edit: 'images/edits' },
   'gemini-image': { submit: 'models/{model}:generateContent' },
   'ark-images': { submit: 'images/generations' },

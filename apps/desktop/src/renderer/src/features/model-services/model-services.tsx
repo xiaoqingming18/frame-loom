@@ -1,33 +1,40 @@
-import { useState, type ReactNode, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react';
+import { ArrowLeft, CircleHelp, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react';
 import {
   Channel,
   ChannelWrite,
   ConnectionCheck,
   DeleteResult,
   LlmProtocol,
-  ModelKind,
   ModelProbeResult,
   ModelProfileList,
-  protocolsByKind,
-  connectionTemplates,
-  connectionTemplateVersion,
-  resolveModelOperation,
-  serviceRoutes,
-  type ServiceOperation,
+  ModelImportPackage,
+  GenerationJob,
+  MediaFile,
+  type GenerationRequest,
   type ChannelModel,
   type ChannelModelSave,
   type ModelProbeRequest,
-  type ModelProfile,
+  ModelProfile,
 } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Input } from '@frame-loom/ui/components/input';
 import { Textarea } from '@frame-loom/ui/components/textarea';
 import { NativeSelect } from '@frame-loom/ui/components/native-select';
+import { Popover, PopoverTrigger, PopoverContent } from '@frame-loom/ui/components/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@frame-loom/ui/components/dialog';
 import type { EngineClient } from '@/lib/engine-client';
-import { channelsQuery, modelsQuery } from '@/lib/model-queries';
+import { catalogQuery, channelsQuery, modelsQuery } from '@/lib/model-queries';
 import { kindLabels } from './labels';
+import { CatalogImport } from './catalog-import';
 
 const protocolLabels: Record<string, string> = {
   'openai-responses': 'OpenAI Responses',
@@ -183,6 +190,7 @@ export function ModelServices({ engineClient: client }: { engineClient: EngineCl
           );
         })}
       </ul>
+      <CatalogImport client={client} />
     </section>
   );
 }
@@ -191,6 +199,7 @@ type Draft = ChannelModelSave & {
   key: string;
   metadata?: ChannelModel['metadata'];
   lastCheck?: ChannelModel['lastCheck'];
+  lastMediaCheck?: ChannelModel['lastMediaCheck'];
 };
 type HeaderRow = { key: string; name: string; value: string };
 const draftFrom = (model: ChannelModel): Draft => ({
@@ -206,6 +215,9 @@ const draftFrom = (model: ChannelModel): Draft => ({
   enabled: model.enabled,
   metadata: model.metadata,
   lastCheck: model.lastCheck,
+  lastMediaCheck: model.lastMediaCheck,
+  definitionId: model.definitionId,
+  connectionId: model.connectionId,
 });
 const newDraft = (upstreamModelId = ''): Draft => ({
   key: crypto.randomUUID(),
@@ -246,6 +258,8 @@ function ChannelEditor({
   const [candidates, setCandidates] = useState<string[] | null>(null);
   const [checks, setChecks] = useState<Record<string, ConnectionCheck>>({});
   const [error, setError] = useState('');
+  const [configurationCheck, setConfigurationCheck] = useState('');
+  const catalog = useQuery(catalogQuery(client));
   const profiles = useQuery({
     queryKey: ['generation', 'profiles'],
     queryFn: ({ signal }) => client.request('/model-profiles', ModelProfileList, { signal }),
@@ -291,10 +305,9 @@ function ChannelEditor({
       );
     });
   }
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function validateConfiguration() {
     if (drafts.some((draft) => draft.enabled && (!draft.kind || !draft.protocol))) {
-      setError('启用的模型需要先选择类别和调用协议。');
+      setError('启用的模型需要先选择模型定义和接入。');
       return;
     }
     const parsed = ChannelWrite.safeParse({
@@ -310,6 +323,8 @@ function ChannelEditor({
         kind: draft.kind,
         protocol: draft.protocol,
         profileId: draft.profileId,
+        definitionId: draft.definitionId,
+        connectionId: draft.connectionId,
         overrides: draft.overrides,
         connection: draft.connection,
         enabled: draft.enabled,
@@ -319,10 +334,16 @@ function ChannelEditor({
       setError('请检查渠道名称、HTTP(S) 接口地址、请求头名称与模型 ID。');
       return;
     }
+    return parsed.data;
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = validateConfiguration();
+    if (!data) return;
     perform(async () => {
       await client.request(channel ? `/channels/${channel.id}` : '/channels', Channel, {
         method: channel ? 'PATCH' : 'POST',
-        body: parsed.data,
+        body: data,
       });
       await queryClient.invalidateQueries({ queryKey: ['models'] });
       onClose();
@@ -345,7 +366,29 @@ function ChannelEditor({
           {channel ? `编辑渠道 · ${channel.name}` : '添加渠道'}
         </h2>
       </header>
-      <form onSubmit={submit} className="space-y-6">
+      <form onSubmit={submit} onChange={() => setConfigurationCheck('')} className="space-y-6">
+        <div className="space-y-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setError('');
+              setConfigurationCheck('');
+              if (validateConfiguration())
+                setConfigurationCheck(
+                  '草稿格式检查通过；未访问目录或发起调用。执行能力仍需服务端校验，保存后才能实测。',
+                );
+            }}
+          >
+            检查草稿配置
+          </Button>
+          {configurationCheck && (
+            <p role="status" className="text-xs text-muted-foreground">
+              {configurationCheck}
+            </p>
+          )}
+        </div>
         <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
           <Field label="渠道名称">
             <Input
@@ -355,18 +398,24 @@ function ChannelEditor({
               onChange={(event) => setName(event.target.value)}
             />
           </Field>
-          <Field label="API 格式">
-            <NativeSelect
-              value={apiFormat}
-              onChange={(event) => setApiFormat(LlmProtocol.parse(event.target.value))}
-            >
-              {LlmProtocol.options.map((protocol) => (
-                <option key={protocol} value={protocol}>
-                  {protocolLabels[protocol]}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
+          <details className="space-y-2 sm:col-span-2">
+            <summary className="cursor-pointer text-xs">高级：目录方式</summary>
+            <Field label="目录协议">
+              <NativeSelect
+                value={apiFormat}
+                onChange={(event) => setApiFormat(LlmProtocol.parse(event.target.value))}
+              >
+                {LlmProtocol.options.map((protocol) => (
+                  <option key={protocol} value={protocol}>
+                    {protocolLabels[protocol]}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              只影响拉取目录；模型调用由所选定义和接入决定。目录不可访问时可手动添加模型。
+            </p>
+          </details>
           <div className="space-y-1.5 sm:col-span-2">
             <Field label="接口地址">
               <Input
@@ -377,9 +426,9 @@ function ChannelEditor({
                 onChange={(event) => setBaseUrl(event.target.value)}
               />
             </Field>
-            <p className="text-xs text-muted-foreground">
-              API 格式决定拉取模型列表的方式，也是新文本模型的默认协议；每个模型可单独改用其他协议。
-            </p>
+            <Help label="接口地址帮助">
+              填写供应商 API 根地址。接入留空地址时继承此地址，特殊路径与多域名在共享接入中配置。
+            </Help>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Field label="API 密钥">
@@ -402,8 +451,10 @@ function ChannelEditor({
               </label>
             )}
           </div>
-          <div className="space-y-2 sm:col-span-2">
-            <p className="text-xs text-muted-foreground">附加请求头</p>
+          <details className="space-y-2 sm:col-span-2">
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              高级：附加请求头
+            </summary>
             {headers === null ? (
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 已保存：{channel?.headerNames.join('、')}
@@ -452,7 +503,7 @@ function ChannelEditor({
                 </Button>
               </>
             )}
-          </div>
+          </details>
           <label className="flex items-center gap-2 text-xs">
             <input
               type="checkbox"
@@ -481,7 +532,7 @@ function ChannelEditor({
                   })
                 }
               >
-                测试渠道
+                检查已保存目录权限
               </Button>
               <DeleteButton
                 label="删除渠道"
@@ -550,6 +601,24 @@ function ChannelEditor({
               channelBaseUrl={baseUrl}
               apiFormat={apiFormat}
               profiles={profiles.data ?? []}
+              catalog={catalog.data}
+              client={client}
+              allowTest={
+                !!channel?.enabled &&
+                name === channel.name &&
+                baseUrl === channel.baseUrl &&
+                apiFormat === channel.apiFormat &&
+                enabled === channel.enabled &&
+                !apiKey &&
+                !clearKey &&
+                (headers === null || (!channel.headerNames.length && !headers.length)) &&
+                JSON.stringify(draft) ===
+                  JSON.stringify(
+                    models.find((item) => item.id === draft.id)
+                      ? draftFrom(models.find((item) => item.id === draft.id)!)
+                      : null,
+                  )
+              }
               busy={busy}
               check={draft.id ? checks[draft.id] : undefined}
               onChange={(patch) => update(draft.key, patch)}
@@ -571,6 +640,11 @@ function ChannelEditor({
             />
           ))}
         </div>
+        {(catalog.error || profiles.error) && (
+          <p role="alert" className="text-xs text-destructive">
+            {(catalog.error ?? profiles.error)?.message}
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-xs text-destructive">
             {error}
@@ -655,42 +729,59 @@ function ModelPicker({
   );
 }
 
-function BooleanOverride({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean | undefined;
-  onChange: (value: boolean | undefined) => void;
-}) {
+function Help({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const restoringFocus = useRef(false);
   return (
-    <Field label={label}>
-      <NativeSelect
-        value={value === undefined ? '' : String(value)}
-        onChange={(event) =>
-          onChange(event.target.value ? event.target.value === 'true' : undefined)
-        }
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={label}
+          ref={trigger}
+          onMouseEnter={() => setOpen(true)}
+          onFocus={() => {
+            if (!restoringFocus.current) setOpen(true);
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            setOpen(true);
+          }}
+        >
+          <CircleHelp aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        onEscapeKeyDown={() => setOpen(false)}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          restoringFocus.current = true;
+          trigger.current?.focus();
+          restoringFocus.current = false;
+        }}
+        className="text-xs"
       >
-        <option value="">按内置目录</option>
-        <option value="true">支持</option>
-        <option value="false">不支持</option>
-      </NativeSelect>
-    </Field>
+        {children}
+      </PopoverContent>
+    </Popover>
   );
 }
 
 function ModelCard({
   index,
   draft,
-  channelBaseUrl,
-  apiFormat,
   profiles,
   busy,
   check,
   onChange,
   onRemove,
   onTest,
+  catalog,
+  client,
+  allowTest,
 }: {
   index: number;
   draft: Draft;
@@ -702,342 +793,481 @@ function ModelCard({
   onChange: (patch: Partial<Draft>) => void;
   onRemove: () => void;
   onTest?: () => void;
+  catalog?: ModelImportPackage;
+  client: EngineClient;
+  allowTest: boolean;
 }) {
   const label = draft.displayName || draft.upstreamModelId || `模型 ${index + 1}`;
-  const [compat, setCompat] = useState(
-    draft.overrides.compat ? JSON.stringify(draft.overrides.compat, null, 2) : '',
-  );
-  const [compatError, setCompatError] = useState(false);
-  const [template, setTemplate] = useState('');
-  const connection = draft.connection ?? {};
-  const routes = serviceRoutes[draft.protocol ?? ''];
-  const changeConnection = (patch: Partial<typeof connection>) =>
-    onChange({ connection: { ...connection, ...patch } });
-  const preview = (operation: ServiceOperation) => {
-    try {
-      return resolveModelOperation(channelBaseUrl, connection, draft.protocol ?? '', operation, {
-        id: 'task-preview',
-        model: draft.upstreamModelId.replace(/^models\//, ''),
-      });
-    } catch {
-      return '配置无效，保存前请修正地址或路径';
-    }
-  };
-  const protocols = draft.kind ? protocolsByKind[draft.kind] : [];
-  const matching = profiles.filter(
-    (profile) => profile.kind === draft.kind && profile.protocol === draft.protocol,
-  );
-  const selectedProfile =
-    matching.find((profile) => profile.id === draft.profileId) ??
-    matching.find((profile) => profile.matchIds.includes(draft.upstreamModelId)) ??
-    matching.find((profile) => profile.generic);
-  const overrides = (patch: Partial<Draft['overrides']>) =>
-    onChange({ overrides: { ...draft.overrides, ...patch } });
-  const number = (value: string) => (value ? Number(value) : undefined);
-  // 新模型在类别和协议齐全时默认启用；已保存的模型保持用户的选择，但缺协议时必须停用。
-  const enabledFor = (protocol: string | null) =>
-    draft.id ? draft.enabled && !!protocol : !!protocol;
+  const definition = catalog?.definitions.find((item) => item.id === draft.definitionId);
+  const profile =
+    definition && definition.kind !== 'chat'
+      ? ModelProfile.parse(definition.profile)
+      : profiles.find(
+          (item) => item.id === draft.profileId || item.matchIds.includes(draft.upstreamModelId),
+        );
   return (
     <fieldset disabled={busy} className="space-y-4 rounded-xl border p-4">
       <legend className="sr-only">{label}</legend>
       <div className="flex items-center justify-between gap-2">
         <h4 className="min-w-0 text-sm font-medium break-all">{label}</h4>
-        <div className="flex gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!onTest || draft.kind !== 'chat' || !draft.enabled}
-            onClick={onTest}
-          >
-            测试模型
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`移除 ${label}`}
-            onClick={onRemove}
-          >
-            <Trash2 aria-hidden="true" />
-          </Button>
-        </div>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          aria-label={`移除 ${label}`}
+          onClick={onRemove}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        {routes && (
-          <div className="space-y-3 sm:col-span-2">
-            <div className="flex flex-wrap items-end gap-2">
-              <Field label="接入模板">
-                <NativeSelect
-                  value={template}
-                  onChange={(event) => setTemplate(event.target.value)}
-                >
-                  <option value="">选择模板（需点击应用）</option>
-                  {connectionTemplates
-                    .filter((item) => item.protocol === draft.protocol)
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                </NativeSelect>
-              </Field>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!template}
-                onClick={() => {
-                  const selected = connectionTemplates.find(
-                    (item) => item.id === template && item.protocol === draft.protocol,
-                  );
-                  if (selected)
-                    onChange({
-                      connection: {
-                        baseUrl: selected.baseUrl,
-                        routes: serviceRoutes[selected.protocol],
-                        templateId: selected.id,
-                        templateVersion: connectionTemplateVersion,
-                      },
-                    });
-                }}
-              >
-                应用模板并替换接入设置
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              当前模板：{connection.templateId ?? '自定义'} · 已存版本{' '}
-              {connection.templateVersion ?? '无'} · 内置版本 {connectionTemplateVersion}
-              。模板不会自动更新；应用前请核对下方地址与路径差异。
-            </p>
-            {template && (
-              <div className="space-y-1 text-xs break-all text-muted-foreground">
-                <p>
-                  待应用地址：{connection.baseUrl ?? channelBaseUrl} →{' '}
-                  {connectionTemplates.find((item) => item.id === template)?.baseUrl}
-                  ；能力档案保持所选值。
-                </p>
-                {(Object.entries(routes) as [ServiceOperation, string][]).map(
-                  ([operation, path]) => (
-                    <p key={operation}>
-                      {operation}：{connection.routes?.[operation] ?? path} → {path}
-                    </p>
-                  ),
-                )}
-              </div>
-            )}
-            <Field label="模型服务地址（留空继承渠道）">
-              <Input
-                type="url"
-                value={connection.baseUrl ?? ''}
-                placeholder={channelBaseUrl}
-                onChange={(event) => changeConnection({ baseUrl: event.target.value || undefined })}
-              />
-            </Field>
-            <details className="space-y-2 text-xs">
-              <summary className="cursor-pointer text-muted-foreground">
-                高级：操作路径和有效地址
-              </summary>
-              {(Object.keys(routes) as ServiceOperation[]).map((operation) => (
-                <div key={operation} className="mt-2 space-y-1">
-                  <Field label={`${operation} 相对路径`}>
-                    <Input
-                      value={connection.routes?.[operation] ?? ''}
-                      placeholder={routes[operation]}
-                      onChange={(event) => {
-                        const next = { ...connection.routes };
-                        if (event.target.value) next[operation] = event.target.value;
-                        else delete next[operation];
-                        changeConnection({ routes: next });
-                      }}
-                    />
-                  </Field>
-                  <p className="break-all text-muted-foreground">{preview(operation)}</p>
-                </div>
+        <Field label="逻辑模型">
+          <NativeSelect
+            value={draft.definitionId ?? ''}
+            onChange={(event) => {
+              const selected = catalog?.definitions.find((item) => item.id === event.target.value);
+              const connection = catalog?.connections.find(
+                (item) => item.protocol === selected?.protocol,
+              );
+              onChange({
+                definitionId: selected?.id ?? null,
+                connectionId: connection?.id ?? null,
+                kind: selected?.kind ?? null,
+                protocol: selected?.protocol ?? null,
+                profileId:
+                  selected?.kind !== 'chat' && selected
+                    ? ModelProfile.parse(selected.profile).id
+                    : null,
+                connection: undefined,
+                enabled: !!selected && !!connection,
+                upstreamModelId: draft.upstreamModelId || selected?.aliases[0] || '',
+                lastCheck: null,
+                lastMediaCheck: null,
+              });
+            }}
+          >
+            <option value="">{draft.id ? '旧配置（选择定义以升级）' : '选择模型定义'}</option>
+            {catalog?.definitions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label="接入">
+          <NativeSelect
+            aria-label="接入"
+            disabled={!definition}
+            value={draft.connectionId ?? ''}
+            onChange={(event) =>
+              onChange({
+                connectionId: event.target.value || null,
+                lastCheck: null,
+                lastMediaCheck: null,
+              })
+            }
+          >
+            <option value="">选择接入</option>
+            {catalog?.connections
+              .filter((item) => item.protocol === definition?.protocol)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
               ))}
-            </details>
-            <p className="text-xs text-muted-foreground">
-              本地校验在保存时执行；拉取目录只证明目录权限。文本测试和目录成功不代表媒体生成可用。真实媒体验证请保存后在画布发起生成，可能计费，不会随保存自动执行。
-            </p>
-          </div>
-        )}
+          </NativeSelect>
+        </Field>
         <Field label="模型 ID">
           <Input
             required
             maxLength={300}
-            placeholder="服务商提供的模型 ID"
+            placeholder="供应商提供的上游 ID"
             value={draft.upstreamModelId}
-            onChange={(event) => onChange({ upstreamModelId: event.target.value })}
+            onChange={(event) =>
+              onChange({
+                upstreamModelId: event.target.value,
+                lastCheck: null,
+                lastMediaCheck: null,
+              })
+            }
           />
         </Field>
         <Field label="显示名称">
           <Input
             maxLength={300}
-            placeholder="留空使用模型 ID"
             value={draft.displayName}
             onChange={(event) => onChange({ displayName: event.target.value })}
           />
         </Field>
-        <Field label="模型类别">
-          <NativeSelect
-            value={draft.kind ?? ''}
-            onChange={(event) => {
-              const kind = event.target.value ? ModelKind.parse(event.target.value) : null;
-              const options = kind ? protocolsByKind[kind] : [];
-              const protocol =
-                draft.protocol && options.includes(draft.protocol)
-                  ? draft.protocol
-                  : kind === 'chat'
-                    ? apiFormat
-                    : options.length === 1
-                      ? options[0]
-                      : null;
-              setTemplate('');
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {draft.kind ? kindLabels[draft.kind] : '未分类'} ·{' '}
+        {definition ? `能力 ${definition.capabilityVersion}` : '旧配置保留原协议'}
+        <Help label="模型与接入帮助">
+          模型定义自动决定类别、参数与模式；上游 ID
+          来自供应商。接入继承渠道地址和密钥，多域名及特殊路径在共享接入中管理。
+        </Help>
+      </div>
+      {profile && (
+        <details className="text-xs">
+          <summary className="cursor-pointer">有效能力与参数</summary>
+          <p className="mt-2 text-muted-foreground">
+            {profile.modes.map((mode) => mode.name).join('、')}；
+            {profile.params
+              .map(
+                (param) =>
+                  `${param.name}：${param.values?.join('/') ?? `${param.min ?? ''}–${param.max ?? ''}`}`,
+              )
+              .join('；')}
+          </p>
+        </details>
+      )}
+      <details className="space-y-2 text-xs">
+        <summary className="cursor-pointer">高级：模型限制</summary>
+        <Field label="并发上限（只能收窄）">
+          <Input
+            type="number"
+            min={1}
+            max={profile?.runtime.concurrency ?? 16}
+            value={draft.overrides.concurrency ?? ''}
+            onChange={(event) =>
               onChange({
-                kind,
-                protocol,
-                profileId: null,
-                connection: protocol === draft.protocol ? draft.connection : undefined,
-                enabled: enabledFor(protocol),
-              });
-            }}
-          >
-            <option value="">未分类</option>
-            {ModelKind.options.map((kind) => (
-              <option key={kind} value={kind}>
-                {kindLabels[kind]}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field label="调用协议">
-          <NativeSelect
-            aria-label="调用协议"
-            disabled={!draft.kind}
-            value={draft.protocol ?? ''}
-            onChange={(event) => {
-              const protocol = event.target.value || null;
-              setTemplate('');
-              onChange({
-                protocol,
-                profileId: null,
-                connection: undefined,
-                enabled: enabledFor(protocol),
-              });
-            }}
-          >
-            <option value="">{draft.kind ? '选择协议' : '先选择类别'}</option>
-            {protocols.map((protocol) => (
-              <option key={protocol} value={protocol}>
-                {protocolLabels[protocol] ?? protocol}
-              </option>
-            ))}
-          </NativeSelect>
-          <span className="text-xs text-muted-foreground">
-            切换类别或协议会清除原接入设置；取消编辑可保留原配置。
-          </span>
+                overrides: {
+                  ...draft.overrides,
+                  concurrency: event.target.value ? Number(event.target.value) : undefined,
+                },
+              })
+            }
+          />
         </Field>
         {draft.kind === 'chat' && (
           <>
+            {(['reasoning', 'imageInput'] as const).map((key) => (
+              <label key={key} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={draft.overrides[key] ?? draft.metadata?.[key] ?? false}
+                  onChange={(event) =>
+                    onChange({ overrides: { ...draft.overrides, [key]: event.target.checked } })
+                  }
+                />
+                {key === 'reasoning' ? '推理能力' : '图片输入能力'}
+              </label>
+            ))}
             <Field label="上下文窗口">
               <Input
                 type="number"
                 min={1}
-                placeholder={draft.metadata ? `默认 ${draft.metadata.contextWindow}` : '按内置目录'}
                 value={draft.overrides.contextWindow ?? ''}
-                onChange={(event) => overrides({ contextWindow: number(event.target.value) })}
+                onChange={(event) =>
+                  onChange({
+                    overrides: {
+                      ...draft.overrides,
+                      contextWindow: event.target.value ? Number(event.target.value) : undefined,
+                    },
+                  })
+                }
               />
             </Field>
             <Field label="最大输出 Token">
               <Input
                 type="number"
                 min={1}
-                placeholder={draft.metadata ? `默认 ${draft.metadata.maxTokens}` : '按内置目录'}
                 value={draft.overrides.maxTokens ?? ''}
-                onChange={(event) => overrides({ maxTokens: number(event.target.value) })}
+                onChange={(event) =>
+                  onChange({
+                    overrides: {
+                      ...draft.overrides,
+                      maxTokens: event.target.value ? Number(event.target.value) : undefined,
+                    },
+                  })
+                }
               />
             </Field>
-            <BooleanOverride
-              label="推理能力"
-              value={draft.overrides.reasoning}
-              onChange={(reasoning) => overrides({ reasoning })}
-            />
-            <BooleanOverride
-              label="图片输入"
-              value={draft.overrides.imageInput}
-              onChange={(imageInput) => overrides({ imageInput })}
-            />
-            {draft.metadata?.needsConfirmation && (
-              <p className="text-xs text-muted-foreground sm:col-span-2">
-                元数据需确认：内置目录没有该模型，当前使用保守默认值，请按供应商文档填写上限。
-              </p>
-            )}
-            <details className="text-xs sm:col-span-2">
-              <summary className="cursor-pointer text-muted-foreground">高级：compat 开关</summary>
-              <Textarea
-                aria-label="compat JSON"
-                className="mt-2 min-h-24 font-mono text-xs"
-                placeholder="{}"
-                value={compat}
-                onChange={(event) => {
-                  setCompat(event.target.value);
-                  try {
-                    const value = event.target.value.trim()
-                      ? (JSON.parse(event.target.value) as Record<string, never>)
-                      : undefined;
-                    setCompatError(false);
-                    overrides({ compat: value });
-                  } catch {
-                    setCompatError(true);
-                  }
-                }}
-              />
-              {compatError && <p className="mt-1 text-destructive">JSON 格式无效，暂未应用。</p>}
-            </details>
           </>
         )}
-        {draft.kind && draft.kind !== 'chat' && draft.protocol && (
-          <Field label="能力档案">
-            <NativeSelect
-              aria-label="能力档案"
-              value={draft.profileId ?? ''}
-              onChange={(event) => onChange({ profileId: event.target.value || null })}
-            >
-              <option value="">按模型 ID 自动匹配</option>
-              {matching.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </NativeSelect>
-            {selectedProfile && (
-              <span className="text-xs text-muted-foreground">
-                {selectedProfile.generic ? '通用保守档案，需核对供应商能力' : '精确型号档案'}：
-                {selectedProfile.modes.map((mode) => mode.name).join('、')}；
-                {selectedProfile.inputs
-                  .map((input) => `${input.kind} 最多 ${input.maxCount} 项`)
-                  .join('，')}
-                。
-                {selectedProfile.params
-                  .map(
-                    (param) =>
-                      `${param.name}：${param.values?.join('/') ?? `${param.min ?? ''}–${param.max ?? ''}`}`,
-                  )
-                  .join('；')}
-              </span>
-            )}
-          </Field>
-        )}
-      </div>
+      </details>
       <label className="flex items-center gap-2 text-xs">
         <input
           type="checkbox"
           checked={draft.enabled}
+          disabled={!draft.protocol || (!draft.id && !definition)}
           onChange={(event) => onChange({ enabled: event.target.checked })}
         />
         启用模型
       </label>
       <CheckResult result={check ?? draft.lastCheck} />
+      {draft.id && !allowTest && (
+        <p className="text-xs text-muted-foreground">配置有未保存改动，请保存后再测试。</p>
+      )}
+      {draft.id && draft.kind === 'chat' && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!onTest || !draft.enabled || !allowTest}
+          onClick={onTest}
+        >
+          测试已保存文本模型（可能计费）
+        </Button>
+      )}
+      {draft.id && profile && (
+        <MediaTest
+          client={client}
+          modelId={draft.id}
+          profile={profile}
+          check={draft.lastMediaCheck}
+          disabled={!allowTest || !draft.enabled}
+        />
+      )}
     </fieldset>
+  );
+}
+
+function MediaTest({
+  client,
+  modelId,
+  profile,
+  check,
+  disabled,
+}: {
+  client: EngineClient;
+  modelId: string;
+  profile: ModelProfile;
+  check?: ChannelModel['lastMediaCheck'];
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [prompt, setPrompt] = useState('测试');
+  const [mode, setMode] = useState(profile.modes[0].id);
+  const [jobId, setJobId] = useState<string>();
+  const [error, setError] = useState('');
+  const [inputs, setInputs] = useState<GenerationRequest['inputs']>([]);
+  const [busy, setBusy] = useState(false);
+  const [params, setParams] = useState<GenerationRequest['params']>({});
+  const queryClient = useQueryClient();
+  const job = useQuery({
+    queryKey: ['generation', 'settings-test', jobId],
+    enabled: !!jobId,
+    queryFn: ({ signal }) => client.request(`/generation-jobs/${jobId}`, GenerationJob, { signal }),
+    refetchInterval: (query) =>
+      query.state.data &&
+      ['succeeded', 'failed', 'cancelled', 'paused', 'submit_unknown', 'download_failed'].includes(
+        query.state.data.status,
+      )
+        ? false
+        : 1000,
+  });
+  useEffect(() => {
+    if (job.data?.status === 'succeeded')
+      void queryClient.invalidateQueries({ queryKey: ['models'] });
+  }, [job.data?.status, queryClient]);
+  async function submit() {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await client.request('/generation-jobs', GenerationJob, {
+        method: 'POST',
+        body: { modelId, mode, prompt, inputs, params, source: 'manual' },
+      });
+      setJobId(result.id);
+      setOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ['models'] });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '测试失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-2 text-xs">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={
+          disabled ||
+          (!!jobId &&
+            (!job.data ||
+              ['pending', 'submitting', 'running', 'downloading'].includes(job.data.status)))
+        }
+        onClick={() => setOpen(true)}
+      >
+        实际媒体调用测试
+      </Button>
+      <p className="text-muted-foreground">
+        {job.data
+          ? `测试任务：${job.data.status} · ${job.data.errorMessage ?? ''}`
+          : check
+            ? `已验证模式 ${check.mode} · ${check.checkedAt}`
+            : '尚未验证实际媒体调用'}
+      </p>
+      {job.error && <p role="alert">{job.error.message}</p>}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent overlayClassName="z-[51]" className="z-[52] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>实际媒体调用测试</DialogTitle>
+            <DialogDescription>
+              将使用已保存的配置向供应商发起一次真实调用，可能计费。草稿改动不会用于测试；成功仅证明本次绑定、模式与参数。
+            </DialogDescription>
+          </DialogHeader>
+          <Field label="测试模式">
+            <NativeSelect
+              value={mode}
+              onChange={(event) => {
+                setMode(event.target.value);
+                setInputs([]);
+              }}
+            >
+              {profile.modes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field label="测试提示词">
+            <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+          </Field>
+          {profile.params.map((param) => (
+            <Field key={param.key} label={`测试${param.name}`}>
+              {param.type === 'boolean' ? (
+                <NativeSelect
+                  value={String(params[param.key] ?? param.default ?? false)}
+                  onChange={(event) =>
+                    setParams({ ...params, [param.key]: event.target.value === 'true' })
+                  }
+                >
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </NativeSelect>
+              ) : param.values ? (
+                <NativeSelect
+                  value={String(params[param.key] ?? param.default)}
+                  onChange={(event) =>
+                    setParams({
+                      ...params,
+                      [param.key]:
+                        param.type === 'number' ? Number(event.target.value) : event.target.value,
+                    })
+                  }
+                >
+                  {param.values.map((value) => (
+                    <option key={String(value)} value={String(value)}>
+                      {String(value)}
+                    </option>
+                  ))}
+                </NativeSelect>
+              ) : (
+                <Input
+                  type={param.type === 'number' ? 'number' : 'text'}
+                  min={param.min}
+                  max={param.max}
+                  value={String(params[param.key] ?? param.default ?? '')}
+                  onChange={(event) =>
+                    setParams({
+                      ...params,
+                      [param.key]:
+                        param.type === 'number' ? Number(event.target.value) : event.target.value,
+                    })
+                  }
+                />
+              )}
+            </Field>
+          ))}
+          {mode !== 'text' && profile.inputs.length > 0 && (
+            <Field label="参考素材（按选择顺序上传）">
+              <Input
+                type="file"
+                multiple
+                disabled={busy}
+                onChange={(event) => {
+                  const files = [...(event.target.files ?? [])];
+                  if (!files.length) return;
+                  setError('');
+                  setBusy(true);
+                  void Promise.all(
+                    files.map((file) =>
+                      client.request('/media', MediaFile, {
+                        method: 'POST',
+                        body: file,
+                        timeoutMs: 120_000,
+                      }),
+                    ),
+                  )
+                    .then((mediaFiles) => {
+                      setInputs(
+                        mediaFiles.map((media, index) => {
+                          const kind = media.mime.split('/')[0];
+                          if (kind !== 'image' && kind !== 'video' && kind !== 'audio')
+                            throw new Error('素材类别无效');
+                          return {
+                            sha256: media.sha256,
+                            kind,
+                            role:
+                              mode === 'frames'
+                                ? index === 0
+                                  ? 'first_frame'
+                                  : 'last_frame'
+                                : 'reference',
+                          };
+                        }),
+                      );
+                    })
+                    .catch((failure: Error) => setError(failure.message))
+                    .finally(() => setBusy(false));
+                }}
+              />
+            </Field>
+          )}
+          {inputs.map((input, index) => (
+            <Field
+              key={`${input.sha256}-${index}`}
+              label={`素材 ${index + 1}（${input.kind}）角色`}
+            >
+              <NativeSelect
+                value={input.role}
+                onChange={(event) =>
+                  setInputs(
+                    inputs.map((item, position) =>
+                      position === index
+                        ? { ...item, role: event.target.value as typeof input.role }
+                        : item,
+                    ),
+                  )
+                }
+              >
+                {['reference', 'first_frame', 'last_frame'].map((role) => (
+                  <option key={role} value={role}>
+                    {{ reference: '参考', first_frame: '首帧', last_frame: '尾帧' }[role]}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          ))}
+          {error && (
+            <p role="alert" className="text-xs text-destructive">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                busy ||
+                !prompt.trim() ||
+                (mode !== 'text' && !!profile.inputs.length && !inputs.length)
+              }
+              onClick={() => void submit()}
+            >
+              确认调用并承担可能费用
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

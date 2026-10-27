@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Channel, ChannelModel } from '@frame-loom/contracts';
+import { Channel, ChannelModel, ModelImportPackage } from '@frame-loom/contracts';
 import type { EngineClient } from '@/lib/engine-client';
 import { ModelServices } from './model-services/model-services';
 import { ModelDefaultsSettings } from './model-services/model-defaults';
@@ -82,6 +82,28 @@ function setup(view: 'services' | 'defaults', empty = false) {
         result = saved;
       } else if (path === '/channels/probe-models') result = ['unknown', 'gpt-4o', 'claude-x'];
       else if (path === '/model-profiles') result = [];
+      else if (path === '/model-catalog')
+        result = ModelImportPackage.parse({
+          schema: 'frame-loom.model-package',
+          schemaVersion: 1,
+          source: 'fixture',
+          definitions: ['openai-completions', 'anthropic-messages'].map((protocol) => ({
+            id: protocol,
+            version: 'v1',
+            name: protocol,
+            kind: 'chat',
+            protocol,
+            capabilityVersion: 'v1',
+            operations: [{ id: 'submit', status: 'supported' }],
+          })),
+          connections: ['openai-completions', 'anthropic-messages'].map((protocol) => ({
+            id: protocol,
+            version: 'v1',
+            name: protocol,
+            protocol,
+            operations: ['submit'],
+          })),
+        });
       else if (init?.method === 'DELETE') {
         channels = [];
         models = [];
@@ -112,50 +134,29 @@ function change(label: string | RegExp, value: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
-it('媒体模板需显式应用，预览路径可编辑，保存与取消保持事务边界', async () => {
+it('逻辑模型自动决定类别与协议，取消不保存，保存不发起生成', async () => {
   const { calls } = setup('services');
   fireEvent.click(await screen.findByRole('button', { name: '编辑 本地测试' }));
-  change('模型类别', 'video');
-  change('调用协议', 'fastaitoken-video');
-  change('模型 ID', 'seedance-2.5-token');
-  change('模型服务地址（留空继承渠道）', 'https://custom.test/gateway');
-  change('接入模板', 'fastaitoken-video');
-  expect(screen.getByLabelText<HTMLInputElement>('模型服务地址（留空继承渠道）').value).toBe(
-    'https://custom.test/gateway',
-  );
-  expect(screen.getByText(/待应用地址/).textContent).toContain('https://video.fastaitoken.com');
-  fireEvent.click(screen.getByRole('button', { name: '应用模板并替换接入设置' }));
-  change('submit 相对路径', 'custom/videos');
-  expect(screen.getByText('https://video.fastaitoken.com/custom/videos')).toBeTruthy();
-  expect(screen.getByText(/本地校验在保存时执行/).textContent).toContain('可能计费');
+  await screen.findByRole('option', { name: 'anthropic-messages' });
+  expect(screen.queryByLabelText('能力档案')).toBeNull();
+  change('逻辑模型', 'anthropic-messages');
+  expect(screen.getByLabelText<HTMLSelectElement>('接入').value).toBe('anthropic-messages');
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  expect(calls.some((call) => call.init?.method === 'PATCH')).toBe(false);
+  fireEvent.click(await screen.findByRole('button', { name: '编辑 本地测试' }));
+  change('逻辑模型', 'anthropic-messages');
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await screen.findByRole('button', { name: '编辑 本地测试' });
-  const saved = calls.filter((call) => call.init?.method === 'PATCH');
-  expect(saved).toHaveLength(1);
-  expect(saved[0].init?.body).toMatchObject({
+  expect(calls.find((call) => call.init?.method === 'PATCH')?.init?.body).toMatchObject({
     models: [
       {
-        connection: {
-          templateId: 'fastaitoken-video',
-          templateVersion: 'v1',
-          baseUrl: 'https://video.fastaitoken.com',
-          routes: { submit: 'custom/videos', upload: 'api/v1/uploads' },
-        },
+        definitionId: 'anthropic-messages',
+        connectionId: 'anthropic-messages',
+        kind: 'chat',
+        protocol: 'anthropic-messages',
       },
     ],
   });
-  fireEvent.click(screen.getByRole('button', { name: '编辑 本地测试' }));
-  expect(screen.getByLabelText<HTMLInputElement>('submit 相对路径').value).toBe('custom/videos');
-  change('模型服务地址（留空继承渠道）', 'https://discarded.test');
-  fireEvent.click(screen.getByRole('button', { name: '取消' }));
-  fireEvent.click(await screen.findByRole('button', { name: '编辑 本地测试' }));
-  expect(screen.getByLabelText<HTMLInputElement>('模型服务地址（留空继承渠道）').value).toBe(
-    'https://video.fastaitoken.com',
-  );
-  change('submit 相对路径', '../admin');
-  fireEvent.click(screen.getByRole('button', { name: '保存' }));
-  await screen.findByRole('alert');
-  expect(calls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
   expect(calls.some((call) => /test|generation-jobs/.test(call.path))).toBe(false);
 });
 
@@ -164,7 +165,7 @@ it('新建渠道：草稿拉取后勾选模型，协议随类别过滤，渠道�
   await screen.findByText('添加第一个模型渠道');
   fireEvent.click(screen.getByRole('button', { name: '添加渠道' }));
   change('渠道名称', '新的渠道');
-  change('API 格式', 'anthropic-messages');
+  change('目录协议', 'anthropic-messages');
   change('接口地址', 'https://relay.example.com');
   change('API 密钥', 'sk-private');
   fireEvent.click(screen.getByRole('button', { name: '添加请求头' }));
@@ -183,19 +184,11 @@ it('新建渠道：草稿拉取后勾选模型，协议随类别过滤，渠道�
   fireEvent.click(within(picker).getByLabelText(/claude-x/));
   fireEvent.click(within(picker).getByRole('button', { name: '添加所选（1）' }));
   const card = screen.getByRole('group', { name: 'claude-x' });
-  const protocol = within(card).getByLabelText<HTMLSelectElement>('调用协议');
-  expect(protocol.disabled).toBe(true);
-  fireEvent.change(within(card).getByLabelText('模型类别'), { target: { value: 'chat' } });
-  expect(protocol.value).toBe('anthropic-messages');
-  fireEvent.change(within(card).getByLabelText('模型类别'), { target: { value: 'image' } });
-  expect([...protocol.options].map((option) => option.value)).toEqual([
-    '',
-    'openai-images',
-    'gemini-image',
-    'ark-images',
-  ]);
-  expect(protocol.value).toBe('');
-  fireEvent.change(within(card).getByLabelText('模型类别'), { target: { value: 'chat' } });
+  expect(within(card).getByLabelText<HTMLInputElement>('启用模型').disabled).toBe(true);
+  fireEvent.change(within(card).getByLabelText('逻辑模型'), {
+    target: { value: 'anthropic-messages' },
+  });
+  expect(within(card).getByLabelText<HTMLSelectElement>('接入').value).toBe('anthropic-messages');
   fireEvent.change(within(card).getByLabelText('上下文窗口'), { target: { value: '200000' } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await screen.findByRole('button', { name: '编辑 新的渠道' });
@@ -254,18 +247,15 @@ it('列表只显示渠道；编辑时密钥与请求头留空保留，拉取复�
 it('编辑页移除模型、启用未分类模型被拦截，删除渠道须确认', async () => {
   const { calls } = setup('services');
   fireEvent.click(await screen.findByRole('button', { name: '编辑 本地测试' }));
-  expect(screen.getByText(/元数据需确认/)).toBeTruthy();
+
   fireEvent.click(screen.getByRole('button', { name: '添加模型' }));
   const blank = screen.getByRole('group', { name: '模型 2' });
   fireEvent.change(within(blank).getByLabelText('模型 ID'), { target: { value: 'manual' } });
-  fireEvent.click(within(blank).getByLabelText('启用模型'));
   expect(
-    within(screen.getByRole('group', { name: 'manual' })).getByRole<HTMLButtonElement>('button', {
-      name: '测试模型',
-    }).disabled,
+    within(screen.getByRole('group', { name: 'manual' })).getByLabelText<HTMLInputElement>(
+      '启用模型',
+    ).disabled,
   ).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: '保存' }));
-  expect((await screen.findByRole('alert')).textContent).toContain('先选择类别和调用协议');
   fireEvent.click(screen.getByRole('button', { name: '移除 manual' }));
   fireEvent.click(screen.getByRole('button', { name: '移除 测试文本' }));
   fireEvent.click(screen.getByRole('button', { name: '删除渠道' }));

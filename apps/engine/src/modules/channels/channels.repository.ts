@@ -15,12 +15,14 @@ import { DatabaseService } from '../../core/database/database.service.js';
 import { SecretCipher } from '../../core/crypto/secret-cipher.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { channels, channelModels, modelDefaults } from './channels.schema.js';
+import { ModelCatalogService } from './model-catalog.service.js';
 
 @Injectable()
 export class ChannelsRepository {
   constructor(
     private readonly database: DatabaseService,
     private readonly cipher: SecretCipher,
+    private readonly catalog: ModelCatalogService,
   ) {}
   private get db() {
     return this.database.db;
@@ -80,11 +82,41 @@ export class ChannelsRepository {
       )
       .digest('hex');
   }
+  modelVersion(id: string) {
+    const model = { ...this.getModel(id), lastCheck: undefined, lastMediaCheck: undefined };
+    const channel = this.getChannel(model.channelId);
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          model,
+          channel.baseUrl,
+          channel.enabled,
+          this.credentialFingerprint(model.connection?.credentialRef ?? channel.id),
+        ]),
+      )
+      .digest('hex');
+  }
+  recordMediaCheck(
+    id: string,
+    value: NonNullable<import('@frame-loom/contracts').ChannelModel['lastMediaCheck']>,
+  ) {
+    try {
+      if (this.modelVersion(id) === value.configVersion)
+        this.db
+          .update(channelModels)
+          .set({ lastMediaCheck: value })
+          .where(eq(channelModels.id, id))
+          .run();
+    } catch {
+      /* 模型已被删除时仅保留任务记录。 */
+    }
+  }
   saveChannel(input: Partial<ChannelWrite>, existingId?: string) {
     if (existingId) this.channelRow(existingId);
     const id = existingId ?? randomUUID();
     const now = new Date().toISOString();
     const { apiKey, headers, models, ...values } = input;
+    const resolvedModels = models?.map((model) => ({ ...model, ...this.catalog.resolve(model) }));
     const secrets = {
       ...(apiKey !== undefined
         ? {
@@ -110,7 +142,7 @@ export class ChannelsRepository {
             .where(eq(channels.id, id))
             .run();
           tx.update(channelModels)
-            .set({ lastCheck: null })
+            .set({ lastCheck: null, lastMediaCheck: null })
             .where(eq(channelModels.channelId, id))
             .run();
           if (input.enabled === false)
@@ -136,7 +168,7 @@ export class ChannelsRepository {
               updatedAt: now,
             })
             .run();
-        if (models) this.syncModels(tx, id, models);
+        if (resolvedModels) this.syncModels(tx, id, resolvedModels);
       });
     } catch (error) {
       this.rethrowConstraint(error);
@@ -169,7 +201,10 @@ export class ChannelsRepository {
         ...model,
         protocol: model.protocol ?? '',
         connection: model.connection ?? {},
+        definitionId: model.definitionId ?? null,
+        connectionId: model.connectionId ?? null,
         lastCheck: null,
+        lastMediaCheck: null,
       };
       if (id) {
         tx.update(channelModels)
@@ -196,14 +231,23 @@ export class ChannelsRepository {
       .from(channelModels)
       .where(channelId ? eq(channelModels.channelId, channelId) : undefined)
       .all()
-      .map((row) => ({ ...row, protocol: row.protocol || null, connection: row.connection ?? {} }));
+      .map((row) => this.effectiveModel(row));
+  }
+  private effectiveModel(row: typeof channelModels.$inferSelect) {
+    const input = { ...row, protocol: row.protocol || null, connection: row.connection ?? {} };
+    return {
+      ...input,
+      ...this.catalog.resolve(input),
+      effectiveProfile: this.catalog.profile(input),
+    };
   }
   getModel(id: string) {
     const row = this.db.select().from(channelModels).where(eq(channelModels.id, id)).get();
     if (!row) throw new DomainError('MODEL_NOT_FOUND', 404, '模型不存在');
-    return { ...row, protocol: row.protocol || null, connection: row.connection ?? {} };
+    return this.effectiveModel(row);
   }
   saveModel(channelId: string, input: ChannelModelWrite, id = randomUUID()) {
+    input = this.catalog.resolve(input);
     this.channelRow(channelId);
     try {
       this.db
@@ -222,15 +266,19 @@ export class ChannelsRepository {
     return this.getModel(id);
   }
   updateModel(id: string, input: ChannelModelWrite) {
+    input = this.catalog.resolve(input);
     const previous = this.getModel(id);
     try {
       this.db.transaction((tx) => {
         tx.update(channelModels)
           .set({
             ...input,
+            definitionId: input.definitionId ?? null,
+            connectionId: input.connectionId ?? null,
             protocol: input.protocol ?? '',
             connection: input.connection ?? {},
             lastCheck: null,
+            lastMediaCheck: null,
           })
           .where(eq(channelModels.id, id))
           .run();

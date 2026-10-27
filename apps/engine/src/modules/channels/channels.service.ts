@@ -12,15 +12,21 @@ import { DomainError } from '../../core/http/domain-error.js';
 import { ChannelsRepository } from './channels.repository.js';
 import { connectionError, providerError } from './provider-request.js';
 import { mediaProfile } from '../generation/profiles/media-profiles.js';
+import { ModelCatalogService } from './model-catalog.service.js';
 
 @Injectable()
 export class ChannelsService {
-  constructor(readonly repository: ChannelsRepository) {}
+  constructor(
+    readonly repository: ChannelsRepository,
+    private readonly catalog: ModelCatalogService,
+  ) {}
 
   validateModel(input: ChannelModelWrite) {
+    input = this.catalog.resolve(input);
     if (input.protocol && (!input.kind || !protocolsByKind[input.kind].includes(input.protocol)))
       throw new DomainError('INVALID_PROTOCOL', 422, '调用协议与模型类别不匹配');
-    if (input.kind && input.kind !== 'chat' && input.protocol) mediaProfile(input);
+    if (input.kind && input.kind !== 'chat' && input.protocol)
+      mediaProfile({ ...input, effectiveProfile: this.catalog.profile(input) });
     if (input.enabled && (!input.kind || !input.protocol))
       throw new DomainError('MODEL_UNCLASSIFIED', 422, '请选择类别和协议后再启用模型');
     if (

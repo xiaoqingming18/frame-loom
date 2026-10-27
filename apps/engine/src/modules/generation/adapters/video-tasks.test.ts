@@ -266,11 +266,13 @@ it('H3 兼容旧渠道的 /v1 地址并改用 minimax/v2 路由', async () => {
 
 it('Kling 使用精确文本生成路径并保留受限参数', async () => {
   const requests: Request[] = [];
-  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push(new Request(input, init));
-    return new Response(
-      JSON.stringify({ code: '0', data: { task_id: 'kling-1', task_status: 'submitted' } }),
-      { status: 200 },
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({ code: '0', data: { task_id: 'kling-1', task_status: 'submitted' } }),
+        { status: 200 },
+      ),
     );
   });
   await klingVideo.submit(
@@ -291,12 +293,12 @@ it('Kling 使用精确文本生成路径并保留受限参数', async () => {
 });
 
 it('Wan 任务查询缺少视频地址时拒绝伪成功', async () => {
-  vi.stubGlobal(
-    'fetch',
-    async () =>
+  vi.stubGlobal('fetch', () =>
+    Promise.resolve(
       new Response(JSON.stringify({ code: 0, data: { task_status: 'SUCCEEDED', output: {} } }), {
         status: 200,
       }),
+    ),
   );
   await expect(
     wanVideo.query!({ ...context, model: 'wan3.0-video' }, 'wan-1'),
@@ -346,7 +348,7 @@ it('FastAIToken 首尾帧按角色排序，同键提交且处理中业务码不�
     ),
   ).resolves.toMatchObject({ status: 'running' });
   const init = fetchMock.mock.calls[0][1]!;
-  expect(init.headers).toMatchObject({ 'Idempotency-Key': 'stable-key' });
+  expect(new Headers(init.headers).get('Idempotency-Key')).toBe('stable-key');
   if (typeof init.body !== 'string') throw new Error('未发送 JSON 请求体');
   expect(JSON.parse(init.body)).toMatchObject({
     mode: 'first_last_frame',

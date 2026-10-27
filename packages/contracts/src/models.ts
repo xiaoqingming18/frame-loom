@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ImageProtocol, VideoProtocol } from './generation.js';
+import { ImageProtocol, VideoProtocol, ModelProfile } from './generation.js';
 
 export const ModelKind = z.enum(['chat', 'image', 'video', 'tts']);
 export type ModelKind = z.infer<typeof ModelKind>;
@@ -52,6 +52,14 @@ export const ConnectionCheck = z.object({
   usage: ModelUsage.nullable(),
 });
 export type ConnectionCheck = z.infer<typeof ConnectionCheck>;
+export const MediaConnectionCheck = z.object({
+  jobId: z.string().uuid(),
+  mode: z.string(),
+  checkedAt: z.string().datetime(),
+  configVersion: z.string(),
+  definitionVersion: z.string().optional(),
+  capabilityVersion: z.string().optional(),
+});
 
 const BaseUrl = z
   .url()
@@ -66,7 +74,15 @@ const BaseUrl = z
       !url.hash
     );
   }, '地址只允许 HTTP(S)，不能包含凭据、查询参数或片段');
-export const ServiceOperation = z.enum(['submit', 'edit', 'query', 'content', 'upload', 'catalog']);
+export const ServiceOperation = z.enum([
+  'submit',
+  'edit',
+  'query',
+  'content',
+  'upload',
+  'catalog',
+  'cancel',
+]);
 export type ServiceOperation = z.infer<typeof ServiceOperation>;
 export const RelativePath = z
   .string()
@@ -83,6 +99,18 @@ export const RelativePath = z
   .transform((value) => value.replace(/^\/+|\/+$/g, ''));
 export const ModelConnection = z
   .object({
+    contractVersion: z.literal('v1').optional(),
+    credentialRef: z.string().uuid().optional(),
+    runtime: z
+      .strictObject({
+        upload: z.enum(['inline', 'file', 'url', 'provider-file']),
+        idempotency: z.boolean(),
+        cancel: z.boolean(),
+        concurrency: z.number().int().min(1).max(16),
+        downloadAuth: z.enum(['none', 'content']),
+        uploadReuseMs: z.number().int().positive().max(86_400_000),
+      })
+      .optional(),
     baseUrl: BaseUrl.optional(),
     routes: z.partialRecord(ServiceOperation, RelativePath).optional(),
     templateId: z.string().max(100).optional(),
@@ -94,7 +122,11 @@ export const ModelConnection = z
   .superRefine((connection, ctx) => {
     for (const [operation, path] of Object.entries(connection.routes ?? {})) {
       const allowed =
-        operation === 'submit' ? ['model'] : ['query', 'content'].includes(operation) ? ['id'] : [];
+        operation === 'submit'
+          ? ['model']
+          : ['query', 'content', 'cancel'].includes(operation)
+            ? ['id']
+            : [];
       const rest = path.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (token, key: string) =>
         allowed.includes(key) ? '' : token,
       );
@@ -205,6 +237,8 @@ export const ModelMetadata = z.object({
 });
 export type ModelMetadata = z.infer<typeof ModelMetadata>;
 export const ChannelModelWrite = z.strictObject({
+  definitionId: z.string().max(128).nullable().optional(),
+  connectionId: z.string().max(128).nullable().optional(),
   upstreamModelId: z.string().trim().min(1).max(300),
   displayName: z.string().trim().min(1).max(300),
   kind: ModelKind.nullable(),
@@ -226,11 +260,13 @@ export const ChannelWrite = z.strictObject({
 export type ChannelWrite = z.infer<typeof ChannelWrite>;
 export const ChannelPatch = ChannelWrite.partial();
 export const ChannelModel = z.strictObject({
+  lastMediaCheck: MediaConnectionCheck.nullable().optional(),
   ...ChannelModelWrite.shape,
   id: z.string().uuid(),
   channelId: z.string().uuid(),
   metadata: ModelMetadata.nullable(),
   lastCheck: ConnectionCheck.nullable(),
+  effectiveProfile: ModelProfile.nullable().optional(),
 });
 export type ChannelModel = z.infer<typeof ChannelModel>;
 export const ChannelList = z.array(Channel);

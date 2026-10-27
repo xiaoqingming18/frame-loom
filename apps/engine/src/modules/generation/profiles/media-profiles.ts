@@ -6,8 +6,11 @@ import { ttsProfiles } from './tts-profiles.js';
 
 export const mediaProfiles = [...imageProfiles, ...videoProfiles, ...ttsProfiles];
 export function mediaProfile(
-  model: Pick<ChannelModelWrite, 'kind' | 'protocol' | 'profileId' | 'upstreamModelId'>,
+  model: Pick<ChannelModelWrite, 'kind' | 'protocol' | 'profileId' | 'upstreamModelId'> & {
+    effectiveProfile?: ModelProfile;
+  },
 ): ModelProfile {
+  if (model.effectiveProfile) return model.effectiveProfile;
   if (model.kind === 'image') return imageProfile(model);
   const profiles = mediaProfiles.filter(
     (profile) => profile.kind === model.kind && profile.protocol === model.protocol,

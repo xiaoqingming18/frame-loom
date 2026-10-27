@@ -14,10 +14,10 @@ it('只允许无密钥的分层接入和跨渠道显式绑定', () => {
     name: 'Kling',
     protocol: 'kling-video',
     baseUrl: 'https://api.example.test/v1',
-    credentialRef: 'channel-key',
+    credentialRef: '11111111-1111-4111-8111-111111111111',
     operations: ['submit', 'query'],
   });
-  expect(connection.credentialRef).toBe('channel-key');
+  expect(connection.credentialRef).toBe('11111111-1111-4111-8111-111111111111');
   expect(ServiceConnectionDefinition.safeParse({ ...connection, apiKey: 'secret' }).success).toBe(
     false,
   );

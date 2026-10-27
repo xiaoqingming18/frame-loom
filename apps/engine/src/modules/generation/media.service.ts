@@ -15,6 +15,7 @@ import { probeMedia } from './media-probe.js';
 import { ProjectFilesService } from '../projects/project-files.service.js';
 import { errorCode, internalPath } from '../projects/local-project-store.js';
 import { projects } from '../projects/projects.schema.js';
+import { publicReference } from './public-reference.js';
 
 const formats: Record<string, { mime: string; ext: string }> = {
   png: { mime: 'image/png', ext: 'png' },
@@ -59,6 +60,7 @@ export class MediaService {
     diagnose?: (
       value: NonNullable<import('@frame-loom/contracts').GenerationJob['diagnostic']>,
     ) => void,
+    trustedBaseUrl?: string,
   ): Promise<StoredMedia> {
     let chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
     if (output.data) {
@@ -76,7 +78,24 @@ export class MediaService {
           'INVALID_MEDIA_URL',
           '结果地址必须为 HTTP(S)',
         );
-      // 仅受控的厂商内容端点带鉴权，且拒绝重定向；公开 CDN 不携带渠道凭据。
+      // 用户显式配置的服务可在本地；服务返回的其他目标必须经过公网校验。
+      if (!trustedBaseUrl || url.origin !== new URL(trustedBaseUrl).origin) {
+        if (headers)
+          throw new GenerationFailure(
+            'input_unreachable',
+            'INVALID_MEDIA_URL',
+            '鉴权下载不能离开原服务',
+          );
+        try {
+          await publicReference(url.toString());
+        } catch {
+          throw new GenerationFailure(
+            'input_unreachable',
+            'INVALID_MEDIA_URL',
+            '结果地址不能指向私网或保留地址',
+          );
+        }
+      }
       const diagnostic = {
         stage: 'download' as const,
         method: 'GET',
@@ -85,7 +104,7 @@ export class MediaService {
       diagnose?.(diagnostic);
       const response = await fetch(url, {
         signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
-        redirect: headers ? 'error' : 'follow',
+        redirect: 'error',
         headers,
       });
       diagnose?.({ ...diagnostic, httpStatus: response.status });

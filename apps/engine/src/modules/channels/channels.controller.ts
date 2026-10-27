@@ -15,6 +15,9 @@ import { ZodValidationPipe } from '../../core/http/zod-validation.pipe.js';
 import { ChannelsRepository } from './channels.repository.js';
 import { ChannelsService } from './channels.service.js';
 import { LlmService } from '../llm/llm.service.js';
+import { z } from 'zod';
+import { ModelImportPackage } from '@frame-loom/contracts';
+import { ModelCatalogService } from './model-catalog.service.js';
 
 @Controller()
 export class ChannelsController {
@@ -22,7 +25,35 @@ export class ChannelsController {
     private readonly repository: ChannelsRepository,
     private readonly channels: ChannelsService,
     private readonly llm: LlmService,
+    private readonly catalog: ModelCatalogService,
   ) {}
+  @Get('model-catalog') catalogList() {
+    return this.catalog.get();
+  }
+  @Post('model-catalog/preview') previewImport(
+    @Body(new ZodValidationPipe(ModelImportPackage)) input: ModelImportPackage,
+  ) {
+    const { incoming, conflicts, revision, affectedModels, before } = this.catalog.preview(input);
+    return { incoming, conflicts, revision, affectedModels, before };
+  }
+  @Post('model-catalog/apply') applyImport(
+    @Body(
+      new ZodValidationPipe(
+        z.strictObject({
+          package: ModelImportPackage,
+          revision: z.string(),
+          confirmUpdates: z.boolean(),
+        }),
+      ),
+    )
+    input: {
+      package: ModelImportPackage;
+      revision: string;
+      confirmUpdates: boolean;
+    },
+  ) {
+    return this.catalog.apply(input.package, input.revision, input.confirmUpdates);
+  }
   @Get('channels') listChannels() {
     return this.repository.listChannels();
   }
@@ -69,9 +100,9 @@ export class ChannelsController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(ChannelModelWrite)) input: ChannelModelWrite,
   ) {
-    this.channels.validateModel(input);
-    await this.llm.metadata(input);
-    return this.llm.publicModel(this.repository.saveModel(id, input));
+    const validated = this.channels.validateModel(input);
+    await this.llm.metadata(validated);
+    return this.llm.publicModel(this.repository.saveModel(id, validated));
   }
   @Patch('channel-models/:id') async updateModel(
     @Param('id') id: string,

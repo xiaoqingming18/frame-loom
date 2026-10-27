@@ -25,6 +25,11 @@ export const channelModels = sqliteTable(
   'channel_models',
   {
     id: text('id').primaryKey(),
+    definitionId: text('definition_id'),
+    connectionId: text('connection_id'),
+    lastMediaCheck: text('last_media_check_json', { mode: 'json' }).$type<
+      import('@frame-loom/contracts').ChannelModel['lastMediaCheck']
+    >(),
     channelId: text('channel_id')
       .notNull()
       .references(() => channels.id, { onDelete: 'cascade' }),
@@ -52,4 +57,11 @@ export const modelDefaults = sqliteTable('model_defaults', {
   channelModelId: text('channel_model_id').references(() => channelModels.id, {
     onDelete: 'set null',
   }),
+});
+
+export const modelCatalog = sqliteTable('model_catalog', {
+  id: text('id').primaryKey(),
+  package: text('package_json', { mode: 'json' })
+    .$type<import('@frame-loom/contracts').ModelImportPackage>()
+    .notNull(),
 });

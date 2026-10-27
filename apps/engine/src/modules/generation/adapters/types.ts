@@ -48,7 +48,7 @@ export async function adapterFetch(
   ctx: AdapterContext,
   url: string,
   init: RequestInit,
-  stage: 'upload' | 'submit' | 'query' = ctx.stage ?? 'submit',
+  stage: 'upload' | 'submit' | 'query' | 'cancel' = ctx.stage ?? 'submit',
 ) {
   const parsed = new URL(url);
   const diagnostic = {
@@ -57,7 +57,12 @@ export async function adapterFetch(
     route: parsed.origin + parsed.pathname,
   };
   ctx.diagnose?.(diagnostic);
-  const response = await fetch(url, init);
+  const headers = new Headers(init.headers);
+  if (stage === 'submit' && ctx.idempotencyKey) headers.set('Idempotency-Key', ctx.idempotencyKey);
+  const response = await fetch(url, {
+    ...init,
+    headers: stage === 'submit' && ctx.idempotencyKey ? Object.fromEntries(headers) : init.headers,
+  });
   const candidate =
     response.headers.get('x-request-id') ?? response.headers.get('request-id') ?? '';
   const requestId = [ctx.apiKey, ...Object.values(ctx.headers)].some(

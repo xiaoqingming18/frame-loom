@@ -253,7 +253,7 @@ export const GenerationJob = z.object({
   errorMessage: z.string().nullable(),
   diagnostic: z
     .object({
-      stage: z.enum(['validation', 'upload', 'submit', 'query', 'download']),
+      stage: z.enum(['validation', 'upload', 'submit', 'query', 'download', 'cancel']),
       method: z.string(),
       route: z.string(),
       httpStatus: z.number().optional(),

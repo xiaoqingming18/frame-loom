@@ -19,6 +19,8 @@ import { DatabaseService } from '../../core/database/database.service.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { ChannelsRepository } from '../channels/channels.repository.js';
+import { ModelCatalogService } from '../channels/model-catalog.service.js';
+import { executionContract } from './execution-contract.js';
 import { generationJobs, providerUploads, type JobRow } from './generation.schema.js';
 import { MediaService } from './media.service.js';
 import { ProjectFilesService } from '../projects/project-files.service.js';
@@ -76,6 +78,8 @@ export class GenerationAdapters {
 export class GenerationService implements OnApplicationBootstrap, BeforeApplicationShutdown {
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
+  private readonly cancelling = new Set<string>();
+  private readonly uploads = new Map<string, Promise<string>>();
   private readonly active = new Map<
     string,
     { controller: AbortController; promise: Promise<void> }
@@ -89,6 +93,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     private readonly storage: ObjectStorageService,
     private readonly files: ProjectFilesService,
     private readonly projectMedia: ProjectMediaService,
+    private readonly catalog: ModelCatalogService,
   ) {}
   private get db() {
     return this.database.db;
@@ -110,11 +115,17 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     if (!['failed', 'paused', 'download_failed', 'submit_unknown'].includes(row.status))
       return 'none';
     if (row.rawResponse?.length) return 'download';
-    if (!row.snapshot || row.snapshot.version !== 1 || row.errorCode === 'UPLOAD_UNKNOWN')
+    if (
+      !row.snapshot ||
+      ![1, 2].includes(row.snapshot.version) ||
+      row.errorCode === 'UPLOAD_UNKNOWN'
+    )
       return 'none';
     if (row.remoteTaskId) return this.registry.get(row.profile.protocol).query ? 'query' : 'none';
     if (row.status === 'submit_unknown')
-      return row.profile.protocol === 'fastaitoken-video' ? 'idempotent_submit' : 'none';
+      return executionContract(row.snapshot.connection, row.profile).idempotency
+        ? 'idempotent_submit'
+        : 'none';
     return row.status === 'paused' ? 'prepare' : 'new_job';
   }
   list(): GenerationJob[] {
@@ -152,6 +163,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     if (!model.enabled || !this.channels.getChannel(model.channelId).enabled)
       throw new DomainError('MODEL_DISABLED', 422, '渠道或模型已禁用');
     const profile = mediaProfile(model);
+    const runtime = executionContract(model.connection, profile);
+    const definition = this.catalog
+      .get()
+      .definitions.find((item) => item.id === model.definitionId);
     if (
       profile.protocol === 'fastaitoken-video' &&
       Buffer.byteLength(request.prompt, 'utf8') > 16_384
@@ -167,10 +182,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         issues.map((issue) => issue.message).join('；'),
       );
     // 提交前验证凭据；不让密钥故障变成提交结果不明。
-    this.channels.credentials(model.channelId);
+    this.channels.credentials(model.connection?.credentialRef ?? model.channelId);
     this.registry.get(profile.protocol);
     if (
-      profile.protocol !== 'fastaitoken-video' &&
+      !['provider-file', 'file'].includes(runtime.upload) &&
       request.inputs.some(
         (item) =>
           item.kind !== 'image' ||
@@ -250,20 +265,34 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           ...profile,
           runtime: {
             ...profile.runtime,
-            concurrency: model.overrides.concurrency ?? profile.runtime.concurrency,
+            concurrency: Math.min(
+              model.overrides.concurrency ?? profile.runtime.concurrency,
+              profile.runtime.concurrency,
+              runtime.concurrency,
+            ),
           },
         },
         status: 'pending',
         diagnostic: { stage: 'validation', method: 'LOCAL', route: '' },
         request,
         snapshot: {
-          version: 1,
+          version: 2,
+          definitionId: model.definitionId,
+          connectionId: model.connectionId,
+          definitionVersion: definition?.version,
+          capabilityVersion: definition?.capabilityVersion,
+          adapterVersion: 'v1',
+          requestVersion: 'v1',
+          configVersion: this.channels.modelVersion(model.id),
           channelId: model.channelId,
-          credentialFingerprint: this.channels.credentialFingerprint(model.channelId),
+          credentialFingerprint: this.channels.credentialFingerprint(
+            model.connection?.credentialRef ?? model.channelId,
+          ),
           baseUrl: this.channels.getChannel(model.channelId).baseUrl,
           model: model.upstreamModelId,
           connection: {
             ...model.connection,
+            runtime,
             baseUrl:
               model.connection?.baseUrl ??
               (profile.protocol === 'minimax-video-v2'
@@ -286,6 +315,23 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     this.events.publish({ type: 'generation.job.updated', jobId: id });
     return this.get(id);
   }
+  remove(id: string) {
+    const row = this.row(id);
+    if (
+      !['succeeded', 'failed', 'cancelled'].includes(row.status) ||
+      this.active.has(id) ||
+      this.cancelling.has(id)
+    )
+      throw new DomainError('JOB_BUSY', 409, '请先本地放弃任务，再删除记录；删除不会取消远端任务');
+    if (row.stagedOutputs.length)
+      throw new DomainError(
+        'PROJECT_OFFLINE',
+        409,
+        '任务包含离线项目的暂存产物，请恢复项目并写回后再删除记录',
+      );
+    this.db.delete(generationJobs).where(eq(generationJobs.id, id)).run();
+    return { deleted: true as const };
+  }
   cancel(id: string) {
     const row = this.row(id);
     if (['succeeded', 'failed', 'cancelled'].includes(row.status)) return this.get(id);
@@ -297,6 +343,79 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       errorMessage: '已在本地放弃；远端可能仍在运行并计费',
     });
     this.active.get(id)?.controller.abort();
+    return this.get(id);
+  }
+  async cancelRemote(id: string) {
+    if (this.cancelling.has(id)) throw new DomainError('CANCEL_PENDING', 409, '取消请求正在处理中');
+    const row = this.row(id);
+    const runtime = executionContract(row.snapshot?.connection, row.profile);
+    const route = row.snapshot?.connection.routes?.cancel;
+    if (
+      !row.snapshot ||
+      !row.remoteTaskId ||
+      !runtime.cancel ||
+      !route ||
+      !['running', 'paused'].includes(row.status)
+    )
+      throw new DomainError(
+        'CANCEL_UNAVAILABLE',
+        422,
+        '当前任务或接入不支持远端取消；可选择本地放弃',
+      );
+    const ctx = this.context(row, AbortSignal.timeout(15_000));
+    this.cancelling.add(id);
+    this.active.get(id)?.controller.abort();
+    await this.active.get(id)?.promise;
+    if (this.row(id).status === 'cancelled') {
+      this.cancelling.delete(id);
+      return this.get(id);
+    }
+    this.update(id, {
+      status: 'paused',
+      nextPollAt: null,
+      snapshot: { ...row.snapshot, cancellation: 'requested' },
+      errorMessage: '正在请求远端取消',
+    });
+    try {
+      const response = await adapterFetch(
+        ctx,
+        resolveServiceUrl(ctx.connection!.baseUrl ?? ctx.baseUrl, route, { id: row.remoteTaskId }),
+        {
+          method: 'POST',
+          redirect: 'error',
+          signal: ctx.signal,
+          headers: { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },
+        },
+        'cancel',
+      );
+      const body: unknown = response.status === 204 ? null : await response.json();
+      if (this.row(id).status === 'cancelled') return this.get(id);
+      const confirmed =
+        response.ok &&
+        !!body &&
+        typeof body === 'object' &&
+        'status' in body &&
+        body.status === 'cancelled';
+      this.update(id, {
+        status: confirmed ? 'cancelled' : 'paused',
+        finishedAt: confirmed ? new Date().toISOString() : null,
+        snapshot: {
+          ...row.snapshot,
+          cancellation: confirmed ? 'confirmed' : response.ok ? 'requested' : 'unknown',
+        },
+        errorMessage: confirmed
+          ? '远端已确认取消'
+          : '取消请求未获确认；远端可能仍在运行，请查询确认',
+      });
+    } catch {
+      if (this.row(id).status !== 'cancelled')
+        this.update(id, {
+          snapshot: { ...row.snapshot, cancellation: 'unknown' },
+          errorMessage: '远端取消结果不明；请查询确认，不会自动重发取消',
+        });
+    } finally {
+      this.cancelling.delete(id);
+    }
     return this.get(id);
   }
   async resubmit(id: string) {
@@ -315,7 +434,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     )
       return this.requery(id);
     if (row.status === 'submit_unknown') {
-      if (!row.snapshot || row.profile.protocol !== 'fastaitoken-video')
+      if (!row.snapshot || !executionContract(row.snapshot.connection, row.profile).idempotency)
         throw new DomainError(
           'UNSAFE_RESUBMIT',
           409,
@@ -402,16 +521,31 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       .where(inArray(generationJobs.status, ['pending', ...activeStates]))
       .all();
     const counts = new Map<string, number>();
+    const quotas = (row: JobRow): [string, number][] => [
+      [`model:${row.channelModelId}`, row.profile.runtime.concurrency],
+      [`channel:${row.snapshot?.channelId ?? row.channelModelId}`, 2],
+      [
+        `connection:${row.snapshot?.connection.credentialRef ?? row.snapshot?.channelId}:${row.snapshot?.connectionId ?? row.snapshot?.connection.baseUrl ?? row.channelModelId}`,
+        executionContract(row.snapshot?.connection, row.profile).concurrency,
+      ],
+    ];
+    const limits = new Map<string, number>();
+    for (const row of rows)
+      for (const [key, limit] of quotas(row))
+        limits.set(key, Math.min(limits.get(key) ?? limit, limit));
     for (const row of rows)
       if (activeStates.includes(row.status))
-        counts.set(row.channelModelId, (counts.get(row.channelModelId) ?? 0) + 1);
+        for (const [key] of quotas(row)) counts.set(key, (counts.get(key) ?? 0) + 1);
     for (const row of rows) {
-      if (this.active.has(row.id) || (row.nextPollAt && Date.parse(row.nextPollAt) > Date.now()))
+      if (
+        this.active.has(row.id) ||
+        this.cancelling.has(row.id) ||
+        (row.nextPollAt && Date.parse(row.nextPollAt) > Date.now())
+      )
         continue;
       if (row.status === 'pending') {
-        const count = counts.get(row.channelModelId) ?? 0;
-        if (count >= row.profile.runtime.concurrency) continue;
-        counts.set(row.channelModelId, count + 1);
+        if (quotas(row).some(([key]) => (counts.get(key) ?? 0) >= limits.get(key)!)) continue;
+        for (const [key] of quotas(row)) counts.set(key, (counts.get(key) ?? 0) + 1);
         this.update(row.id, { status: 'submitting', attempts: row.attempts + 1, nextPollAt: null });
       }
       const controller = new AbortController();
@@ -423,7 +557,12 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   }
   private context(row: JobRow, signal: AbortSignal): AdapterContext {
     const snapshot = row.snapshot;
-    if (!snapshot || snapshot.version !== 1)
+    if (
+      !snapshot ||
+      ![1, 2].includes(snapshot.version) ||
+      (snapshot.version === 2 &&
+        (snapshot.adapterVersion !== 'v1' || snapshot.requestVersion !== 'v1'))
+    )
       throw new GenerationFailure(
         'invalid_params',
         'LEGACY_SNAPSHOT_MISSING',
@@ -431,7 +570,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       );
     let credentials: ReturnType<ChannelsRepository['credentials']>;
     try {
-      credentials = this.channels.credentials(snapshot.channelId);
+      if (!this.channels.getChannel(snapshot.channelId).enabled) throw new Error('渠道已禁用');
+      credentials = this.channels.credentials(
+        snapshot.connection.credentialRef ?? snapshot.channelId,
+      );
     } catch {
       throw new GenerationFailure(
         'invalid_params',
@@ -443,7 +585,9 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     if (
       !channel.enabled ||
       !apiKey ||
-      this.channels.credentialFingerprint(snapshot.channelId) !== snapshot.credentialFingerprint
+      this.channels.credentialFingerprint(
+        snapshot.connection.credentialRef ?? snapshot.channelId,
+      ) !== snapshot.credentialFingerprint
     )
       throw new GenerationFailure(
         'invalid_params',
@@ -457,7 +601,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       model: snapshot.model,
       profile: row.profile,
       connection: snapshot.connection,
-      ...(row.profile.protocol === 'fastaitoken-video'
+      ...(executionContract(snapshot.connection, row.profile).idempotency
         ? { idempotencyKey: snapshot.idempotencyKey }
         : {}),
       signal,
@@ -471,8 +615,30 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       ctx.connection?.routes?.upload ?? 'api/v1/uploads',
     );
     const key = createHash('sha256')
-      .update(JSON.stringify([sha256, target, row.snapshot!.credentialFingerprint]))
+      .update(
+        JSON.stringify([
+          sha256,
+          target,
+          row.snapshot!.connectionId ?? null,
+          row.snapshot!.credentialFingerprint,
+        ]),
+      )
       .digest('hex');
+    const inflight = this.uploads.get(key);
+    if (inflight) return inflight;
+    const promise = this.uploadReference(row, ctx, sha256, key, target).finally(() =>
+      this.uploads.delete(key),
+    );
+    this.uploads.set(key, promise);
+    return promise;
+  }
+  private async uploadReference(
+    row: JobRow,
+    ctx: AdapterContext,
+    sha256: string,
+    key: string,
+    target: string,
+  ) {
     const previous = this.db
       .select()
       .from(providerUploads)
@@ -485,7 +651,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           'UPLOAD_UNKNOWN',
           '素材上传结果待确认；为避免重复上传，已暂停',
         );
-      if (!previous.expiresAt || Date.parse(previous.expiresAt) > Date.now()) return previous.url!;
+      if (previous.expiresAt && Date.parse(previous.expiresAt) > Date.now()) return previous.url!;
       this.db.delete(providerUploads).where(eq(providerUploads.key, key)).run();
     }
     const { media, path } = await this.media.resolve(sha256, row.projectId ?? undefined);
@@ -516,7 +682,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       };
       const data = json.data ?? json;
       const url = await publicReference(data.url ?? '');
-      const expiresAt = data.expires_at ? new Date(data.expires_at).toISOString() : null;
+      const maxExpiry = Date.now() + executionContract(ctx.connection, row.profile).uploadReuseMs;
+      const expiresAt = new Date(
+        Math.min(maxExpiry, data.expires_at ? Date.parse(data.expires_at) : maxExpiry),
+      ).toISOString();
       if (expiresAt && Date.parse(expiresAt) <= Date.now()) throw new Error('素材已过期');
       this.db
         .update(providerUploads)
@@ -545,18 +714,27 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       if (row.status === 'downloading') {
         if (!row.rawResponse?.length)
           throw new GenerationFailure('upstream', 'MISSING_OUTPUT', '缺少下载记录');
-        const outputs: string[] = [];
+        const outputs: string[] = [...row.outputs];
+        const completed = new Set(row.snapshot?.completedDownloads ?? []);
         const stagedOutputs = new Set(row.stagedOutputs);
-        const record = (media: { sha256: string }, staged: boolean) => {
+        const record = (media: { sha256: string }, staged: boolean, index: number) => {
           outputs.push(media.sha256);
+          completed.add(index);
           if (staged) stagedOutputs.add(media.sha256);
           else stagedOutputs.delete(media.sha256);
           this.update(row.id, {
             outputs: [...new Set([...row.outputs, ...outputs])],
             stagedOutputs: [...stagedOutputs],
+            ...(row.snapshot
+              ? { snapshot: { ...row.snapshot, completedDownloads: [...completed] } }
+              : {}),
           });
         };
-        for (const output of row.rawResponse) {
+        for (const [index, output] of row.rawResponse.entries()) {
+          if (completed.has(index)) continue;
+          const recordOutput = (media: { sha256: string }, staged: boolean) => {
+            record(media, staged, index);
+          };
           if (output.providerContent) {
             if (!adapter.contentUrl)
               throw new GenerationFailure(
@@ -571,10 +749,13 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
                 url: adapter.contentUrl(ctx, output.providerContent),
               },
               signal,
-              { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },
+              executionContract(ctx.connection, row.profile).downloadAuth === 'content'
+                ? { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` }
+                : undefined,
               row.projectId ?? undefined,
-              record,
+              recordOutput,
               (diagnostic) => this.update(row.id, { diagnostic }),
+              ctx.connection?.baseUrl ?? ctx.baseUrl,
             );
           } else
             await this.media.save(
@@ -582,14 +763,15 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
               signal,
               undefined,
               row.projectId ?? undefined,
-              record,
+              recordOutput,
               (diagnostic) => this.update(row.id, { diagnostic }),
+              row.snapshot?.connection.baseUrl ?? row.snapshot?.baseUrl,
             );
         }
         if (signal.aborted || this.row(row.id).status === 'cancelled') return;
         this.update(row.id, {
           status: 'succeeded',
-          outputs,
+          outputs: [...new Set(outputs)],
           stagedOutputs: [...stagedOutputs].filter((hash) => outputs.includes(hash)),
           rawResponse: null,
           nextPollAt: null,
@@ -598,6 +780,15 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           errorMessage: null,
           finishedAt: new Date().toISOString(),
         });
+        if (row.snapshot?.configVersion)
+          this.channels.recordMediaCheck(row.channelModelId, {
+            jobId: row.id,
+            mode: row.request.mode,
+            checkedAt: new Date().toISOString(),
+            configVersion: row.snapshot.configVersion,
+            definitionVersion: row.snapshot.definitionVersion,
+            capabilityVersion: row.snapshot.capabilityVersion,
+          });
         return;
       }
       const context = this.context(
@@ -610,18 +801,27 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           throw new GenerationFailure('upstream', 'QUERY_UNAVAILABLE', '协议不支持查询');
         result = await adapter.query(context, row.remoteTaskId);
       } else {
-        const request: GenerationRequest = structuredClone(row.request);
-        context.referenceUrls = { ...row.snapshot?.referenceUrls };
+        const request: GenerationRequest = structuredClone(
+          row.snapshot?.preparedRequest ?? row.request,
+        );
+        // 已提交的不确定请求必须保持原素材 URL；尚未形成请求则重新检查缓存有效期。
+        context.referenceUrls = row.snapshot?.preparedRequest
+          ? { ...row.snapshot.referenceUrls }
+          : {};
         let inlineBytes = 0;
         for (const item of request.inputs) {
           const limit = row.profile.inputs.find((entry) => entry.kind === item.kind)!;
-          if (row.profile.protocol === 'fastaitoken-video')
+          const upload = executionContract(context.connection, row.profile).upload;
+          if (upload === 'provider-file')
             context.referenceUrls[item.sha256!] ??= await this.providerReference(
               row,
               context,
               item.sha256!,
             );
-          else if (limit.transport === 'url' || item.kind !== 'image')
+          else if (
+            upload !== 'file' &&
+            (upload === 'url' || limit.transport === 'url' || item.kind !== 'image')
+          )
             context.referenceUrls[item.sha256!] ??= await this.storage.reference(
               this.media.get(item.sha256!),
               context.signal,
@@ -640,7 +840,14 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         }
         if (row.snapshot)
           this.update(row.id, {
-            snapshot: { ...row.snapshot, referenceUrls: context.referenceUrls },
+            snapshot: {
+              ...row.snapshot,
+              referenceUrls: context.referenceUrls,
+              preparedRequest: {
+                ...request,
+                inputs: request.inputs.map((item) => ({ ...item, dataUrl: undefined })),
+              },
+            },
           });
         // 到这一步之前失败能确认没有提交；此后异常一律按是否明确未受理分类。
         try {
@@ -700,6 +907,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
             result.outputs.find((output) => output.providerContent)?.providerContent ??
             null,
           rawResponse: result.outputs,
+          // 查询刷新可能改变产物顺序和签名；旧索引不能用于跳过新列表，已归档资产按哈希去重。
+          ...(row.rawResponse?.length && row.snapshot
+            ? { snapshot: { ...row.snapshot, completedDownloads: [] } }
+            : {}),
           usage: result.usage ?? null,
           attempts: 0,
           nextPollAt: null,
