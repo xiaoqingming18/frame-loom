@@ -27,6 +27,8 @@ Status: implemented
 
 ### 已落地边界
 
+后续[多模态服务配置与模型演进重构](../../proposed/architecture/2026-10-27-model-service-experience-and-evolution.md)已获用户确认，拟拆分模型能力、接入和调度，动态化视频节点，并保留本篇图片语义参数、多任务和引用。能力匹配与普通配置入口的后续变化由新篇持有，尚未实现，不将本篇既有证据解释为新方案交付。
+
 共享契约、engine 档案与适配器、画布多任务运行时、节点与输入框界面及 @ 引用均已落地。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，桌面宿主加载图片档案时使用相同匹配规则，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
 
 任务提交通过 `AdapterContext.profile` 传递创建时保存的档案快照，避免显式通用档案在执行时按模型 ID 重新匹配成更高能力。三个图片适配器先按档案解析语义参数，再显式组装供应商字段；OpenAI generations／edits 共享尺寸、画质与背景映射，透明时指定 PNG；Gemini 仅对声明清晰度的档案发送 `imageSize`；Seedream 发送像素尺寸和水印，产物声明 JPEG。`MediaService` 已有图片文件头及 `image-size` 识别，图片不经过 `probeMedia`，本次保留该实现并以 JPEG 下载入库集成测试确认真实格式。

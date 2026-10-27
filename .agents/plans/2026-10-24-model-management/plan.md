@@ -1,11 +1,13 @@
 # Plan: 模型管理与调用
 
-Status: active
+Status: dropped — 已完成基础保留，剩余范围交多模态服务重构计划
 Note: ../../notes/proposed/architecture/2026-10-24-model-management.md
 
 ## 目标
 
-达成[模型管理提案](../../notes/proposed/architecture/2026-10-24-model-management.md)的验收标准：
+以下为原计划目标与历史范围。2026-10-27 用户确认[多模态服务重构计划](../2026-10-27-model-service-experience-and-evolution/plan.md)，接管未完成验收及 TTS 范围；本计划停止剩余执行，已完成基础和证据保留，临时测试页及统一强制 S3 等旧目标不再恢复。
+
+原[模型管理提案](../../notes/proposed/architecture/2026-10-24-model-management.md)的验收目标：
 
 - 用户能配置渠道与渠道模型，按模型选择文本协议，并通过连通测试；密钥加密存储，接口、日志和数据库中都没有明文。
 - 图片、视频、TTS 调用统一经过生成任务。任务可以恢复，提交结果不明时不会自动重提，结果按 sha256 落盘到 `media/`。
@@ -34,7 +36,7 @@ Note: ../../notes/proposed/architecture/2026-10-24-model-management.md
 | 02 | [渠道与文本模型](02-channels-llm.md) | done | 01 | 渠道和模型的增删改查、拉取模型、pi-ai 连通测试、默认模型、"模型服务"设置页、模型测试页的文本页签 |
 | 03 | [生成任务内核与图片](03-generation-image.md) | done | 02 | `generation_jobs`、调度与恢复、媒体落盘、`frame-media://`、三个图片适配器、模型测试页的图片页签 |
 | 04 | [视频与参考素材](04-video-references.md) | done | 03 | ffprobe、对象存储与预检、三个视频适配器、"对象存储"设置页、模型测试页的视频页签 |
-| 05 | [TTS 与整体验收](05-tts-acceptance.md) | active | 04 | 两个 TTS 适配器、配音页签、真实接口冒烟、人工验收、笔记转入 implemented |
+| 05 | [TTS 与整体验收](05-tts-acceptance.md) | dropped | 04 | 历史 TTS 实现保留；剩余范围交新重构计划 |
 
 ## 依赖与顺序
 
@@ -54,4 +56,5 @@ Note: ../../notes/proposed/architecture/2026-10-24-model-management.md
 
 ## 发现与偏差
 
-- 01～04 已完成并独立验收，证据见各自子计划；05 尚未开始。整体模型管理仍未交付，因此提案保持 proposed、父计划保持 active，父级整体验收项不提前勾选。
+- 01～04 已完成，05 的 T1～T3 已完成，证据见子计划；旧真实供应商及安装包整体验收未闭合。
+- 2026-10-27：用户确认多模态服务重构范围；本计划与未完成的 05 转 dropped，新计划接管 TTS 和整体验收。旧勾选与验证记录保留，本文不作为后续施工入口。
