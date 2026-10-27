@@ -35,7 +35,13 @@ export function parseDocument(text: string, registry: NodeRegistry): CanvasDocum
   for (const edge of document.edges) {
     // 未识别的类型或版本原样保留，当前版本不猜测其端口契约。
     if (registry.supports(nodes.get(edge.source)!) && registry.supports(nodes.get(edge.target)!)) {
-      const verdict = checkConnection(registry, { nodes: document.nodes, edges: accepted }, edge);
+      const verdict = checkConnection(
+        registry,
+        { nodes: document.nodes, edges: accepted },
+        edge,
+        undefined,
+        true,
+      );
       if (!verdict.ok) throw new CanvasCommandError(`画布连线无效：${verdict.reason}`);
     }
     accepted.push(edge);

@@ -41,7 +41,7 @@ export function GenerationRuntime() {
           if (controller.signal.aborted) return;
           const previous = store.getState().generationJobs.get(id);
           store.getState().setGenerationJob(job);
-          if (isActiveGenerationJob(job)) continue;
+          if (isActiveGenerationJob(job) && !job.outputs.length) continue;
           if (
             previous?.status !== job.status &&
             (job.status === 'failed' || job.status === 'cancelled')

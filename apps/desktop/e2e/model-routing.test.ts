@@ -58,12 +58,14 @@ test('逻辑模型、帮助及收费确认在明暗和窄窗口下可用，保�
       await page.getByRole('button', { name: '实际媒体调用测试' }).click();
       await expect(page.getByRole('dialog', { name: '实际媒体调用测试' })).toBeVisible();
       await expect(page.getByText(/将使用已保存的配置/)).toBeVisible();
-      expect(
-        await page.getByRole('dialog', { name: '实际媒体调用测试' }).evaluate((element) => {
-          const box = element.getBoundingClientRect();
-          return element.contains(document.elementFromPoint(box.x + 20, box.y + 20));
-        }),
-      ).toBe(true);
+      await expect
+        .poll(() =>
+          page.getByRole('dialog', { name: '实际媒体调用测试' }).evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            return element.contains(document.elementFromPoint(box.x + 20, box.y + 20));
+          }),
+        )
+        .toBe(true);
       await page.screenshot({
         path: info.outputPath(`media-test-${theme}.png`),
         animations: 'disabled',

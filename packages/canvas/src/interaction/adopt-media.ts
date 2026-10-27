@@ -13,6 +13,7 @@ export async function adoptMedia(host: CanvasHost, nodes: CanvasNode[]) {
       hashes.add(version.sha256);
       if (version.posterSha256) hashes.add(version.posterSha256);
     }
+    for (const reference of parsed.data.mediaReferences ?? []) hashes.add(reference.media.sha256);
   }
   if (!hashes.size) return [];
   const result = await host.media.adopt([...hashes]);

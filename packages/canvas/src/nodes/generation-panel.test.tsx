@@ -290,6 +290,7 @@ afterEach(() => {
 
 const modelId = '22222222-2222-4222-8222-222222222222';
 const jobId = '33333333-3333-4333-8333-333333333333';
+const secondModelId = '44444444-4444-4444-8444-444444444444';
 const date = '2026-10-25T00:00:00.000Z';
 const profile = ModelProfile.parse({
   id: 'openai-images-default',
@@ -322,6 +323,24 @@ const profile = ModelProfile.parse({
     supportsCancel: false,
   },
 });
+const videoProfile = ModelProfile.parse({
+  ...profile,
+  id: 'video-profile',
+  name: '视频生成',
+  kind: 'video',
+  protocol: 'ark-video-tasks',
+  modes: [
+    { id: 'text', name: '文生视频' },
+    { id: 'frames', name: '首尾帧' },
+  ],
+  params: [{ key: 'resolution', name: '分辨率', type: 'enum', values: ['720p'], default: '720p' }],
+  inputs: [
+    {
+      ...profile.inputs[0],
+      maxCount: 2,
+    },
+  ],
+});
 
 function setupPanel(data: Partial<CanvasMediaData> = {}, kind: 'image' | 'video' = 'image') {
   const target = media('target', kind);
@@ -329,7 +348,24 @@ function setupPanel(data: Partial<CanvasMediaData> = {}, kind: 'image' | 'video'
   const store = createCanvasStore(doc([media('source'), target]));
   store.getState().setGenerationConfig({
     storageReady: true,
-    models: [{ id: modelId, label: '图片模型', kind: 'image', profile }],
+    models: [
+      {
+        id: modelId,
+        label: kind === 'video' ? '视频模型' : '图片模型',
+        kind,
+        profile: kind === 'video' ? videoProfile : profile,
+      },
+      ...(kind === 'video'
+        ? [
+            {
+              id: secondModelId,
+              label: '精简视频模型',
+              kind,
+              profile: ModelProfile.parse({ ...videoProfile, id: 'video-profile-2', params: [] }),
+            },
+          ]
+        : []),
+    ],
   });
   const api = {
     load: vi.fn(),
@@ -340,12 +376,13 @@ function setupPanel(data: Partial<CanvasMediaData> = {}, kind: 'image' | 'video'
     subscribe: vi.fn(),
   };
   const registry = createBuiltinRegistry();
+  const upload = vi.fn<CanvasHost['media']['upload']>();
   render(
     <CanvasContext.Provider
       value={{
         store,
         registry,
-        host: { media: { upload: vi.fn(), url: (id) => id }, generation: api },
+        host: { media: { upload, url: (id) => id }, generation: api },
       }}
     >
       <Panel kind={kind} />
@@ -354,10 +391,82 @@ function setupPanel(data: Partial<CanvasMediaData> = {}, kind: 'image' | 'video'
   return {
     store,
     api,
+    upload,
     registry,
     data: () => store.getState().document.nodes[1].data as CanvasMediaData,
   };
 }
+
+it('切换视频模型保留不兼容参数为待处理项并阻止提交', () => {
+  const test = setupPanel({}, 'video');
+  fireEvent.click(screen.getByRole('button', { name: '生成模型' }));
+  fireEvent.click(screen.getByRole('button', { name: /精简视频模型/ }));
+  expect(test.data().pendingParams).toEqual({ resolution: '720p' });
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成视频' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
+  fireEvent.click(screen.getByRole('button', { name: '清除待处理参数' }));
+  expect(test.data().pendingParams).toEqual({});
+});
+
+it('本地音频和连线素材按同一顺序编号与提交，文件保存为节点引用', async () => {
+  const test = setupPanel({ mode: 'reference' }, 'video');
+  const audio = {
+    ...generationJob().outputs[0],
+    sha256: sha('c'),
+    mime: 'audio/wav',
+    width: null,
+    height: null,
+    durationMs: 3000,
+  };
+  test.upload.mockResolvedValue(audio);
+  test.api.create.mockResolvedValue(
+    generationJob({ status: 'running', kind: 'video', outputs: [] }),
+  );
+  act(() => {
+    test.store.getState().setGenerationConfig({
+      storageReady: true,
+      models: [
+        {
+          id: modelId,
+          label: '自定义视频',
+          kind: 'video',
+          profile: {
+            ...videoProfile,
+            id: 'imported-future-video',
+            modes: [{ id: 'reference', name: '多模态参考' }],
+            inputs: [
+              ...videoProfile.inputs,
+              { ...videoProfile.inputs[0], kind: 'audio', mimeTypes: ['audio/wav'] },
+            ],
+          },
+        },
+      ],
+    });
+    test.store.getState().apply((document) => ({
+      ...document,
+      nodes: [referenceSource('source'), document.nodes[1]],
+      edges: [edge('ref-edge', 'source', 'target')],
+    }));
+  });
+  fireEvent.click(screen.getByRole('button', { name: '视频素材' }));
+  fireEvent.click(screen.getByRole('button', { name: '添加参考素材' }));
+  fireEvent.change(screen.getByLabelText('上传视频参考素材'), {
+    target: { files: [new File(['audio'], '声音.wav', { type: 'audio/wav' })] },
+  });
+  await waitFor(() => expect(test.data().mediaReferences).toHaveLength(1));
+  fireEvent.click(screen.getByRole('button', { name: '素材 2 前移' }));
+  expect(test.data().inputOrder[1]).toBe('ref-edge');
+  fireEvent.keyDown(
+    screen.getByLabelText('视频素材', { selector: '[data-slot="popover-content"]' }),
+    { key: 'Escape' },
+  );
+  fireEvent.click(screen.getByRole('button', { name: '生成视频' }));
+  await waitFor(() => expect(test.api.create).toHaveBeenCalledTimes(1));
+  expect(test.api.create.mock.calls[0][0].inputs).toEqual([
+    { kind: 'audio', role: 'reference', sha256: sha('c') },
+    { kind: 'image', role: 'reference', sha256: sha('a') },
+  ]);
+});
 
 it('按数量连续创建任务，重复点击不会重复提交，部分创建失败保留已创建项', async () => {
   const test = setupPanel({ count: 3 });

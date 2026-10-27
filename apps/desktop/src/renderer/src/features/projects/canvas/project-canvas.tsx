@@ -11,7 +11,6 @@ import {
   GenerationJob,
   MediaFile,
   ModelDefaults,
-  ModelProfileList,
   ObjectStorageState,
 } from '@frame-loom/contracts';
 import { CanvasEditor, downloadCanvasDocument, type CanvasHost } from '@frame-loom/canvas';
@@ -93,11 +92,10 @@ export function ProjectCanvas({
         },
         generation: {
           load: async (signal) => {
-            const [channels, models, defaults, profiles, storage] = await Promise.all([
+            const [channels, models, defaults, storage] = await Promise.all([
               engineClient.request('/channels', ChannelList, { signal }),
               engineClient.request('/channel-models', ChannelModelList, { signal }),
               engineClient.request('/model-defaults', ModelDefaults, { signal }),
-              engineClient.request('/model-profiles', ModelProfileList, { signal }),
               engineClient.request('/object-storage', ObjectStorageState, { signal }),
             ]);
             return {
@@ -112,44 +110,13 @@ export function ProjectCanvas({
                     (model.kind !== 'image' && model.kind !== 'video')
                   )
                     return [];
-                  const profile =
-                    profiles
-                      .filter(
-                        (item) =>
-                          item.kind === model.kind &&
-                          item.protocol === model.protocol &&
-                          (model.profileId
-                            ? item.id === model.profileId
-                            : item.matchIds.some((id) =>
-                                model.kind === 'image'
-                                  ? model.upstreamModelId.startsWith(id)
-                                  : model.upstreamModelId === id,
-                              )),
-                      )
-                      .sort((a, b) => {
-                        const length = (item: typeof a) =>
-                          Math.max(
-                            0,
-                            ...item.matchIds
-                              .filter((id) => model.upstreamModelId.startsWith(id))
-                              .map((id) => id.length),
-                          );
-                        return length(b) - length(a);
-                      })[0] ??
-                    profiles.find(
-                      (item) =>
-                        !model.profileId &&
-                        item.protocol === model.protocol &&
-                        item.kind === model.kind &&
-                        item.generic,
-                    ) ??
-                    null;
                   return [
                     {
                       id: model.id,
                       label: model.displayName,
                       kind: model.kind,
-                      profile,
+                      profile: model.effectiveProfile ?? null,
+                      upload: model.connection?.runtime?.upload,
                       preferred: defaults[model.kind] === model.id,
                     },
                   ];
@@ -170,6 +137,10 @@ export function ProjectCanvas({
             }),
           cancel: (id) =>
             engineClient.request('/generation-jobs/' + id + '/cancel', GenerationJob, {
+              method: 'POST',
+            }),
+          cancelRemote: (id) =>
+            engineClient.request('/generation-jobs/' + id + '/cancel-remote', GenerationJob, {
               method: 'POST',
             }),
           subscribe: (changed, signal) => {

@@ -64,8 +64,8 @@ test('节点连线：类型、重复、环、端口限额、方式切换一步�
     await drag(page, out(images.nth(1)), images.nth(0).locator('[data-handleid="reference"]'));
     await expect(editor.getByRole('status')).toContainText('循环依赖');
     await page.getByRole('radio', { name: '文生视频', exact: true }).click();
-    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
-    await expect(editor.getByRole('status')).toContainText('断开 1 条');
+    await expect(page.locator('.react-flow__edge')).toHaveCount(2);
+    await expect(first).toHaveAttribute('title', '首帧（当前模型不支持）');
     await page.getByRole('button', { name: '撤销', exact: true }).click();
     await expect(page.locator('.react-flow__edge')).toHaveCount(2);
     await expect(page.getByRole('radio', { name: '首尾帧', exact: true })).toHaveAttribute(

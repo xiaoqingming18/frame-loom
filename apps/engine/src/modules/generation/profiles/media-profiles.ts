@@ -5,13 +5,38 @@ import { videoProfiles } from './video-profiles.js';
 import { ttsProfiles } from './tts-profiles.js';
 
 export const mediaProfiles = [...imageProfiles, ...videoProfiles, ...ttsProfiles];
+/** 旧目录缺少新增字段时沿用执行器硬边界，不能因目录尚未升级而放宽限制。 */
+export function executionProfile(profile: ModelProfile): ModelProfile {
+  const supported = mediaProfiles.filter((item) => item.protocol === profile.protocol);
+  const maxLength = Math.min(
+    32000,
+    ...supported.flatMap((item) =>
+      item.promptMaxLength === undefined ? [] : [item.promptMaxLength],
+    ),
+  );
+  const maxBytes = supported.flatMap((item) =>
+    item.promptMaxBytes === undefined ? [] : [item.promptMaxBytes],
+  );
+  return {
+    ...profile,
+    promptMaxLength: Math.min(profile.promptMaxLength ?? maxLength, maxLength),
+    ...(maxBytes.length
+      ? { promptMaxBytes: Math.min(profile.promptMaxBytes ?? Infinity, ...maxBytes) }
+      : {}),
+    modes: profile.modes.map((mode) =>
+      profile.kind === 'video' && mode.id === 'frames' && !mode.requiredRoles
+        ? { ...mode, requiredRoles: ['first_frame'] }
+        : mode,
+    ),
+  };
+}
 export function mediaProfile(
   model: Pick<ChannelModelWrite, 'kind' | 'protocol' | 'profileId' | 'upstreamModelId'> & {
-    effectiveProfile?: ModelProfile;
+    effectiveProfile?: ModelProfile | null;
   },
 ): ModelProfile {
-  if (model.effectiveProfile) return model.effectiveProfile;
-  if (model.kind === 'image') return imageProfile(model);
+  if (model.effectiveProfile) return executionProfile(model.effectiveProfile);
+  if (model.kind === 'image') return executionProfile(imageProfile(model));
   const profiles = mediaProfiles.filter(
     (profile) => profile.kind === model.kind && profile.protocol === model.protocol,
   );
@@ -24,5 +49,5 @@ export function mediaProfile(
   const exact = profiles.find((profile) => profile.matchIds.includes(model.upstreamModelId));
   if (model.protocol === 'fastaitoken-video' && exact && selected.id !== exact.id)
     throw new DomainError('INVALID_PROFILE', 422, 'FastAIToken 已知型号必须使用对应的精确能力档案');
-  return selected;
+  return executionProfile(selected);
 }

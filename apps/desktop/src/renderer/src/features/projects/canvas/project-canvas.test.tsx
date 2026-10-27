@@ -115,7 +115,7 @@ function setup(initialFailure?: Error) {
   };
 }
 
-it('宿主图片档案按最长前缀匹配且显式选择优先，单张重试调用 resubmit', async () => {
+it('宿主使用服务端有效档案而不按别名推断，单张重试调用 resubmit', async () => {
   const base = ModelProfile.parse({
     id: 'base',
     name: '图片',
@@ -171,8 +171,19 @@ it('宿主图片档案按最长前缀匹配且显式选择优先，单张重试�
         },
       ],
       '/channel-models': [
-        { ...model, id: crypto.randomUUID(), upstreamModelId: 'gpt-image-2.5-2026-09-08' },
-        { ...model, id: crypto.randomUUID(), upstreamModelId: 'gpt-image-2.5', profileId: 'base' },
+        {
+          ...model,
+          id: crypto.randomUUID(),
+          upstreamModelId: 'custom-billing-id',
+          effectiveProfile: profiles[1],
+        },
+        {
+          ...model,
+          id: crypto.randomUUID(),
+          upstreamModelId: 'gpt-image-2.5',
+          profileId: 'base',
+          effectiveProfile: base,
+        },
       ],
       '/model-defaults': { chat: null, image: null, video: null, tts: null },
       '/model-profiles': profiles,
@@ -202,6 +213,7 @@ it('宿主图片档案按最长前缀匹配且显式选择优先，单张重试�
   await screen.findByRole('button', { name: '编辑画布' });
   const config = await captured.host!.generation!.load(new AbortController().signal);
   expect(config.models.map((model) => model.profile?.id)).toEqual(['new', 'base']);
+  expect(request.mock.calls.some(([path]) => path === '/model-profiles')).toBe(false);
   request.mockRejectedValueOnce(new Error('重试响应'));
   await expect(captured.host!.generation!.resubmit('failed-id')).rejects.toThrow('重试响应');
   expect(request).toHaveBeenLastCalledWith(

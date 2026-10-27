@@ -68,20 +68,28 @@ it('多个节点引用同任务时全部写回；提交结果不明保留引用�
   const one = media('one');
   one.data = { ...(one.data as CanvasMediaData), pendingJobIds: [id] };
   const document = doc([one, { ...one, id: 'copy' }]);
-  expect(writeGenerationJob(document, { ...job, status: 'submit_unknown' })).toBe(document);
+  expect(writeGenerationJob(document, { ...job, status: 'submit_unknown', outputs: [] })).toBe(
+    document,
+  );
   for (const status of ['failed', 'cancelled', 'succeeded'] as const) {
-    const next = writeGenerationJob(document, { ...job, status });
+    const nextJob = { ...job, status, outputs: status === 'succeeded' ? job.outputs : [] };
+    const next = writeGenerationJob(document, nextJob);
     for (const node of next.nodes) {
       expect((node.data as CanvasMediaData).pendingJobIds).toEqual(status === 'failed' ? [id] : []);
       expect((node.data as CanvasMediaData).versions).toHaveLength(status === 'succeeded' ? 1 : 0);
     }
-    expect(writeGenerationJob(next, { ...job, status })).toBe(next);
+    expect(writeGenerationJob(next, nextJob)).toBe(next);
   }
 });
 
 it('三个任务乱序完成、部分失败与重复事件不覆盖结果，并同步全部历史快照', () => {
   const second = { ...job, id: '22222222-2222-4222-8222-222222222222' };
-  const third = { ...job, id: '33333333-3333-4333-8333-333333333333', status: 'failed' as const };
+  const third = {
+    ...job,
+    id: '33333333-3333-4333-8333-333333333333',
+    status: 'failed' as const,
+    outputs: [],
+  };
   const node = media('one');
   node.data = { ...(node.data as CanvasMediaData), pendingJobIds: [id, second.id, third.id] };
   const store = createCanvasStore(doc([node]));
@@ -97,4 +105,22 @@ it('三个任务乱序完成、部分失败与重复事件不覆盖结果，并�
     expect(data.pendingJobIds).toEqual([third.id]);
     expect(data.versions.map((version) => version.jobId)).toEqual([second.id, id]);
   }
+});
+
+it('下载失败先写回部分结果，恢复增加其余版本且重复事件不覆盖用户选择', () => {
+  const node = media('one');
+  node.data = { ...(node.data as CanvasMediaData), pendingJobIds: [id] };
+  const partial = { ...job, status: 'download_failed' as const };
+  const first = writeGenerationJob(doc([node]), partial);
+  expect((first.nodes[0].data as CanvasMediaData).pendingJobIds).toEqual([id]);
+  expect((first.nodes[0].data as CanvasMediaData).versions).toHaveLength(1);
+  expect(writeGenerationJob(first, partial)).toBe(first);
+  const full = writeGenerationJob(first, {
+    ...job,
+    outputs: [...job.outputs, { ...job.outputs[0], sha256: 'b'.repeat(64) }],
+  });
+  expect((full.nodes[0].data as CanvasMediaData).pendingJobIds).toEqual([]);
+  expect((full.nodes[0].data as CanvasMediaData).versions.map((version) => version.sha256)).toEqual(
+    ['a'.repeat(64), 'b'.repeat(64)],
+  );
 });

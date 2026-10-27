@@ -248,6 +248,46 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     await ime.send('Input.insertText', { text: '视频中文' });
     await expect(page.getByLabel('生成提示词')).toHaveValue('视频中文');
     await page.getByLabel('生成提示词').fill('让这束暖光缓慢掠过胶片');
+    await page.getByRole('radio', { name: '文生视频', exact: true }).click();
+    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '生成视频', exact: true })).toBeDisabled();
+    await expect(page.getByLabel('生成提示词')).toHaveValue('让这束暖光缓慢掠过胶片');
+    await page.getByRole('radio', { name: '首尾帧', exact: true }).click();
+    await page.getByRole('button', { name: '视频素材', exact: true }).click();
+    const videoMaterials = page.getByRole('dialog', { name: '视频素材', exact: true });
+    await expect(videoMaterials.getByLabel('素材 1 角色')).toHaveValue('first_frame');
+    await videoMaterials.getByRole('button', { name: '视频素材说明', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(/上传只存入项目，不调用模型/)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    // 固定宽输入框通过画布平移查看；先让视频节点在最小窗口内，再检查独立弹层。
+    await page.mouse.move(box.x + 600, box.y + 100);
+    await page.mouse.down({ button: 'middle' });
+    await page.mouse.move(box.x + 180, box.y - 100, { steps: 12 });
+    await page.mouse.up({ button: 'middle' });
+    await page.getByRole('button', { name: '生成参数', exact: true }).click();
+    const videoParameters = page.getByRole('dialog', { name: '生成参数', exact: true });
+    await videoParameters.getByText('更多', { exact: true }).click();
+    await videoParameters.getByRole('button', { name: '时长（秒）说明' }).click();
+    await expect(page.getByText('默认值：5。', { exact: true })).toBeVisible();
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+      await expect(async () => {
+        const bounds = (await videoParameters.boundingBox())!;
+        const width = await page.evaluate(() => innerWidth);
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+        const height = await page.evaluate(() => innerHeight);
+        expect(bounds.y).toBeGreaterThanOrEqual(0);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(height);
+      }).toPass();
+      await page.screenshot({ path: info.outputPath(`video-capabilities-help-${theme}.png`) });
+    }
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1500, 960));
     await page.getByRole('button', { name: '生成视频', exact: true }).click();
     const previewVideo = videoNode.locator('video');
     await expect(previewVideo).toBeVisible();
@@ -350,6 +390,7 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
     await app?.close();
     upstream.closeAllConnections();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
-    await rm(userData, { recursive: true, force: true });
+    if (process.env.FRAME_LOOM_E2E_KEEP_DATA === '1') console.log(`原生验收数据：${userData}`);
+    else await rm(userData, { recursive: true, force: true });
   }
 });

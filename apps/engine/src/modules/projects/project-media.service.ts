@@ -21,6 +21,7 @@ export function documentReferences(document: CanvasDocument) {
       hashes.add(version.sha256);
       if (version.posterSha256) hashes.add(version.posterSha256);
     }
+    for (const reference of data.mediaReferences ?? []) hashes.add(reference.media.sha256);
     for (const id of data.pendingJobIds ?? []) jobs.add(id);
     if (data.pendingJobId) jobs.add(data.pendingJobId);
   }

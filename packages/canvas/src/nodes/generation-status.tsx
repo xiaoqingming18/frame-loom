@@ -8,6 +8,7 @@ import { writeGenerationJob } from './generation-writeback';
 export function GenerationStatus({ nodeId, data }: { nodeId: string; data: CanvasMediaData }) {
   const { host, store } = useCanvas();
   const jobs = useCanvasState((state) => state.generationJobs);
+  const config = useCanvasState((state) => state.generationConfig);
   const submitting = useCanvasState((state) => state.generationSubmitting.has(nodeId));
   const locked = useCanvasState((state) => {
     const node = state.document.nodes.find((item) => item.id === nodeId);
@@ -19,11 +20,15 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
   );
   const api = host.generation;
   if (!api || (!ids.length && !submitting)) return null;
-  async function act(id: string, retry: boolean) {
+  async function act(id: string, retry: boolean, remote = false) {
     if (!api || locked || store.getState().generationSubmitting.has(nodeId)) return;
     store.getState().setGenerationSubmitting(nodeId, true);
     try {
-      const job = await (retry ? api.resubmit(id) : api.cancel(id));
+      const job = await (remote && api.cancelRemote
+        ? api.cancelRemote(id)
+        : retry
+          ? api.resubmit(id)
+          : api.cancel(id));
       store.getState().setGenerationJob(job);
       store.getState().applySystem((document) =>
         updateData<CanvasMediaData>(document, nodeId, (current) => ({
@@ -59,6 +64,10 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
       )}
       {ids.map((id, index) => {
         const job = jobs.get(id);
+        const retryAvailable =
+          job?.recoveryAction !== 'new_job' ||
+          job.kind !== 'video' ||
+          config?.models.some((model) => model.id === job.channelModelId && !!model.profile);
         return (
           <div key={id} className="space-y-1">
             {job?.errorMessage && (
@@ -74,6 +83,13 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
             )}
             {job?.status === 'download_failed' && (
               <p role="status">下载失败；重试只下载已生成的产物</p>
+            )}
+            {!!job?.outputs.length && <p>已归档 {job.outputs.length} 个产物；可用结果已写入版本</p>}
+            {job?.cancellation && job.cancellation !== 'confirmed' && (
+              <p role="status">
+                {job.cancellation === 'unknown' ? '远端取消结果不明' : '已请求远端取消，尚未确认'}
+                ；可恢复查询确认。
+              </p>
             )}
             {job?.remoteTaskId && (
               <p className="break-all text-muted-foreground">远端任务：{job.remoteTaskId}</p>
@@ -95,6 +111,7 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
               )}
             <div className="flex justify-center gap-1">
               {job &&
+                retryAvailable &&
                 (job.recoveryAction ? job.recoveryAction !== 'none' : job.status === 'failed') && (
                   <Button
                     size="sm"
@@ -114,6 +131,16 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
                     {index + 1}
                   </Button>
                 )}
+              {job?.canCancelRemote && api.cancelRemote && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={locked || submitting}
+                  onClick={() => void act(id, false, true)}
+                >
+                  请求远端取消
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"

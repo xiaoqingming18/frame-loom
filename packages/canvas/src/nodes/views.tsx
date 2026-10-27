@@ -17,23 +17,24 @@ import {
   Plus,
   Upload,
 } from 'lucide-react';
-import type { CanvasGroupData, CanvasMediaData, CanvasVideoMode } from '@frame-loom/contracts';
+import {
+  executableGenerationModes,
+  generationRoleReason,
+  type CanvasGroupData,
+  type CanvasMediaData,
+  type CanvasVideoMode,
+} from '@frame-loom/contracts';
 import { cn } from '@frame-loom/ui/lib/utils';
 import { Button } from '@frame-loom/ui/components/button';
 import { NodeActionsContext, useCanvas, useCanvasState } from '../context';
-import {
-  changeDataDroppingEdges,
-  isNodeLocked,
-  updateData,
-  updateNode,
-} from '../commands/commands';
+import { isNodeLocked, updateData, updateNode } from '../commands/commands';
 import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
-import { activeVersion, appendVersion, GROUP_COLORS, VIDEO_MODES } from './media';
+import { activeVersion, appendVersion, GROUP_COLORS, VIDEO_MODES, videoInputs } from './media';
 import { importMedia } from '../interaction/media-import';
 import { GenerationStatus } from './generation-status';
 import { checkConnection } from '../registry/connections';
 import { GenerationPanel } from './generation-panel';
-import { generationModel } from './generation-inputs';
+import { generationInputs, generationModel } from './generation-inputs';
 
 const portClass: Record<string, string> = {
   image: 'canvas-port-image',
@@ -223,10 +224,34 @@ function MediaFrame({
   const profile = useCanvasState(
     (state) => generationModel(state.generationConfig, kind, node.data.modelId)?.profile,
   );
+  const document = useCanvasState((state) => state.document);
+  const baseInputs = registry.inputs(node);
+  const retained =
+    kind === 'video'
+      ? [...videoInputs('frames'), ...videoInputs('reference')].filter(
+          (port) =>
+            !baseInputs.some((entry) => entry.id === port.id) &&
+            document.edges.some((edge) => edge.target === node.id && edge.targetHandle === port.id),
+        )
+      : [];
+  const ports = [...baseInputs, ...retained];
   const disabledInputs =
-    profile?.constraints.flatMap((rule) =>
-      Object.keys(rule.when).length === 0 ? (rule.forbidRoles ?? []) : [],
-    ) ?? [];
+    profile && kind === 'video'
+      ? ports
+          .filter((port) =>
+            generationRoleReason(
+              profile,
+              {
+                mode: node.data.mode ?? 'text',
+                params: node.data.params ?? {},
+                inputs: generationInputs(document, node.id),
+              },
+              port.id as 'reference' | 'first_frame' | 'last_frame',
+              'image',
+            ),
+          )
+          .map((port) => port.id)
+      : retained.map((port) => port.id);
   return (
     <div className="flex size-full flex-col">
       <div className="absolute -top-7 right-0 left-0 flex items-center justify-between gap-2">
@@ -328,7 +353,7 @@ function MediaFrame({
       )}
       <Ports
         nodeId={node.id}
-        inputs={registry.inputs(node)}
+        inputs={ports}
         outputs={registry.outputs(node)}
         disabledInputs={disabledInputs}
       />
@@ -484,24 +509,9 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
   const setMode = (next: CanvasVideoMode) => {
     if (next === mode) return;
     const state = store.getState();
-    let dropped = 0;
-    const changed = state.apply((document) => {
-      const result = changeDataDroppingEdges<CanvasMediaData>(
-        registry,
-        document,
-        props.node.id,
-        (data) => ({
-          ...data,
-          mode: next,
-        }),
-      );
-      dropped = result.dropped;
-      return result.document;
-    });
-    if (changed && dropped)
-      state.notify(
-        `已切换为${VIDEO_MODES.find((item) => item.id === next)!.label}，断开 ${dropped} 条不兼容的连线`,
-      );
+    state.apply((document) =>
+      updateData<CanvasMediaData>(document, props.node.id, (data) => ({ ...data, mode: next })),
+    );
   };
   return (
     <MediaFrame
@@ -513,8 +523,12 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
           aria-label="生成方式"
           className="nodrag nopan absolute -bottom-9 left-1/2 flex -translate-x-1/2 gap-0.5 rounded-lg border bg-popover p-0.5 shadow-canvas-panel"
         >
-          {VIDEO_MODES.filter(
-            (item) => !profile || profile.modes.some((mode) => mode.id === item.id),
+          {(profile
+            ? executableGenerationModes(profile).map((item) => ({
+                id: item.id as CanvasVideoMode,
+                label: item.name,
+              }))
+            : VIDEO_MODES
           ).map((item) => (
             <button
               key={item.id}

@@ -7,6 +7,7 @@ import {
   IMAGE_QUALITY_LABELS,
   IMAGE_BACKGROUND_LABELS,
   imageRequestSize,
+  generationParamReason,
   type ModelProfile,
   type GenerationRequest,
 } from '@frame-loom/contracts';
@@ -15,6 +16,9 @@ import { NativeSelect } from '@frame-loom/ui/components/native-select';
 import { Slider } from '@frame-loom/ui/components/slider';
 import { ToggleGroup, ToggleGroupItem } from '@frame-loom/ui/components/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@frame-loom/ui/components/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@frame-loom/ui/components/popover';
+import { Button } from '@frame-loom/ui/components/button';
+import { CircleHelp } from 'lucide-react';
 
 type Params = GenerationRequest['params'];
 const groups = {
@@ -36,11 +40,13 @@ export function GenerationParams({
   params,
   disabled,
   onChange,
+  request,
 }: {
   profile: ModelProfile;
   params: Params;
   disabled: boolean;
   onChange: (key: string, value: Params[string]) => void;
+  request?: GenerationRequest;
 }) {
   let pixels: string | undefined;
   // 通用档案可能不声明比例；Gemini 的实际尺寸由供应商决定，不伪造像素值。
@@ -149,15 +155,62 @@ export function GenerationParams({
           </summary>
           <div className="mt-3 space-y-3">
             {profile.params
-              .filter((param) => profile.kind !== 'image' || !(param.key in groups))
+              .filter(
+                (param) =>
+                  (profile.kind !== 'image' || !(param.key in groups)) &&
+                  !(
+                    profile.audioParam === param.key &&
+                    ['fixed-on', 'fixed-off'].includes(profile.audioOutput ?? '')
+                  ),
+              )
               .map((param) => (
-                <label key={param.key} className="flex items-center justify-between gap-3">
-                  <span>{param.name}</span>
+                <div key={param.key} className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-1">
+                    {param.name}
+                    {profile.kind === 'video' && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`${param.name}说明`}
+                            className="size-6"
+                          >
+                            <CircleHelp aria-hidden="true" className="size-3.5" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          sticky="always"
+                          className="max-w-[calc(100vw-32px)] text-xs"
+                        >
+                          <p>
+                            默认值：{String(param.default)}
+                            {param.min !== undefined ? `；最小 ${param.min}` : ''}
+                            {param.max !== undefined ? `；最大 ${param.max}` : ''}。
+                          </p>
+                          {Object.entries(param.notes ?? {}).map(([value, note]) => (
+                            <p key={value}>
+                              {value}：{note}
+                            </p>
+                          ))}
+                          {profile.constraints
+                            .filter((rule) => rule.param === param.key)
+                            .map((rule, index) => (
+                              <p key={index}>{rule.message}</p>
+                            ))}
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </span>
                   {param.type === 'enum' ? (
                     <NativeSelect
                       aria-label={param.name}
                       disabled={disabled}
-                      value={String(params[param.key] ?? param.default)}
+                      value={
+                        param.values?.includes(params[param.key] ?? param.default)
+                          ? String(params[param.key] ?? param.default)
+                          : ''
+                      }
                       onChange={(event) =>
                         onChange(
                           param.key,
@@ -166,17 +219,40 @@ export function GenerationParams({
                       }
                       className="w-auto max-w-48"
                     >
+                      <option value="" disabled>
+                        请选择
+                      </option>
                       {param.values?.map((value) => (
-                        <option key={String(value)} value={String(value)}>
+                        <option
+                          key={String(value)}
+                          value={String(value)}
+                          disabled={
+                            !!request && !!generationParamReason(profile, request, param.key, value)
+                          }
+                        >
                           {String(value)}
+                          {request && generationParamReason(profile, request, param.key, value)
+                            ? `（${generationParamReason(profile, request, param.key, value)}）`
+                            : ''}
                         </option>
                       ))}
                     </NativeSelect>
+                  ) : param.type === 'boolean' && param.values?.length === 1 ? (
+                    <span>{param.values[0] === true ? '固定开启' : '固定关闭'}</span>
                   ) : param.type === 'boolean' ? (
                     <input
                       type="checkbox"
                       aria-label={param.name}
-                      disabled={disabled}
+                      disabled={
+                        disabled ||
+                        (!!request &&
+                          !!generationParamReason(
+                            profile,
+                            request,
+                            param.key,
+                            params[param.key] !== true,
+                          ))
+                      }
                       checked={params[param.key] === true}
                       onChange={(event) => onChange(param.key, event.target.checked)}
                     />
@@ -197,7 +273,7 @@ export function GenerationParams({
                       className="w-36"
                     />
                   )}
-                </label>
+                </div>
               ))}
           </div>
         </details>
@@ -205,6 +281,15 @@ export function GenerationParams({
       {pixels && (
         <p aria-label="预计像素" className="border-t pt-3 text-muted-foreground">
           ≈ {pixels}
+        </p>
+      )}
+      {profile.kind === 'video' && profile.audioOutput && profile.audioOutput !== 'optional' && (
+        <p className="border-t pt-3 text-muted-foreground">
+          {profile.audioOutput === 'fixed-on'
+            ? '声音：固定有声'
+            : profile.audioOutput === 'fixed-off'
+              ? '声音：固定无声'
+              : '声音：接入未声明，不能推断有声输出'}
         </p>
       )}
     </div>

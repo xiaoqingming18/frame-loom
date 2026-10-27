@@ -81,6 +81,15 @@ describe('生成契约与共享预检', () => {
   });
   it('拦截数量、格式、大小、模式、范围和白名单外字段', () => {
     expect(
+      checkGenerationRequest(
+        { ...profile, params: [{ ...profile.params[0], values: undefined }] },
+        {
+          ...request,
+          params: { resolution: '720p' },
+        },
+      ),
+    ).toContainEqual({ field: 'resolution', message: '分辨率取值无效' });
+    expect(
       checkGenerationRequest(profile, {
         ...request,
         mode: 'reference',

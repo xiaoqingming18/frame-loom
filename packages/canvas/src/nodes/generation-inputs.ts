@@ -1,4 +1,4 @@
-import type { CanvasDocument, GenerationInput } from '@frame-loom/contracts';
+import type { CanvasDocument, CanvasMediaData, GenerationInput } from '@frame-loom/contracts';
 import type { CanvasGenerationConfig } from '../host';
 
 export function generationModel(
@@ -11,7 +11,42 @@ export function generationModel(
 }
 
 export function generationInputs(document: CanvasDocument, nodeId: string): GenerationInput[] {
-  return generationReferences(document, nodeId).map((reference) => reference.input);
+  return generationSources(document, nodeId).map((reference) => reference.input);
+}
+
+/** 连线和本地素材使用同一份顺序，编号与实际请求始终一致。 */
+export function generationSources(document: CanvasDocument, nodeId: string) {
+  const target = document.nodes.find((node) => node.id === nodeId);
+  const data = target?.data as CanvasMediaData | undefined;
+  const refs = generationReferences(document, nodeId).map(({ edge, node, input, media }) => ({
+    id: edge.id,
+    sourceId: node.id,
+    name: node.title ?? node.id,
+    input,
+    media,
+    local: false,
+  }));
+  const local = (data?.mediaReferences ?? []).map((ref) => ({
+    id: ref.id,
+    sourceId: ref.id,
+    name: ref.name,
+    input: {
+      kind: ref.media.mime.startsWith('image/')
+        ? ('image' as const)
+        : ref.media.mime.startsWith('video/')
+          ? ('video' as const)
+          : ('audio' as const),
+      role: ref.role,
+      sha256: ref.media.sha256,
+    },
+    media: ref.media,
+    local: true,
+  }));
+  const rank = (id: string) => {
+    const index = data?.inputOrder.indexOf(id) ?? -1;
+    return index < 0 ? (data?.inputOrder.length ?? 0) : index;
+  };
+  return [...refs, ...local].sort((a, b) => rank(a.id) - rank(b.id));
 }
 
 /** 编号、缩略图和请求输入共用同一次排序及有效产物筛选。 */
@@ -30,13 +65,14 @@ export function generationReferences(document: CanvasDocument, nodeId: string) {
     .flatMap((edge) => {
       const source = document.nodes.find((node) => node.id === edge.source);
       if (!source || (source.type !== 'image' && source.type !== 'video')) return [];
-      const data = source.data as { versions?: { sha256: string }[]; activeVersion?: number };
+      const data = source.data as CanvasMediaData;
       const media = data.versions?.[data.activeVersion ?? -1];
       return media
         ? [
             {
               edge,
               node: source,
+              media,
               input: {
                 kind: source.type === 'video' ? ('video' as const) : ('image' as const),
                 role:

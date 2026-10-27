@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   CanvasDocument,
+  type CanvasMediaData,
   ProjectSummary,
   ProjectPageSummary,
   emptyCanvasDocument,
@@ -375,7 +376,25 @@ it('清理保护全部页面版本、未结束任务和 pending 任务，会话�
     .set({ status: 'succeeded', outputs: [hashes[6]] })
     .where(eq(generationJobs.id, pending.id))
     .run();
-  const doc = document(hashes.slice(0, 2), [pending.id]);
+  const doc = document([hashes[0]], [pending.id]);
+  Object.assign(doc.nodes[0].data as CanvasMediaData, {
+    mediaReferences: [
+      {
+        id: 'local-reference',
+        name: '本地参考',
+        role: 'reference',
+        media: {
+          sha256: hashes[1],
+          mime: 'image/png',
+          bytes: png.length,
+          width: 1,
+          height: 1,
+          durationMs: null,
+          createdAt: new Date().toISOString(),
+        },
+      },
+    ],
+  });
   (doc.nodes[0].data as { versions: { posterSha256?: string }[] }).versions[0].posterSha256 =
     hashes[2];
   const second = ProjectPageSummary.parse(

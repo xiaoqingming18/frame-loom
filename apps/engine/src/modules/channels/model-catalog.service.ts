@@ -15,7 +15,7 @@ import {
 } from '@frame-loom/contracts';
 import { DatabaseService } from '../../core/database/database.service.js';
 import { DomainError } from '../../core/http/domain-error.js';
-import { mediaProfiles } from '../generation/profiles/media-profiles.js';
+import { mediaProfiles, executionProfile } from '../generation/profiles/media-profiles.js';
 import { modelCatalog, channelModels, channels, modelDefaults } from './channels.schema.js';
 import { isPublicAddress } from '../generation/public-reference.js';
 import { isIP } from 'node:net';
@@ -132,7 +132,7 @@ export class ModelCatalogService {
           '文本能力通过模型限制设置，定义不能包含未执行的字段',
         );
     } else {
-      const profile = ModelProfile.parse(definition.profile);
+      const profile = executionProfile(ModelProfile.parse(definition.profile));
       if (profile.kind !== definition.kind || profile.protocol !== definition.protocol)
         throw new DomainError('INVALID_DEFINITION', 422, '模型定义类别与执行能力不一致');
       const supported = mediaProfiles.filter((item) => item.protocol === profile.protocol);
@@ -153,7 +153,19 @@ export class ModelCatalogService {
         );
       const base = supported.find(
         (item) =>
-          profile.modes.every((mode) => item.modes.some((entry) => entry.id === mode.id)) &&
+          profile.modes.every((mode) =>
+            item.modes.some(
+              (entry) =>
+                entry.id === mode.id &&
+                (entry.requiredRoles ?? []).every((role) => mode.requiredRoles?.includes(role)),
+            ),
+          ) &&
+          (profile.promptMaxLength ?? 32000) <= (item.promptMaxLength ?? 32000) &&
+          (!item.promptMaxBytes ||
+            (!!profile.promptMaxBytes && profile.promptMaxBytes <= item.promptMaxBytes)) &&
+          (!profile.audioParam || profile.audioParam === item.audioParam) &&
+          (!['fixed-on', 'fixed-off'].includes(item.audioOutput ?? '') ||
+            profile.audioOutput === item.audioOutput) &&
           profile.params.every((param) =>
             item.params.some(
               (entry) =>
@@ -272,7 +284,9 @@ export class ModelCatalogService {
     if (!input.definitionId) return undefined;
     const resolved = this.resolve(input);
     const definition = this.get().definitions.find((item) => item.id === input.definitionId)!;
-    return resolved.kind === 'chat' ? undefined : ModelProfile.parse(definition.profile);
+    return resolved.kind === 'chat'
+      ? undefined
+      : executionProfile(ModelProfile.parse(definition.profile));
   }
   preview(raw: unknown) {
     const incoming = ModelImportPackage.parse(raw);

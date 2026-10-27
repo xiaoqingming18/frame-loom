@@ -13,11 +13,7 @@ export function mediaKind(file: Blob): 'image' | 'video' | null {
 
 export function toVersion(media: MediaFile, posterSha256?: string): CanvasMediaVersion {
   return {
-    sha256: media.sha256,
-    mime: media.mime,
-    width: media.width,
-    height: media.height,
-    durationMs: media.durationMs,
+    ...media,
     ...(posterSha256 ? { posterSha256 } : {}),
     createdAt: new Date().toISOString(),
   };

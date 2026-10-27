@@ -10,7 +10,7 @@ const runtime = {
 };
 const modes = [
   { id: 'text', name: '文生视频' },
-  { id: 'frames', name: '首尾帧' },
+  { id: 'frames', name: '首尾帧', requiredRoles: ['first_frame'] },
   { id: 'reference', name: '全模态参考' },
 ];
 const image = {
@@ -74,6 +74,7 @@ const minimax = [
     name: model,
     kind: 'video',
     protocol: 'minimax-video-v2',
+    promptMaxLength: 7000,
     matchIds: [model],
     generic: false,
     modes,
@@ -119,6 +120,8 @@ const seedance = [
         : 'Seedance 2.0',
     kind: 'video',
     protocol: 'ark-video-tasks',
+    audioOutput: 'optional',
+    audioParam: 'generate_audio',
     matchIds: [model, model.replace(/-260\d+$/, '')],
     generic: false,
     modes,
@@ -151,6 +154,7 @@ const sora = ModelProfile.parse({
   name: 'Sora 兼容渠道',
   kind: 'video',
   protocol: 'openai-videos',
+  audioOutput: 'fixed-on',
   matchIds: ['sora-2', 'sora-2-pro'],
   generic: false,
   modes: modes.slice(0, 2).map((mode) => (mode.id === 'frames' ? { ...mode, name: '首帧' } : mode)),
@@ -192,6 +196,7 @@ const fastaitokenProfiles = fastaitoken.map(([model, min, max, resolutions, imag
     name: `FastAIToken ${model}`,
     kind: 'video',
     protocol: 'fastaitoken-video',
+    promptMaxBytes: 16384,
     matchIds: [model],
     generic: false,
     modes,
@@ -224,9 +229,13 @@ const kling = [
     name,
     kind: 'video',
     protocol: 'kling-video',
+    audioOutput: 'optional',
+    audioParam: 'sound',
     matchIds: [model, model.replace('kling-', 'klingai-')],
     generic: false,
-    modes: modes.slice(0, 2),
+    modes: modes
+      .slice(0, 2)
+      .map((mode) => (mode.id === 'frames' ? { ...mode, requiredRoles: ['first_frame'] } : mode)),
     params: [
       { key: 'duration', name: '时长（秒）', type: 'enum', values: [5, 10], default: 5 },
       {
@@ -254,9 +263,13 @@ const wan = ModelProfile.parse({
   name: 'Wan 3.0',
   kind: 'video',
   protocol: 'wan-video',
+  audioOutput: 'optional',
+  audioParam: 'audio',
   matchIds: ['wan3.0-video', 'wan-3.0'],
   generic: false,
-  modes: modes.slice(0, 2),
+  modes: modes
+    .slice(0, 2)
+    .map((mode) => (mode.id === 'frames' ? { ...mode, requiredRoles: ['first_frame'] } : mode)),
   params: [
     {
       key: 'size',

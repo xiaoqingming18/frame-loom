@@ -16,6 +16,7 @@ export interface CanvasGenerationModel {
   label: string;
   kind: 'image' | 'video';
   profile: ModelProfile | null;
+  upload?: 'inline' | 'url' | 'file' | 'provider-file';
 }
 
 export interface CanvasGenerationConfig {
@@ -30,6 +31,7 @@ export interface CanvasGenerationHost {
   create(request: GenerationRequest): Promise<GenerationJob>;
   get(id: string, signal: AbortSignal): Promise<GenerationJob>;
   cancel(id: string): Promise<GenerationJob>;
+  cancelRemote?(id: string): Promise<GenerationJob>;
   resubmit(id: string): Promise<GenerationJob>;
   subscribe(changed: (jobId: string) => void, signal: AbortSignal): void;
 }

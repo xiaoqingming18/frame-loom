@@ -5,6 +5,7 @@ export * from './desktop.js';
 export { EngineEvent } from './events.js';
 export * from './models.js';
 export * from './generation.js';
+export * from './generation-capabilities.js';
 export * from './image-params.js';
 export * from './image-references.js';
 export * from './object-storage.js';

@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { publicReference } from './public-reference.js';
 import {
   checkGenerationRequest,
+  checkGenerationMedia,
   GenerationJob,
   GenerationRequest,
   type GenerationStatus,
@@ -108,6 +109,14 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     return GenerationJob.parse({
       ...row,
       recoveryAction: this.recoveryAction(row),
+      canCancelRemote:
+        !!row.snapshot &&
+        !!row.remoteTaskId &&
+        executionContract(row.snapshot.connection, row.profile).cancel &&
+        !!row.snapshot.connection.routes?.cancel &&
+        ['running', 'paused'].includes(row.status) &&
+        !row.snapshot.cancellation,
+      cancellation: row.snapshot?.cancellation,
       outputs: row.outputs.map((sha) => this.media.get(sha)),
     });
   }
@@ -167,13 +176,6 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     const definition = this.catalog
       .get()
       .definitions.find((item) => item.id === model.definitionId);
-    if (
-      profile.protocol === 'fastaitoken-video' &&
-      Buffer.byteLength(request.prompt, 'utf8') > 16_384
-    )
-      throw new DomainError('INVALID_GENERATION_REQUEST', 422, 'FastAIToken 提示词不能超过 16 KiB');
-    if (profile.protocol === 'minimax-video-v2' && request.prompt.length > 7000)
-      throw new DomainError('INVALID_GENERATION_REQUEST', 422, 'H3 提示词不能超过 7000 字符');
     const issues = checkGenerationRequest(profile, request);
     if (issues.length)
       throw new DomainError(
@@ -207,46 +209,25 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
             root,
           );
       if (root) await this.media.adoptAt(root, [stored.sha256]);
-      const limit = profile.inputs.find((entry) => entry.kind === item.kind)!;
-      if (
-        !stored.mime.startsWith(item.kind + '/') ||
-        !limit.mimeTypes.includes(stored.mime) ||
-        stored.bytes > limit.maxBytes ||
-        (limit.minDurationMs !== undefined && (stored.durationMs ?? 0) < limit.minDurationMs) ||
-        (limit.maxDurationMs !== undefined &&
-          (stored.durationMs ?? Infinity) > limit.maxDurationMs) ||
-        (limit.minFps !== undefined && (stored.fps ?? 0) < limit.minFps) ||
-        (limit.maxFps !== undefined && (stored.fps ?? Infinity) > limit.maxFps) ||
-        (limit.codecs !== undefined && !limit.codecs.includes(stored.codec ?? '')) ||
-        (limit.audioCodecs !== undefined &&
-          !!stored.audioCodec &&
-          !limit.audioCodecs.includes(stored.audioCodec)) ||
-        (limit.minRatio !== undefined &&
-          (stored.width ?? 0) / (stored.height ?? 1) < limit.minRatio) ||
-        (limit.maxRatio !== undefined &&
-          (stored.width ?? Infinity) / (stored.height ?? 1) > limit.maxRatio) ||
-        (stored.width !== null &&
-          ((limit.minWidth !== undefined && stored.width < limit.minWidth) ||
-            (limit.maxWidth !== undefined && stored.width > limit.maxWidth))) ||
-        (stored.height !== null &&
-          ((limit.minHeight !== undefined && stored.height < limit.minHeight) ||
-            (limit.maxHeight !== undefined && stored.height > limit.maxHeight)))
-      )
-        throw new DomainError(
-          'INVALID_REFERENCE',
-          422,
-          '参考素材格式、大小、尺寸、时长、帧率或编码不符合档案',
-        );
       item.sha256 = stored.sha256;
       delete item.dataUrl;
     }
-    for (const limit of profile.inputs) {
-      const duration = request.inputs
-        .filter((item) => item.kind === limit.kind)
-        .reduce((sum, item) => sum + (this.media.get(item.sha256!).durationMs ?? 0), 0);
-      if (limit.maxTotalDurationMs !== undefined && duration > limit.maxTotalDurationMs)
-        throw new DomainError('INVALID_REFERENCE', 422, '参考素材总时长超过档案上限');
-    }
+    const mediaIssues = checkGenerationMedia(
+      profile,
+      request.inputs.map((input) => {
+        const stored = this.media.get(input.sha256!);
+        return {
+          input,
+          media: { ...stored, fps: stored.fps ?? null, codec: stored.codec ?? null },
+        };
+      }),
+    );
+    if (mediaIssues.length)
+      throw new DomainError(
+        'INVALID_REFERENCE',
+        422,
+        mediaIssues.map((issue) => issue.message).join('；'),
+      );
     if (profile.protocol === 'openai-videos' && request.inputs.length && request.params.size) {
       const first = this.media.get(request.inputs[0].sha256!);
       if (`${first.width}x${first.height}` !== request.params.size)

@@ -51,7 +51,19 @@ export const ModelProfile = z.strictObject({
   protocol: MediaProtocol,
   matchIds: z.array(z.string()),
   generic: z.boolean(),
-  modes: z.array(z.object({ id: z.string(), name: z.string() })).min(1),
+  modes: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        requiredRoles: z.array(z.enum(['reference', 'first_frame', 'last_frame'])).optional(),
+      }),
+    )
+    .min(1),
+  promptMaxLength: z.number().int().positive().max(32000).optional(),
+  promptMaxBytes: z.number().int().positive().optional(),
+  audioOutput: z.enum(['fixed-on', 'fixed-off', 'optional', 'unknown']).optional(),
+  audioParam: z.string().optional(),
   params: z.array(
     z.strictObject({
       key: z.string(),
@@ -120,14 +132,42 @@ export function checkGenerationRequest(
 ): GenerationIssue[] {
   const issues: GenerationIssue[] = [];
   const add = (field: string, message: string) => issues.push({ field, message });
+  if (request.inputs.length > 50) add('inputs', '素材总数最多 50 个');
+  if (request.prompt.length > (profile.promptMaxLength ?? 32000))
+    add('prompt', `提示词最多 ${profile.promptMaxLength ?? 32000} 字符`);
+  if (
+    profile.promptMaxBytes &&
+    new TextEncoder().encode(request.prompt).byteLength > profile.promptMaxBytes
+  )
+    add('prompt', `提示词最多 ${profile.promptMaxBytes} UTF-8 字节`);
   if (!profile.modes.some((mode) => mode.id === request.mode)) add('mode', '当前档案不支持此模式');
+  if (profile.kind === 'video' && !['text', 'frames', 'reference'].includes(request.mode))
+    add('mode', '当前版本尚未实现此创作操作');
+  if (
+    profile.audioParam &&
+    ['fixed-on', 'fixed-off'].includes(profile.audioOutput ?? '') &&
+    (request.params[profile.audioParam] ??
+      profile.params.find((param) => param.key === profile.audioParam)?.default) !==
+      (profile.audioOutput === 'fixed-on')
+  )
+    add(
+      profile.audioParam,
+      profile.audioOutput === 'fixed-on' ? '当前模型固定有声输出' : '当前模型固定无声输出',
+    );
+  for (const role of profile.modes.find((mode) => mode.id === request.mode)?.requiredRoles ?? [])
+    if (!request.inputs.some((input) => input.role === role))
+      add(
+        'inputs',
+        `当前模式需要${role === 'first_frame' ? '首帧' : role === 'last_frame' ? '尾帧' : '参考素材'}`,
+      );
   for (const [key, value] of Object.entries(request.params)) {
     const param = profile.params.find((item) => item.key === key);
     if (!param) {
       add(key, '参数不在档案白名单内');
       continue;
     }
-    if (param.type === 'enum' && !param.values?.includes(value)) add(key, `${param.name}取值无效`);
+    if ((param.values || param.type === 'enum') && !param.values?.includes(value))
+      add(key, `${param.name}取值无效`);
     if (
       param.type === 'number' &&
       (typeof value !== 'number' ||
@@ -243,6 +283,8 @@ export const GenerationJob = z.object({
   recoveryAction: z
     .enum(['none', 'query', 'download', 'idempotent_submit', 'prepare', 'new_job'])
     .optional(),
+  canCancelRemote: z.boolean().optional(),
+  cancellation: z.enum(['requested', 'confirmed', 'unknown']).optional(),
   request: GenerationRequest,
   remoteTaskId: z.string().nullable(),
   remoteStatus: z.string().nullable(),

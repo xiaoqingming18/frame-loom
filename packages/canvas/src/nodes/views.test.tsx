@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { CanvasMediaData, ModelProfile } from '@frame-loom/contracts';
 import { CanvasContext, NodeActionsContext, useCanvasState } from '../context';
 import { createCanvasStore } from '../store/store';
-import { doc, media, sha, generationJob } from '../test-utils';
+import { doc, edge, media, sha, generationJob } from '../test-utils';
 import { createBuiltinRegistry } from './builtin';
 import { ImageNodeView, VideoNodeView } from './views';
 
@@ -169,7 +169,8 @@ it('视频档案隐藏不支持的方式并禁用尾帧，未加载档案时保�
   const store = createCanvasStore(doc([node]));
   const profile = {
     modes: [{ id: 'text' }, { id: 'frames' }],
-    constraints: [{ when: {}, forbidRoles: ['last_frame'] }],
+    constraints: [{ when: {}, forbidRoles: ['last_frame'], message: '当前模型不支持尾帧' }],
+    inputs: [{ kind: 'image', maxCount: 1 }],
   } as ModelProfile;
   store.getState().setGenerationConfig({
     storageReady: false,
@@ -195,5 +196,39 @@ it('视频档案隐藏不支持的方式并禁用尾帧，未加载档案时保�
   expect(screen.getByRole('radio', { name: '参考生视频' })).toBeDefined();
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'last_frame' }).disabled).toBe(
     false,
+  );
+});
+
+it('模式切换保留首尾帧连线和提示词，文生模式保留端口但不能新连线', () => {
+  const node = media('video', 'video');
+  node.data = { ...(node.data as CanvasMediaData), mode: 'frames', prompt: '保留创作内容' };
+  const document = doc(
+    [media('source'), node],
+    [{ ...edge('first', 'source', 'video'), targetHandle: 'first_frame' }],
+  );
+  const store = createCanvasStore(document);
+  function View() {
+    const current = useCanvasState((state) => state.document.nodes[1]);
+    return <VideoNodeView node={{ ...current, data: current.data as CanvasMediaData }} selected />;
+  }
+  render(
+    <CanvasContext.Provider
+      value={{
+        store,
+        registry: createBuiltinRegistry(),
+        host: { media: { upload: vi.fn(), url: (hash) => hash } },
+      }}
+    >
+      <View />
+    </CanvasContext.Provider>,
+  );
+  fireEvent.click(screen.getByRole('radio', { name: '文生视频' }));
+  expect(store.getState().document.edges).toEqual(document.edges);
+  expect(store.getState().document.nodes[1].data).toMatchObject({
+    mode: 'text',
+    prompt: '保留创作内容',
+  });
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'first_frame' }).disabled).toBe(
+    true,
   );
 });

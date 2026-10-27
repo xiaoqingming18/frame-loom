@@ -16,6 +16,8 @@ import { SecretCipher } from '../../core/crypto/secret-cipher.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { channels, channelModels, modelDefaults } from './channels.schema.js';
 import { ModelCatalogService } from './model-catalog.service.js';
+import { mediaProfile } from '../generation/profiles/media-profiles.js';
+import { executionContract } from '../generation/execution-contract.js';
 
 @Injectable()
 export class ChannelsRepository {
@@ -235,10 +237,29 @@ export class ChannelsRepository {
   }
   private effectiveModel(row: typeof channelModels.$inferSelect) {
     const input = { ...row, protocol: row.protocol || null, connection: row.connection ?? {} };
+    const resolved = this.catalog.resolve(input);
+    let effectiveProfile;
+    if (resolved.kind && resolved.kind !== 'chat' && resolved.protocol) {
+      try {
+        effectiveProfile = mediaProfile({
+          ...resolved,
+          effectiveProfile: this.catalog.profile(input),
+        });
+      } catch (error) {
+        if (input.definitionId) throw error;
+        effectiveProfile = null;
+      }
+    }
     return {
       ...input,
-      ...this.catalog.resolve(input),
-      effectiveProfile: this.catalog.profile(input),
+      ...resolved,
+      effectiveProfile,
+      connection: effectiveProfile
+        ? {
+            ...resolved.connection,
+            runtime: executionContract(resolved.connection, effectiveProfile),
+          }
+        : resolved.connection,
     };
   }
   getModel(id: string) {

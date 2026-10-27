@@ -80,7 +80,15 @@ export function deserialize(text: string, registry?: NodeRegistry): ClipboardPay
       }
       const accepted: CanvasEdge[] = [];
       for (const edge of payload.edges) {
-        if (!checkConnection(registry, { nodes: payload.nodes, edges: accepted }, edge).ok)
+        if (
+          !checkConnection(
+            registry,
+            { nodes: payload.nodes, edges: accepted },
+            edge,
+            undefined,
+            true,
+          ).ok
+        )
           return null;
         accepted.push(edge);
       }
@@ -128,12 +136,16 @@ export function instantiate(
 }
 
 function remapInputOrder(data: unknown, edgeIds: Map<string, string>): unknown {
-  const value = data as { inputOrder?: unknown } | null;
+  const value = data as { inputOrder?: unknown; mediaReferences?: { id: string }[] } | null;
   if (!value || !Array.isArray(value.inputOrder)) return data;
   return {
     ...value,
     inputOrder: value.inputOrder
-      .filter((id): id is string => typeof id === 'string' && edgeIds.has(id))
-      .map((id) => edgeIds.get(id)!),
+      .filter(
+        (id): id is string =>
+          typeof id === 'string' &&
+          (edgeIds.has(id) || !!value.mediaReferences?.some((ref) => ref.id === id)),
+      )
+      .map((id) => edgeIds.get(id) ?? id),
   };
 }

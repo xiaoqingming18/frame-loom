@@ -620,8 +620,11 @@ it('远端取消只在明确回执后终止，未知回执保留可查询状态�
       })
       .where(eq(generationJobs.id, job.id))
       .run();
+    expect(service.get(job.id).canCancelRemote).toBe(true);
     const result = await service.cancelRemote(job.id);
     expect(result.status).toBe(confirmed ? 'cancelled' : 'paused');
+    expect(result.canCancelRemote).toBe(false);
+    expect(result.cancellation).toBe(confirmed ? 'confirmed' : 'unknown');
     expect(result.diagnostic?.stage).toBe('cancel');
     const saved = db.select().from(generationJobs).where(eq(generationJobs.id, job.id)).get()!;
     expect(saved.snapshot?.cancellation).toBe(confirmed ? 'confirmed' : 'unknown');

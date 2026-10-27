@@ -14,6 +14,7 @@ import {
   IMAGE_QUALITY_LABELS,
   IMAGE_BACKGROUND_LABELS,
   resolveImagePrompt,
+  executableGenerationModes,
   type CanvasMediaData,
   type GenerationInput,
   type GenerationRequest,
@@ -30,7 +31,8 @@ import {
 import type { CanvasGenerationConfig } from '../host';
 import { useCanvas, useCanvasState } from '../context';
 import { updateData } from '../commands/commands';
-import { generationReferences } from './generation-inputs';
+import { generationSources } from './generation-inputs';
+import { VideoReferences } from './video-references';
 import { ImagePromptEditor } from './image-prompt-editor';
 import { GenerationParams } from './generation-params';
 
@@ -75,7 +77,7 @@ export function GenerationComposer({
   const [modelOpen, setModelOpen] = useState(false);
   const [countOpen, setCountOpen] = useState(false);
   const document = useCanvasState((state) => state.document);
-  const references = generationReferences(document, nodeId);
+  const references = generationSources(document, nodeId);
   const dragged = useRef<string | null>(null);
   const promptEditor = useRef<{ open: () => void }>(null);
   const videoEditor = useRef<HTMLTextAreaElement>(null);
@@ -86,7 +88,7 @@ export function GenerationComposer({
   }, [data.prompt]);
   function reorderReference(sourceId: string, targetId: string) {
     if (locked || sourceId === targetId) return;
-    const order = references.map((reference) => reference.edge.id);
+    const order = references.map((reference) => reference.id);
     const from = order.indexOf(sourceId);
     const to = order.indexOf(targetId);
     if (from < 0 || to < 0) return;
@@ -134,15 +136,15 @@ export function GenerationComposer({
             )}
             {inputs.map((input, index) => (
               <span
-                key={references[index].edge.id}
-                title={`参考 ${index + 1}`}
+                key={references[index].id}
+                title={`${input.role === 'first_frame' ? '首帧' : input.role === 'last_frame' ? '尾帧' : '参考'} ${index + 1}`}
                 role={kind === 'image' ? 'button' : undefined}
                 aria-label={kind === 'image' ? `参考 ${index + 1}，Alt 加方向键排序` : undefined}
                 tabIndex={kind === 'image' && !locked ? 0 : undefined}
                 draggable={kind === 'image' && !locked}
                 onDragStart={(event) => {
-                  dragged.current = references[index].edge.id;
-                  event.dataTransfer.setData('text/plain', references[index].edge.id);
+                  dragged.current = references[index].id;
+                  event.dataTransfer.setData('text/plain', references[index].id);
                   event.stopPropagation();
                 }}
                 onDragOver={(event) => {
@@ -155,7 +157,7 @@ export function GenerationComposer({
                   if (kind !== 'image') return;
                   event.preventDefault();
                   event.stopPropagation();
-                  if (dragged.current) reorderReference(dragged.current, references[index].edge.id);
+                  if (dragged.current) reorderReference(dragged.current, references[index].id);
                   dragged.current = null;
                 }}
                 onDragEnd={() => {
@@ -170,7 +172,7 @@ export function GenerationComposer({
                     return;
                   event.preventDefault();
                   const target = references[index + (event.key === 'ArrowLeft' ? -1 : 1)];
-                  if (target) reorderReference(references[index].edge.id, target.edge.id);
+                  if (target) reorderReference(references[index].id, target.id);
                 }}
                 className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
@@ -218,7 +220,7 @@ export function GenerationComposer({
             aria-label="生成提示词"
             disabled={locked}
             defaultValue={data.prompt}
-            maxLength={profile?.protocol === 'minimax-video-v2' ? 7000 : 32000}
+            maxLength={profile?.promptMaxLength ?? 32000}
             placeholder="描述你想要生成的内容…"
             className={`min-h-0 resize-none rounded-none border-0 bg-transparent px-3.5 py-6 text-sm shadow-none transition-[height] duration-200 ease-in-out focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[292px]' : 'h-32'}`}
             onCompositionStart={() => {
@@ -252,13 +254,16 @@ export function GenerationComposer({
             {kind === 'image'
               ? resolveImagePrompt(
                   data.prompt,
-                  references.map((reference) => reference.node.id),
+                  references.map((reference) => reference.sourceId),
                 ).prompt.length
               : data.prompt.length}{' '}
-            / {profile?.protocol === 'minimax-video-v2' ? 7000 : 32000}
+            / {profile?.promptMaxLength ?? 32000}
           </span>
         </div>
         <div className="flex items-center gap-1 px-3 pb-3">
+          {kind === 'video' && profile && (
+            <VideoReferences nodeId={nodeId} data={data} profile={profile} disabled={locked} />
+          )}
           <Popover open={modelOpen} onOpenChange={setModelOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -277,6 +282,7 @@ export function GenerationComposer({
               onKeyDown={(event) => event.stopPropagation()}
               aria-label="生成模型"
               side="top"
+              sticky="always"
               align="start"
               collisionPadding={{ top: 58, right: 16, bottom: 16, left: 16 }}
               className="nodrag nopan nowheel max-h-[min(360px,var(--radix-popover-content-available-height))] w-80 max-w-[calc(100vw-32px)] overflow-y-auto p-2"
@@ -297,7 +303,11 @@ export function GenerationComposer({
                   <span className="text-xs">{item.label}</span>
                   <span className="text-xs font-normal whitespace-normal text-muted-foreground">
                     {item.profile
-                      ? `${item.profile.name} · ${item.profile.modes.map((mode) => mode.name).join(' / ')} · 最多 ${item.profile.inputs.find((input) => input.kind === 'image')?.maxCount ?? 0} 张参考`
+                      ? `${item.profile.name} · ${executableGenerationModes(item.profile)
+                          .map((mode) => mode.name)
+                          .join(
+                            ' / ',
+                          )} · 最多 ${item.profile.inputs.find((input) => input.kind === 'image')?.maxCount ?? 0} 张参考`
                       : '无匹配档案'}
                   </span>
                 </Button>
@@ -329,16 +339,62 @@ export function GenerationComposer({
               onKeyDown={(event) => event.stopPropagation()}
               aria-label="生成参数"
               side="top"
+              sticky="always"
               collisionPadding={{ top: 58, right: 16, bottom: 16, left: 16 }}
               className="nodrag nopan nowheel max-h-[min(440px,var(--radix-popover-content-available-height))] w-[420px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-xl"
             >
               {profile && (
-                <GenerationParams
-                  profile={profile}
-                  params={params}
-                  disabled={locked}
-                  onChange={onParam}
-                />
+                <>
+                  <GenerationParams
+                    profile={profile}
+                    params={params}
+                    request={{
+                      modelId: model!.id,
+                      mode:
+                        kind === 'image'
+                          ? inputs.length
+                            ? 'reference'
+                            : 'text'
+                          : (data.mode ?? 'text'),
+                      prompt: data.prompt,
+                      params,
+                      inputs,
+                      source: 'canvas',
+                    }}
+                    disabled={locked}
+                    onChange={onParam}
+                  />
+                  {Object.keys(data.pendingParams ?? {}).length > 0 && (
+                    <div className="mt-3 border-t pt-3 text-xs">
+                      <p className="text-muted-foreground">
+                        旧模型参数未自动迁移：{Object.keys(data.pendingParams!).join('、')}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={locked}
+                        onClick={() =>
+                          store.getState().apply((document) =>
+                            updateData<CanvasMediaData>(document, nodeId, (current) => ({
+                              ...current,
+                              pendingParams: {},
+                              params: {
+                                ...current.params,
+                                ...Object.fromEntries(
+                                  profile.params
+                                    .filter((param) => param.key in (current.pendingParams ?? {}))
+                                    .map((param) => [param.key, param.default]),
+                                ),
+                              },
+                            })),
+                          )
+                        }
+                      >
+                        清除待处理参数
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </PopoverContent>
           </Popover>

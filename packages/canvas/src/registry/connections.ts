@@ -1,5 +1,6 @@
 import type { CanvasDocument, CanvasEdge, CanvasNode } from '@frame-loom/contracts';
 import type { NodeRegistry, PortDataType } from './registry';
+import { videoInputs } from '../nodes/media';
 
 export interface ConnectionAttempt {
   source: string;
@@ -23,6 +24,7 @@ export function checkConnection(
   document: Pick<CanvasDocument, 'nodes' | 'edges'>,
   attempt: ConnectionAttempt,
   ignoreEdgeId?: string,
+  allowInactiveVideoPorts = false,
 ): ConnectionVerdict {
   const byId = new Map(document.nodes.map((node) => [node.id, node]));
   const source = byId.get(attempt.source);
@@ -39,7 +41,11 @@ export function checkConnection(
   )
     return { ok: false, reason: '该节点不支持连线' };
   const output = registry.outputs(source).find((port) => port.id === attempt.sourceHandle);
-  const input = registry.inputs(target).find((port) => port.id === attempt.targetHandle);
+  const input = (
+    allowInactiveVideoPorts && target.type === 'video'
+      ? [...videoInputs('frames'), ...videoInputs('reference')]
+      : registry.inputs(target)
+  ).find((port) => port.id === attempt.targetHandle);
   if (!output || !input) return { ok: false, reason: '端口不存在' };
   if (!input.accepts.includes(output.dataType))
     return {

@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { GenerationComposer } from './generation-composer';
 import {
   checkGenerationRequest,
+  checkGenerationMedia,
+  generationParamReason,
   resolveImageParams,
   resolveImagePrompt,
   type CanvasMediaData,
@@ -9,7 +11,7 @@ import {
 } from '@frame-loom/contracts';
 import { isNodeLocked, updateData } from '../commands/commands';
 import { useCanvas, useCanvasState } from '../context';
-import { generationReferences, generationModel } from './generation-inputs';
+import { generationSources, generationModel } from './generation-inputs';
 import { writeGenerationJob } from './generation-writeback';
 
 export function GenerationPanel({
@@ -31,18 +33,19 @@ export function GenerationPanel({
     const node = state.document.nodes.find((item) => item.id === nodeId);
     return !node || isNodeLocked(state.document, node);
   });
-  const references = useMemo(() => generationReferences(document, nodeId), [document, nodeId]);
+  const references = useMemo(() => generationSources(document, nodeId), [document, nodeId]);
   const inputs = references.map((reference) => reference.input);
   const resolved =
     kind === 'image'
       ? resolveImagePrompt(
           data.prompt,
-          references.map((reference) => reference.node.id),
+          references.map((reference) => reference.sourceId),
         )
       : { prompt: data.prompt, missingNodeIds: [] };
   const prompt = resolved.prompt;
   const missingInputs =
-    document.edges.filter((edge) => edge.target === nodeId).length > inputs.length;
+    document.edges.filter((edge) => edge.target === nodeId).length >
+    references.filter((ref) => !ref.local).length;
   const api = host.generation;
   if (!api) return null;
 
@@ -50,6 +53,7 @@ export function GenerationPanel({
   const model = generationModel(config, kind, data.modelId);
   const profile = model?.profile;
   const mode = kind === 'video' ? (data.mode ?? 'text') : inputs.length ? 'reference' : 'text';
+  const pendingParams = data.pendingParams ?? {};
   const request: GenerationRequest | undefined =
     model && profile
       ? {
@@ -67,10 +71,13 @@ export function GenerationPanel({
           source: 'canvas',
         }
       : undefined;
-  const issues = request && profile ? checkGenerationRequest(profile, request) : [];
+  const issues =
+    request && profile
+      ? [...checkGenerationRequest(profile, request), ...checkGenerationMedia(profile, references)]
+      : [];
   const storageMissing =
     !!config &&
-    profile?.protocol !== 'fastaitoken-video' &&
+    !['provider-file', 'file'].includes(model?.upload ?? '') &&
     !config.storageReady &&
     inputs.some(
       (input) =>
@@ -85,6 +92,7 @@ export function GenerationPanel({
       !api ||
       !request ||
       issues.length ||
+      Object.keys(pendingParams).length ||
       storageMissing ||
       missingInputs ||
       resolved.missingNodeIds.length ||
@@ -135,6 +143,7 @@ export function GenerationPanel({
     storageMissing && '当前参考素材需要先配置对象存储',
     missingInputs && '连线来源尚无可用媒体，请先生成或上传素材',
     issues[0]?.message,
+    Object.keys(pendingParams).length > 0 && '模型切换后有参数需要确认或清除',
   ].find((reason) => typeof reason === 'string');
   return (
     <GenerationComposer
@@ -152,23 +161,62 @@ export function GenerationPanel({
       onPrompt={(prompt) => setData((current) => ({ ...current, prompt }))}
       onCount={(count) => setData((current) => ({ ...current, count }))}
       onParam={(key, value) =>
-        setData((current) => ({ ...current, params: { ...request?.params, [key]: value } }))
+        setData((current) => {
+          const pending = { ...current.pendingParams };
+          delete pending[key];
+          return {
+            ...current,
+            params: { ...request?.params, [key]: value },
+            pendingParams: pending,
+          };
+        })
       }
       onModel={(id) => {
         const next = options.find((item) => item.id === id);
-        const resolved =
-          kind === 'image' && next?.profile
-            ? resolveImageParams(next.profile, { ...request?.params, ...data.params })
-            : { params: {}, changes: [] };
-        if (
-          setData((current) => ({ ...current, modelId: id, params: resolved.params })) &&
-          resolved.changes.length
-        )
-          store
-            .getState()
-            .notify(
-              `已按新模型调整：${resolved.changes.map((change) => change.message).join('；')}`,
+        if (!next?.profile) return;
+        const previous = { ...data.pendingParams, ...data.params, ...request?.params };
+        if (kind === 'image') {
+          const resolved = resolveImageParams(next.profile, previous);
+          setData((current) => ({
+            ...current,
+            modelId: id,
+            params: resolved.params,
+            pendingParams: {},
+          }));
+          if (resolved.changes.length)
+            store
+              .getState()
+              .notify(
+                `已按新模型调整：${resolved.changes.map((change) => change.message).join('；')}`,
+              );
+          return;
+        }
+        const params = Object.fromEntries(
+          next.profile.params.map((param) => [
+            param.key,
+            param.key in previous ? previous[param.key] : param.default,
+          ]),
+        );
+        const pending = Object.fromEntries(
+          Object.entries(previous).filter(([key, value]) => {
+            return !!generationParamReason(
+              next.profile!,
+              {
+                modelId: id,
+                mode,
+                prompt,
+                inputs,
+                params,
+                source: 'canvas',
+              },
+              key,
+              value,
             );
+          }),
+        );
+        setData((current) => ({ ...current, modelId: id, params, pendingParams: pending }));
+        if (Object.keys(pending).length)
+          store.getState().notify('新模型无法沿用部分参数，请在参数中重新选择或清除待处理项');
       }}
     />
   );

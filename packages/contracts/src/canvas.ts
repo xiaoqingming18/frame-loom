@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Sha256 } from './generation.js';
+import { Sha256, GenerationInput, MediaFile } from './generation.js';
 
 export const CANVAS_LIMITS = { nodes: 2000, edges: 4000, bytes: 8 * 1024 * 1024 } as const;
 export const canvasDocumentBytes = (document: unknown): number =>
@@ -28,6 +28,10 @@ export const CanvasMediaVersion = z.strictObject({
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
   durationMs: z.number().nonnegative().nullable().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+  fps: z.number().positive().nullable().optional(),
+  codec: z.string().nullable().optional(),
+  audioCodec: z.string().nullable().optional(),
   posterSha256: Sha256.optional(),
   jobId: z.string().uuid().optional(),
   createdAt: z.string().datetime(),
@@ -45,6 +49,18 @@ export const CanvasMediaData = z
     inputOrder: z.array(Id).max(64),
     modelId: z.string().uuid().optional(),
     params: z.record(z.string().max(100), ParamValue).optional(),
+    pendingParams: z.record(z.string().max(100), ParamValue).optional(),
+    mediaReferences: z
+      .array(
+        z.strictObject({
+          id: Id,
+          name: z.string().max(200),
+          role: GenerationInput.shape.role,
+          media: MediaFile,
+        }),
+      )
+      .max(50)
+      .optional(),
     pendingJobId: z.string().uuid().optional(),
     pendingJobIds: z.array(z.string().uuid()).max(4).optional(),
     count: z.number().int().min(1).max(4).optional(),

@@ -46,13 +46,23 @@ it('拒绝非法 JSON、超限、非法分组、内置数据、重复连线与�
     JSON.stringify(doc([media('a', 'image', { data: {} })])),
     JSON.stringify(doc([media('a'), media('b')], [edge('a1', 'a', 'b'), edge('a2', 'a', 'b')])),
     JSON.stringify(doc([media('a'), media('b')], [edge('ab', 'a', 'b'), edge('ba', 'b', 'a')])),
-    JSON.stringify(doc([media('a'), media('b', 'video')], [edge('ab', 'a', 'b')])),
+    JSON.stringify(
+      doc(
+        [media('a'), media('b', 'video')],
+        [{ ...edge('ab', 'a', 'b'), targetHandle: 'unknown' }],
+      ),
+    ),
   ];
   for (const text of invalid) {
     expect(store.getState().apply(() => parseDocument(text, registry))).toBe(false);
     expect(store.getState().document).toBe(original);
     expect(store.getState().past).toHaveLength(0);
   }
+});
+
+it('切换模式后保留的不活跃视频端口可以导入，生成时另行检查能力', () => {
+  const document = doc([media('a'), media('b', 'video')], [edge('ab', 'a', 'b')]);
+  expect(parseDocument(JSON.stringify(document), registry)).toEqual(document);
 });
 
 it('未知类型与未来版本的节点、data 和连线原样保留', () => {
