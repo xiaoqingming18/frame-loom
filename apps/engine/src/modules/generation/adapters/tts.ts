@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { GenerationAdapter } from './types.js';
-import { GenerationFailure } from './types.js';
+import { GenerationFailure, adapterFetch } from './types.js';
 import { imageResponse } from './image-response.js';
 
 const AudioResult = z.object({
@@ -17,7 +17,7 @@ const AudioResult = z.object({
 export const openaiSpeech: GenerationAdapter = {
   protocol: 'openai-speech',
   async submit(ctx, request) {
-    const response = await fetch(`${ctx.baseUrl}/audio/speech`, {
+    const response = await adapterFetch(ctx, `${ctx.baseUrl}/audio/speech`, {
       method: 'POST',
       headers: {
         ...ctx.headers,
@@ -46,7 +46,7 @@ export const minimaxT2a: GenerationAdapter = {
   async submit(ctx, request) {
     const { voice_id, speed, format, ...params } = request.params;
     const baseUrl = ctx.baseUrl.replace(/\/anthropic$/, '');
-    const response = await fetch(`${baseUrl}/v1/t2a_v2`, {
+    const response = await adapterFetch(ctx, `${baseUrl}/v1/t2a_v2`, {
       method: 'POST',
       headers: {
         ...ctx.headers,

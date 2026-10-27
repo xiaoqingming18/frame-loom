@@ -66,25 +66,46 @@ const BaseUrl = z
       !url.hash
     );
   }, '地址只允许 HTTP(S)，不能包含凭据、查询参数或片段');
-export const ServiceOperation = z.enum(['submit', 'query', 'content', 'upload', 'catalog']);
+export const ServiceOperation = z.enum(['submit', 'edit', 'query', 'content', 'upload', 'catalog']);
 export type ServiceOperation = z.infer<typeof ServiceOperation>;
 export const RelativePath = z
   .string()
   .min(1)
   .max(2048)
   .refine(
-    (value) => !value.includes('://') && !value.split('/').some((part) => part === '..'),
+    (value) =>
+      !/[\\?#\u0000-\u0020]/.test(value) &&
+      !value.includes('://') &&
+      !value.split('/').some((part) => /^(\.|%2e){1,2}$/i.test(part)) &&
+      !!value.replace(/^\/+|\/+$/g, ''),
     '操作路径必须是安全的相对路径',
   )
   .transform((value) => value.replace(/^\/+|\/+$/g, ''));
-export const ModelConnection = z.object({
-  baseUrl: BaseUrl.optional(),
-  routes: z.record(ServiceOperation, RelativePath).optional(),
-  templateVersion: z
-    .string()
-    .regex(/^v\d+$/)
-    .optional(),
-});
+export const ModelConnection = z
+  .object({
+    baseUrl: BaseUrl.optional(),
+    routes: z.partialRecord(ServiceOperation, RelativePath).optional(),
+    templateId: z.string().max(100).optional(),
+    templateVersion: z
+      .string()
+      .regex(/^v\d+$/)
+      .optional(),
+  })
+  .superRefine((connection, ctx) => {
+    for (const [operation, path] of Object.entries(connection.routes ?? {})) {
+      const allowed =
+        operation === 'submit' ? ['model'] : ['query', 'content'].includes(operation) ? ['id'] : [];
+      const rest = path.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (token, key: string) =>
+        allowed.includes(key) ? '' : token,
+      );
+      if (/[{}]/.test(rest))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['routes', operation],
+          message: '操作路径包含不支持的占位符',
+        });
+    }
+  });
 export type ModelConnection = z.infer<typeof ModelConnection>;
 export function resolveServiceUrl(
   baseUrl: string,
@@ -97,6 +118,7 @@ export function resolveServiceUrl(
     .map((part) =>
       part.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (_, key: string) => {
         if (!(key in params)) throw new Error(`缺少路径参数: ${key}`);
+        if (['.', '..'].includes(params[key])) throw new Error('路径参数不能是点段');
         return encodeURIComponent(params[key]);
       }),
     )

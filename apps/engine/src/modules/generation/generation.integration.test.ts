@@ -361,10 +361,19 @@ it('重新提交产生新任务；同步图片不提供重新查询；非法参�
   await context.waitStatus(first.id, 'submit_unknown');
   expect(() => context.app.get(GenerationService).requery(first.id)).toThrow('没有可重新查询');
   context.setMode('success');
+  await expect(context.app.get(GenerationService).resubmit(first.id)).rejects.toMatchObject({
+    code: 'UNSAFE_RESUBMIT',
+  });
+  context.app
+    .get(DatabaseService)
+    .db.update(generationJobs)
+    .set({ status: 'failed' })
+    .where(eq(generationJobs.id, first.id))
+    .run();
   const second = await context.app.get(GenerationService).resubmit(first.id);
   expect(second.id).not.toBe(first.id);
   await context.waitStatus(second.id, 'succeeded');
-  expect(context.job(first.id).status).toBe('submit_unknown');
+  expect(context.job(first.id).status).toBe('failed');
   await expect(context.create({ params: { arbitrary: true } })).rejects.toThrow('白名单');
   await expect(
     context.create({

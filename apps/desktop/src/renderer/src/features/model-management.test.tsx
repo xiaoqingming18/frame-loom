@@ -112,6 +112,53 @@ function change(label: string | RegExp, value: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
+it('媒体模板需显式应用，预览路径可编辑，保存与取消保持事务边界', async () => {
+  const { calls } = setup('services');
+  fireEvent.click(await screen.findByRole('button', { name: '编辑 本地测试' }));
+  change('模型类别', 'video');
+  change('调用协议', 'fastaitoken-video');
+  change('模型 ID', 'seedance-2.5-token');
+  change('模型服务地址（留空继承渠道）', 'https://custom.test/gateway');
+  change('接入模板', 'fastaitoken-video');
+  expect(screen.getByLabelText<HTMLInputElement>('模型服务地址（留空继承渠道）').value).toBe(
+    'https://custom.test/gateway',
+  );
+  expect(screen.getByText(/待应用地址/).textContent).toContain('https://video.fastaitoken.com');
+  fireEvent.click(screen.getByRole('button', { name: '应用模板并替换接入设置' }));
+  change('submit 相对路径', 'custom/videos');
+  expect(screen.getByText('https://video.fastaitoken.com/custom/videos')).toBeTruthy();
+  expect(screen.getByText(/本地校验在保存时执行/).textContent).toContain('可能计费');
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await screen.findByRole('button', { name: '编辑 本地测试' });
+  const saved = calls.filter((call) => call.init?.method === 'PATCH');
+  expect(saved).toHaveLength(1);
+  expect(saved[0].init?.body).toMatchObject({
+    models: [
+      {
+        connection: {
+          templateId: 'fastaitoken-video',
+          templateVersion: 'v1',
+          baseUrl: 'https://video.fastaitoken.com',
+          routes: { submit: 'custom/videos', upload: 'api/v1/uploads' },
+        },
+      },
+    ],
+  });
+  fireEvent.click(screen.getByRole('button', { name: '编辑 本地测试' }));
+  expect(screen.getByLabelText<HTMLInputElement>('submit 相对路径').value).toBe('custom/videos');
+  change('模型服务地址（留空继承渠道）', 'https://discarded.test');
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  fireEvent.click(await screen.findByRole('button', { name: '编辑 本地测试' }));
+  expect(screen.getByLabelText<HTMLInputElement>('模型服务地址（留空继承渠道）').value).toBe(
+    'https://video.fastaitoken.com',
+  );
+  change('submit 相对路径', '../admin');
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await screen.findByRole('alert');
+  expect(calls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
+  expect(calls.some((call) => /test|generation-jobs/.test(call.path))).toBe(false);
+});
+
 it('新建渠道：草稿拉取后勾选模型，协议随类别过滤，渠道与模型一次保存', async () => {
   const { calls } = setup('services', true);
   await screen.findByText('添加第一个模型渠道');

@@ -21,6 +21,16 @@ export const generationJobs = sqliteTable(
     profile: text('profile_json', { mode: 'json' }).$type<ModelProfile>().notNull(),
     status: text('status').$type<GenerationStatus>().notNull(),
     request: text('request_json', { mode: 'json' }).$type<GenerationRequest>().notNull(),
+    snapshot: text('snapshot_json', { mode: 'json' }).$type<{
+      version: 1;
+      channelId: string;
+      credentialFingerprint: string;
+      baseUrl: string;
+      model: string;
+      connection: import('@frame-loom/contracts').ModelConnection;
+      idempotencyKey: string;
+      referenceUrls: Record<string, string>;
+    }>(),
     remoteTaskId: text('remote_task_id'),
     remoteStatus: text('remote_status'),
     attempts: integer('attempts').notNull().default(0),
@@ -29,6 +39,9 @@ export const generationJobs = sqliteTable(
     errorCategory: text('error_category').$type<GenerationErrorCategory>(),
     errorCode: text('error_code'),
     errorMessage: text('error_message'),
+    diagnostic: text('diagnostic_json', { mode: 'json' }).$type<
+      import('@frame-loom/contracts').GenerationJob['diagnostic']
+    >(),
     usage: text('usage_json', { mode: 'json' }).$type<unknown>(),
     rawResponse: text('raw_response_json', { mode: 'json' }).$type<AdapterOutput[]>(),
     outputs: text('outputs_json', { mode: 'json' }).$type<string[]>().notNull(),
@@ -62,3 +75,10 @@ export const mediaFiles = sqliteTable('media_files', {
 });
 export type JobRow = typeof generationJobs.$inferSelect;
 export type StoredMedia = MediaFile & { ext: string };
+
+export const providerUploads = sqliteTable('provider_uploads', {
+  key: text('key').primaryKey(),
+  status: text('status').$type<'uploading' | 'ready' | 'unknown'>().notNull(),
+  url: text('url'),
+  expiresAt: text('expires_at'),
+});

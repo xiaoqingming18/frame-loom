@@ -18,5 +18,8 @@ export function mediaProfile(
     : (profiles.find((profile) => profile.matchIds.includes(model.upstreamModelId)) ??
       profiles.find((profile) => profile.generic));
   if (!selected) throw new DomainError('INVALID_PROFILE', 422, '档案不存在或与模型协议不匹配');
+  const exact = profiles.find((profile) => profile.matchIds.includes(model.upstreamModelId));
+  if (model.protocol === 'fastaitoken-video' && exact && selected.id !== exact.id)
+    throw new DomainError('INVALID_PROFILE', 422, 'FastAIToken 已知型号必须使用对应的精确能力档案');
   return selected;
 }

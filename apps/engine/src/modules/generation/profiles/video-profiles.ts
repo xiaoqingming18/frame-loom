@@ -166,27 +166,63 @@ const sora = ModelProfile.parse({
   inputs: [{ ...image, maxCount: 1 }],
   runtime,
 });
+const fastaitoken = [
+  ['seedance-2.5-token', 4, 30, ['480p', '720p', '1080p'], 30, 10],
+  ['seedance-2.5-pro-token', 4, 30, ['720p', '1080p'], 30, 10],
+  ['seedance-2.0-token', 4, 15, ['480p', '720p', '1080p', '4k'], 9, 3],
+  ['seedance-2.0-pro-token', 4, 15, ['480p', '720p', '1080p', '4k'], 9, 3],
+  ['seedance-2.0-mini-token', 4, 15, ['480p', '720p', '1080p'], 9, 3],
+  ['seedance-2.0-fast-token', 4, 15, ['480p', '720p', '1080p'], 9, 3],
+  ['seedance-2.0-time', 4, 15, ['480p', '720p', '1080p'], 9, 3],
+  ['seedance-2.0-fast-time', 1, 15, ['480p', '720p'], 9, 3],
+  ['minimax-h3-time', 4, 15, ['768p'], 9, 3],
+  ['wan-3.0-time', 4, 30, ['480p', '720p', '1080p'], 9, 3],
+] satisfies [string, number, number, string[], number, number][];
+const fastaitokenProfiles = fastaitoken.map(([model, min, max, resolutions, images, other]) =>
+  ModelProfile.parse({
+    id: `fastaitoken-${model}`,
+    name: `FastAIToken ${model}`,
+    kind: 'video',
+    protocol: 'fastaitoken-video',
+    matchIds: [model],
+    generic: false,
+    modes,
+    params: [
+      { ...ratio, values: ratio.values.filter((value) => value !== 'adaptive') },
+      { key: 'duration', name: '时长（秒）', type: 'number', min, max, default: 5 },
+      {
+        key: 'resolution',
+        name: '分辨率',
+        type: 'enum',
+        values: resolutions,
+        default: resolutions.includes('720p') ? '720p' : '768p',
+      },
+    ],
+    constraints: [],
+    inputs: [
+      { ...image, maxCount: images, transport: 'url' },
+      { ...video, maxCount: other },
+      { ...audio, maxCount: other },
+    ],
+    runtime,
+  }),
+);
 export const videoProfiles: ModelProfile[] = [
   ...seedance,
   ...minimax,
   sora,
+  ...fastaitokenProfiles,
   ModelProfile.parse({
     id: 'fastaitoken-video-generic',
     name: 'FastAIToken 视频',
     kind: 'video',
     protocol: 'fastaitoken-video',
-    matchIds: [
-      'seedance-2.5-token',
-      'seedance-2.5-pro-token',
-      'seedance-2.0-token',
-      'minimax-h3-time',
-      'wan-3.0-time',
-    ],
+    matchIds: [],
     generic: true,
-    modes: modes.map((mode) => (mode.id === 'frames' ? { ...mode, name: '首尾帧' } : mode)),
-    params: [],
+    modes: [modes[0]],
+    params: fastaitokenProfiles[0].params,
     constraints: [],
-    inputs: [image, video, audio],
+    inputs: [],
     runtime,
   }),
   ...(['ark-video-tasks', 'minimax-video-v2', 'openai-videos'] as const).map((protocol) =>

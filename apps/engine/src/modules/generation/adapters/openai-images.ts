@@ -1,6 +1,6 @@
-import { imageRequestSize, resolveImageParams } from '@frame-loom/contracts';
+import { imageRequestSize, resolveImageParams, resolveModelOperation } from '@frame-loom/contracts';
 import { imageProfile } from '../profiles/image-profiles.js';
-import type { GenerationAdapter } from './types.js';
+import { adapterFetch, type GenerationAdapter } from './types.js';
 import { imageOutputs, imageResponse } from './image-response.js';
 
 export const openaiImages: GenerationAdapter = {
@@ -44,13 +44,23 @@ export const openaiImages: GenerationAdapter = {
     }
     return imageOutputs(
       await imageResponse(
-        await fetch(`${ctx.baseUrl}/images/${request.inputs.length ? 'edits' : 'generations'}`, {
-          method: 'POST',
-          headers,
-          body,
-          signal: ctx.signal,
-          redirect: 'error',
-        }),
+        await adapterFetch(
+          ctx,
+          resolveModelOperation(
+            ctx.baseUrl,
+            ctx.connection,
+            'openai-images',
+            request.inputs.length ? 'edit' : 'submit',
+            { model: ctx.model },
+          ),
+          {
+            method: 'POST',
+            headers,
+            body,
+            signal: ctx.signal,
+            redirect: 'error',
+          },
+        ),
       ),
     );
   },

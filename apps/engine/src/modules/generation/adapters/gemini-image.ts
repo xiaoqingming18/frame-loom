@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { resolveImageParams } from '@frame-loom/contracts';
+import { resolveImageParams, resolveModelOperation } from '@frame-loom/contracts';
 import { imageProfile } from '../profiles/image-profiles.js';
-import { GenerationFailure, type GenerationAdapter } from './types.js';
+import { GenerationFailure, adapterFetch, type GenerationAdapter } from './types.js';
 import { imageResponse } from './image-response.js';
 
 export const geminiImage: GenerationAdapter = {
@@ -17,8 +17,11 @@ export const geminiImage: GenerationAdapter = {
       });
     const { params } = resolveImageParams(profile, request.params);
     const json = await imageResponse(
-      await fetch(
-        `${ctx.baseUrl}/models/${encodeURIComponent(ctx.model.replace(/^models\//, ''))}:generateContent`,
+      await adapterFetch(
+        ctx,
+        resolveModelOperation(ctx.baseUrl, ctx.connection, 'gemini-image', 'submit', {
+          model: ctx.model.replace(/^models\//, ''),
+        }),
         {
           method: 'POST',
           headers: {

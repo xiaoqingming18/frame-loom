@@ -126,7 +126,7 @@ it('H3 兼容旧渠道的 /v1 地址并改用 minimax/v2 路由', async () => {
 
 it('FastAIToken 视频使用 JSON 任务并映射 processing/completed', async () => {
   const fetchMock = vi
-    .fn()
+    .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
     .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'fast-1', status: 'processing' })))
     .mockResolvedValueOnce(
       new Response(
@@ -138,6 +138,44 @@ it('FastAIToken 视频使用 JSON 任务并映射 processing/completed', async (
   expect(submitted).toMatchObject({ status: 'running', remoteTaskId: 'fast-1' });
   expect(await fastaitokenVideo.query!(context, 'fast-1')).toMatchObject({ status: 'succeeded' });
   expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ 'Content-Type': 'application/json' });
+});
+
+it('FastAIToken 首尾帧按角色排序，同键提交且处理中业务码不误判失败', async () => {
+  const fetchMock = vi
+    .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+    .mockResolvedValue(
+      new Response(
+        JSON.stringify({ id: 'fast-frames', status: 'processing', error_code: 'upstream_retry' }),
+      ),
+    );
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(
+    fastaitokenVideo.submit(
+      {
+        ...context,
+        idempotencyKey: 'stable-key',
+        referenceUrls: { first: 'https://cdn.test/first.png', last: 'https://cdn.test/last.png' },
+      },
+      {
+        ...request,
+        mode: 'frames',
+        inputs: [
+          { kind: 'image', role: 'last_frame', sha256: 'last' },
+          { kind: 'image', role: 'first_frame', sha256: 'first' },
+        ],
+      },
+    ),
+  ).resolves.toMatchObject({ status: 'running' });
+  const init = fetchMock.mock.calls[0][1]!;
+  expect(init.headers).toMatchObject({ 'Idempotency-Key': 'stable-key' });
+  if (typeof init.body !== 'string') throw new Error('未发送 JSON 请求体');
+  expect(JSON.parse(init.body)).toMatchObject({
+    mode: 'first_last_frame',
+    images: ['https://cdn.test/first.png', 'https://cdn.test/last.png'],
+    videos: [],
+    audio: [],
+    n: 1,
+  });
 });
 
 it.each([

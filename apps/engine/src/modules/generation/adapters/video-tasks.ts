@@ -4,6 +4,7 @@ import { resolveServiceUrl } from '@frame-loom/contracts';
 import { imageResponse } from './image-response.js';
 import {
   GenerationFailure,
+  adapterFetch,
   type AdapterContext,
   type AdapterResult,
   type GenerationAdapter,
@@ -60,17 +61,22 @@ function parseTask(value: unknown, openai = false): AdapterResult {
 }
 async function call(ctx: AdapterContext, path: string, body?: object | FormData) {
   return imageResponse(
-    await fetch(resolveServiceUrl(ctx.connection?.baseUrl ?? ctx.baseUrl, path), {
-      method: body ? 'POST' : 'GET',
-      signal: ctx.signal,
-      redirect: 'error',
-      headers: {
-        ...ctx.headers,
-        Authorization: `Bearer ${ctx.apiKey}`,
-        ...(body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+    await adapterFetch(
+      ctx,
+      resolveServiceUrl(ctx.connection?.baseUrl ?? ctx.baseUrl, path, { model: ctx.model }),
+      {
+        method: body ? 'POST' : 'GET',
+        signal: ctx.signal,
+        redirect: 'error',
+        headers: {
+          ...ctx.headers,
+          Authorization: `Bearer ${ctx.apiKey}`,
+          ...(ctx.idempotencyKey && body ? { 'Idempotency-Key': ctx.idempotencyKey } : {}),
+          ...(body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body ? { body: body instanceof FormData ? body : JSON.stringify(body) } : {}),
       },
-      ...(body ? { body: body instanceof FormData ? body : JSON.stringify(body) } : {}),
-    }),
+    ),
   );
 }
 function content(ctx: AdapterContext, request: GenerationRequest) {
@@ -92,7 +98,7 @@ function content(ctx: AdapterContext, request: GenerationRequest) {
 export const arkVideoTasks: GenerationAdapter = {
   protocol: 'ark-video-tasks',
   async submit(ctx, request) {
-    const json = await call(ctx, '/contents/generations/tasks', {
+    const json = await call(ctx, ctx.connection?.routes?.submit ?? 'contents/generations/tasks', {
       model: ctx.model,
       content: content(ctx, request),
       ...request.params,
@@ -102,7 +108,15 @@ export const arkVideoTasks: GenerationAdapter = {
     return { status: 'running', remoteTaskId: result.data.id, remoteStatus: 'queued' };
   },
   async query(ctx, id) {
-    return parseTask(await call(ctx, `/contents/generations/tasks/${encodeURIComponent(id)}`));
+    return parseTask(
+      await call(
+        ctx,
+        (ctx.connection?.routes?.query ?? 'contents/generations/tasks/{id}').replace(
+          '{id}',
+          encodeURIComponent(id),
+        ),
+      ),
+    );
   },
 };
 export const minimaxVideoV2: GenerationAdapter = {
@@ -142,8 +156,8 @@ export const minimaxVideoV2: GenerationAdapter = {
       ),
     );
     if (json && typeof json === 'object' && 'task' in json) {
-      const task = (json as { task: unknown }).task;
-      return parseTask(task && typeof task === 'object' ? { ...(task as object), id } : task);
+      const task = json.task;
+      return parseTask(task && typeof task === 'object' ? { ...task, id } : task);
     }
     if (json && typeof json === 'object' && 'task_id' in json)
       return parseTask({
@@ -195,18 +209,27 @@ export const openaiVideos: GenerationAdapter = {
 export const fastaitokenVideo: GenerationAdapter = {
   protocol: 'fastaitoken-video',
   async submit(ctx, request) {
-    const inputs = request.inputs.map((input) => ({
-      role: input.role,
-      kind: input.kind,
-      url: input.dataUrl ?? ctx.referenceUrls?.[input.sha256!],
-    }));
-    if (inputs.some((item) => !item.url))
+    const inputs = [...request.inputs]
+      .sort((a, b) => Number(b.role === 'first_frame') - Number(a.role === 'first_frame'))
+      .map((input) => ({
+        kind: input.kind,
+        url: input.dataUrl ?? ctx.referenceUrls?.[input.sha256!],
+      }));
+    if (inputs.some((item) => !item.url || !/^https?:\/\//.test(item.url)))
       throw new GenerationFailure('invalid_params', 'MISSING_REFERENCE', '参考素材尚未准备好');
     const json = await call(ctx, ctx.connection?.routes?.submit ?? 'v1/videos/generations', {
       model: ctx.model,
       prompt: request.prompt,
-      mode: request.mode,
-      inputs,
+      mode:
+        request.mode === 'text'
+          ? 'text_to_video'
+          : request.mode === 'frames'
+            ? 'first_last_frame'
+            : 'omni',
+      images: inputs.filter((item) => item.kind === 'image').map((item) => item.url),
+      videos: inputs.filter((item) => item.kind === 'video').map((item) => item.url),
+      audio: inputs.filter((item) => item.kind === 'audio').map((item) => item.url),
+      n: 1,
       ...request.params,
     });
     const parsed = z
@@ -221,11 +244,18 @@ export const fastaitokenVideo: GenerationAdapter = {
       })
       .safeParse(json);
     if (!parsed.success) return invalid();
-    if (parsed.data.error_code)
+    if (
+      parsed.data.error_code &&
+      !['processing', 'queued', 'running', 'submission_pending', 'upstream_retry'].includes(
+        parsed.data.status ?? '',
+      )
+    )
       return {
         status: 'failed',
         category: 'upstream',
-        code: String(parsed.data.error_code),
+        code: /^[\w.-]{1,100}$/.test(String(parsed.data.error_code))
+          ? String(parsed.data.error_code)
+          : 'VIDEO_FAILED',
         message: 'FastAIToken 视频请求失败',
       };
     const id = parsed.data.id ?? parsed.data.task_id;
@@ -256,14 +286,18 @@ export const fastaitokenVideo: GenerationAdapter = {
     if (!parsed.success) return invalid();
     if (['completed', 'succeeded'].includes(parsed.data.status)) {
       const url = parsed.data.video_url ?? parsed.data.download_url ?? parsed.data.result_url;
-      if (!url) return invalid();
-      return { status: 'succeeded', outputs: [{ mime: 'video/mp4', url }] };
+      return {
+        status: 'succeeded',
+        outputs: [url ? { mime: 'video/mp4', url } : { mime: 'video/mp4', providerContent: id }],
+      };
     }
     if (['failed', 'cancelled', 'expired'].includes(parsed.data.status))
       return {
         status: 'failed',
         category: 'upstream',
-        code: String(parsed.data.error_code ?? 'VIDEO_FAILED'),
+        code: /^[\w.-]{1,100}$/.test(String(parsed.data.error_code ?? 'VIDEO_FAILED'))
+          ? String(parsed.data.error_code ?? 'VIDEO_FAILED')
+          : 'VIDEO_FAILED',
         message: '远端视频任务失败',
       };
     return { status: 'running', remoteTaskId: id, remoteStatus: parsed.data.status };

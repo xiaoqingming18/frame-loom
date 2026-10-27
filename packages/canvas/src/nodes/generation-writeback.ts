@@ -8,7 +8,10 @@ export function isActiveGenerationJob(job: GenerationJob) {
 }
 
 export function writeGenerationJob(document: CanvasDocument, job: GenerationJob) {
-  if (isActiveGenerationJob(job) || job.status === 'submit_unknown' || job.status === 'failed')
+  if (
+    isActiveGenerationJob(job) ||
+    ['submit_unknown', 'failed', 'paused', 'download_failed'].includes(job.status)
+  )
     return document;
   let changed = false;
   const nodes = document.nodes.map((node) => {

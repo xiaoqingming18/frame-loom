@@ -5,6 +5,7 @@ import {
   ChannelModelWrite,
   TestChatRequest,
   resolveServiceUrl,
+  ModelConnection,
 } from './models.js';
 
 const channel = {
@@ -65,4 +66,12 @@ it('统一解析部署前缀、占位符并拒绝路径逃逸', () => {
   );
   expect(() => resolveServiceUrl('https://example.com', '../admin')).toThrow();
   expect(() => resolveServiceUrl('https://example.com', 'https://evil.test')).toThrow();
+  for (const path of ['%2e%2e/admin', 'a/./b', 'a\\b', 'a?key=secret', 'a#fragment', '///', 'a\nb'])
+    expect(() => resolveServiceUrl('https://example.com', path), path).toThrow();
+  expect(ModelConnection.parse({ routes: { submit: 'custom/generate' } }).routes).toEqual({
+    submit: 'custom/generate',
+  });
+  for (const routes of [{ query: 'tasks/{foo}' }, { upload: '{id}' }, { submit: '{broken' }])
+    expect(ModelConnection.safeParse({ routes }).success).toBe(false);
+  expect(() => resolveServiceUrl('https://example.com/gateway', '{id}', { id: '..' })).toThrow();
 });

@@ -14,6 +14,11 @@ export type AdapterContext = {
   profile?: ModelProfile;
   connection?: import('@frame-loom/contracts').ModelConnection;
   referenceUrls?: Record<string, string>;
+  idempotencyKey?: string;
+  stage?: 'submit' | 'query';
+  diagnose?: (
+    value: NonNullable<import('@frame-loom/contracts').GenerationJob['diagnostic']>,
+  ) => void;
 };
 export type AdapterOutput = { url?: string; data?: string; mime: string; providerContent?: string };
 export type AdapterResult =
@@ -37,4 +42,33 @@ export class GenerationFailure extends Error {
   ) {
     super(message);
   }
+}
+
+export async function adapterFetch(
+  ctx: AdapterContext,
+  url: string,
+  init: RequestInit,
+  stage: 'upload' | 'submit' | 'query' = ctx.stage ?? 'submit',
+) {
+  const parsed = new URL(url);
+  const diagnostic = {
+    stage,
+    method: init.method ?? 'GET',
+    route: parsed.origin + parsed.pathname,
+  };
+  ctx.diagnose?.(diagnostic);
+  const response = await fetch(url, init);
+  const candidate =
+    response.headers.get('x-request-id') ?? response.headers.get('request-id') ?? '';
+  const requestId = [ctx.apiKey, ...Object.values(ctx.headers)].some(
+    (secret) => secret && candidate.includes(secret),
+  )
+    ? ''
+    : candidate;
+  ctx.diagnose?.({
+    ...diagnostic,
+    httpStatus: response.status,
+    ...(/^[\w.-]{1,100}$/.test(requestId) ? { requestId } : {}),
+  });
+  return response;
 }

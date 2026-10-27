@@ -38,7 +38,7 @@ export const GenerationRequest = z.strictObject({
   mode: z.string().min(1).max(100),
   prompt: z.string().trim().min(1).max(32_000),
   params: z.record(z.string().max(100), Value).default({}),
-  inputs: z.array(GenerationInput).max(16).default([]),
+  inputs: z.array(GenerationInput).max(50).default([]),
   source: z.enum(['manual', 'agent', 'canvas']).default('manual'),
 });
 export type GenerationRequest = z.infer<typeof GenerationRequest>;
@@ -200,6 +200,8 @@ export const GenerationStatus = z.enum([
   'downloading',
   'succeeded',
   'submit_unknown',
+  'paused',
+  'download_failed',
   'failed',
   'cancelled',
 ]);
@@ -236,6 +238,9 @@ export const GenerationJob = z.object({
   channelModelId: z.string().uuid(),
   profileId: z.string(),
   status: GenerationStatus,
+  recoveryAction: z
+    .enum(['none', 'query', 'download', 'idempotent_submit', 'prepare', 'new_job'])
+    .optional(),
   request: GenerationRequest,
   remoteTaskId: z.string().nullable(),
   remoteStatus: z.string().nullable(),
@@ -244,6 +249,16 @@ export const GenerationJob = z.object({
   errorCategory: GenerationErrorCategory.nullable(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
+  diagnostic: z
+    .object({
+      stage: z.enum(['validation', 'upload', 'submit', 'query', 'download']),
+      method: z.string(),
+      route: z.string(),
+      httpStatus: z.number().optional(),
+      requestId: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
   outputs: z.array(MediaFile),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

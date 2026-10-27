@@ -70,6 +70,7 @@ export function GenerationPanel({
   const issues = request && profile ? checkGenerationRequest(profile, request) : [];
   const storageMissing =
     !!config &&
+    profile?.protocol !== 'fastaitoken-video' &&
     !config.storageReady &&
     inputs.some(
       (input) =>

@@ -11,6 +11,11 @@ import {
   ModelProbeResult,
   ModelProfileList,
   protocolsByKind,
+  connectionTemplates,
+  connectionTemplateVersion,
+  resolveModelOperation,
+  serviceRoutes,
+  type ServiceOperation,
   type ChannelModel,
   type ChannelModelSave,
   type ModelProbeRequest,
@@ -35,6 +40,7 @@ const protocolLabels: Record<string, string> = {
   'ark-video-tasks': '火山方舟视频任务',
   'minimax-video-v2': 'MiniMax 视频 V2',
   'openai-videos': 'OpenAI Videos（Sora 兼容）',
+  'fastaitoken-video': 'FastAIToken JSON 视频',
   'openai-speech': 'OpenAI Speech',
   'minimax-t2a': 'MiniMax T2A',
 };
@@ -196,6 +202,7 @@ const draftFrom = (model: ChannelModel): Draft => ({
   protocol: model.protocol,
   profileId: model.profileId,
   overrides: model.overrides,
+  connection: model.connection,
   enabled: model.enabled,
   metadata: model.metadata,
   lastCheck: model.lastCheck,
@@ -304,6 +311,7 @@ function ChannelEditor({
         protocol: draft.protocol,
         profileId: draft.profileId,
         overrides: draft.overrides,
+        connection: draft.connection,
         enabled: draft.enabled,
       })),
     });
@@ -539,6 +547,7 @@ function ChannelEditor({
               key={draft.key}
               index={index}
               draft={draft}
+              channelBaseUrl={baseUrl}
               apiFormat={apiFormat}
               profiles={profiles.data ?? []}
               busy={busy}
@@ -674,6 +683,7 @@ function BooleanOverride({
 function ModelCard({
   index,
   draft,
+  channelBaseUrl,
   apiFormat,
   profiles,
   busy,
@@ -684,6 +694,7 @@ function ModelCard({
 }: {
   index: number;
   draft: Draft;
+  channelBaseUrl: string;
   apiFormat: LlmProtocol;
   profiles: ModelProfile[];
   busy: boolean;
@@ -697,10 +708,29 @@ function ModelCard({
     draft.overrides.compat ? JSON.stringify(draft.overrides.compat, null, 2) : '',
   );
   const [compatError, setCompatError] = useState(false);
+  const [template, setTemplate] = useState('');
+  const connection = draft.connection ?? {};
+  const routes = serviceRoutes[draft.protocol ?? ''];
+  const changeConnection = (patch: Partial<typeof connection>) =>
+    onChange({ connection: { ...connection, ...patch } });
+  const preview = (operation: ServiceOperation) => {
+    try {
+      return resolveModelOperation(channelBaseUrl, connection, draft.protocol ?? '', operation, {
+        id: 'task-preview',
+        model: draft.upstreamModelId.replace(/^models\//, ''),
+      });
+    } catch {
+      return '配置无效，保存前请修正地址或路径';
+    }
+  };
   const protocols = draft.kind ? protocolsByKind[draft.kind] : [];
   const matching = profiles.filter(
     (profile) => profile.kind === draft.kind && profile.protocol === draft.protocol,
   );
+  const selectedProfile =
+    matching.find((profile) => profile.id === draft.profileId) ??
+    matching.find((profile) => profile.matchIds.includes(draft.upstreamModelId)) ??
+    matching.find((profile) => profile.generic);
   const overrides = (patch: Partial<Draft['overrides']>) =>
     onChange({ overrides: { ...draft.overrides, ...patch } });
   const number = (value: string) => (value ? Number(value) : undefined);
@@ -734,6 +764,103 @@ function ModelCard({
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
+        {routes && (
+          <div className="space-y-3 sm:col-span-2">
+            <div className="flex flex-wrap items-end gap-2">
+              <Field label="接入模板">
+                <NativeSelect
+                  value={template}
+                  onChange={(event) => setTemplate(event.target.value)}
+                >
+                  <option value="">选择模板（需点击应用）</option>
+                  {connectionTemplates
+                    .filter((item) => item.protocol === draft.protocol)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                </NativeSelect>
+              </Field>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!template}
+                onClick={() => {
+                  const selected = connectionTemplates.find(
+                    (item) => item.id === template && item.protocol === draft.protocol,
+                  );
+                  if (selected)
+                    onChange({
+                      connection: {
+                        baseUrl: selected.baseUrl,
+                        routes: serviceRoutes[selected.protocol],
+                        templateId: selected.id,
+                        templateVersion: connectionTemplateVersion,
+                      },
+                    });
+                }}
+              >
+                应用模板并替换接入设置
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              当前模板：{connection.templateId ?? '自定义'} · 已存版本{' '}
+              {connection.templateVersion ?? '无'} · 内置版本 {connectionTemplateVersion}
+              。模板不会自动更新；应用前请核对下方地址与路径差异。
+            </p>
+            {template && (
+              <div className="space-y-1 text-xs break-all text-muted-foreground">
+                <p>
+                  待应用地址：{connection.baseUrl ?? channelBaseUrl} →{' '}
+                  {connectionTemplates.find((item) => item.id === template)?.baseUrl}
+                  ；能力档案保持所选值。
+                </p>
+                {(Object.entries(routes) as [ServiceOperation, string][]).map(
+                  ([operation, path]) => (
+                    <p key={operation}>
+                      {operation}：{connection.routes?.[operation] ?? path} → {path}
+                    </p>
+                  ),
+                )}
+              </div>
+            )}
+            <Field label="模型服务地址（留空继承渠道）">
+              <Input
+                type="url"
+                value={connection.baseUrl ?? ''}
+                placeholder={channelBaseUrl}
+                onChange={(event) => changeConnection({ baseUrl: event.target.value || undefined })}
+              />
+            </Field>
+            <details className="space-y-2 text-xs">
+              <summary className="cursor-pointer text-muted-foreground">
+                高级：操作路径和有效地址
+              </summary>
+              {(Object.keys(routes) as ServiceOperation[]).map((operation) => (
+                <div key={operation} className="mt-2 space-y-1">
+                  <Field label={`${operation} 相对路径`}>
+                    <Input
+                      value={connection.routes?.[operation] ?? ''}
+                      placeholder={routes[operation]}
+                      onChange={(event) => {
+                        const next = { ...connection.routes };
+                        if (event.target.value) next[operation] = event.target.value;
+                        else delete next[operation];
+                        changeConnection({ routes: next });
+                      }}
+                    />
+                  </Field>
+                  <p className="break-all text-muted-foreground">{preview(operation)}</p>
+                </div>
+              ))}
+            </details>
+            <p className="text-xs text-muted-foreground">
+              本地校验在保存时执行；拉取目录只证明目录权限。文本测试和目录成功不代表媒体生成可用。真实媒体验证请保存后在画布发起生成，可能计费，不会随保存自动执行。
+            </p>
+          </div>
+        )}
         <Field label="模型 ID">
           <Input
             required
@@ -765,7 +892,14 @@ function ModelCard({
                     : options.length === 1
                       ? options[0]
                       : null;
-              onChange({ kind, protocol, profileId: null, enabled: enabledFor(protocol) });
+              setTemplate('');
+              onChange({
+                kind,
+                protocol,
+                profileId: null,
+                connection: protocol === draft.protocol ? draft.connection : undefined,
+                enabled: enabledFor(protocol),
+              });
             }}
           >
             <option value="">未分类</option>
@@ -778,11 +912,18 @@ function ModelCard({
         </Field>
         <Field label="调用协议">
           <NativeSelect
+            aria-label="调用协议"
             disabled={!draft.kind}
             value={draft.protocol ?? ''}
             onChange={(event) => {
               const protocol = event.target.value || null;
-              onChange({ protocol, profileId: null, enabled: enabledFor(protocol) });
+              setTemplate('');
+              onChange({
+                protocol,
+                profileId: null,
+                connection: undefined,
+                enabled: enabledFor(protocol),
+              });
             }}
           >
             <option value="">{draft.kind ? '选择协议' : '先选择类别'}</option>
@@ -792,6 +933,9 @@ function ModelCard({
               </option>
             ))}
           </NativeSelect>
+          <span className="text-xs text-muted-foreground">
+            切换类别或协议会清除原接入设置；取消编辑可保留原配置。
+          </span>
         </Field>
         {draft.kind === 'chat' && (
           <>
@@ -855,6 +999,7 @@ function ModelCard({
         {draft.kind && draft.kind !== 'chat' && draft.protocol && (
           <Field label="能力档案">
             <NativeSelect
+              aria-label="能力档案"
               value={draft.profileId ?? ''}
               onChange={(event) => onChange({ profileId: event.target.value || null })}
             >
@@ -865,6 +1010,22 @@ function ModelCard({
                 </option>
               ))}
             </NativeSelect>
+            {selectedProfile && (
+              <span className="text-xs text-muted-foreground">
+                {selectedProfile.generic ? '通用保守档案，需核对供应商能力' : '精确型号档案'}：
+                {selectedProfile.modes.map((mode) => mode.name).join('、')}；
+                {selectedProfile.inputs
+                  .map((input) => `${input.kind} 最多 ${input.maxCount} 项`)
+                  .join('，')}
+                。
+                {selectedProfile.params
+                  .map(
+                    (param) =>
+                      `${param.name}：${param.values?.join('/') ?? `${param.min ?? ''}–${param.max ?? ''}`}`,
+                  )
+                  .join('；')}
+              </span>
+            )}
           </Field>
         )}
       </div>

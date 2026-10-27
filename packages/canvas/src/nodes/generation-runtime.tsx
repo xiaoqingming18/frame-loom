@@ -31,7 +31,6 @@ export function GenerationRuntime() {
           ),
         );
         for (const id of ids) {
-          if (store.getState().generationJobs.get(id)?.status === 'submit_unknown') continue;
           let job;
           try {
             job = await generation.get(id, controller.signal);

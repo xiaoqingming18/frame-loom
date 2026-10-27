@@ -4,23 +4,28 @@ import {
   type BeforeApplicationShutdown,
 } from '@nestjs/common';
 import { desc, eq, inArray } from 'drizzle-orm';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { publicReference } from './public-reference.js';
 import {
   checkGenerationRequest,
   GenerationJob,
   GenerationRequest,
   type GenerationStatus,
+  resolveServiceUrl,
+  serviceRoutes,
 } from '@frame-loom/contracts';
 import { DatabaseService } from '../../core/database/database.service.js';
 import { EventBus } from '../../core/events/event-bus.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { ChannelsRepository } from '../channels/channels.repository.js';
-import { generationJobs, type JobRow } from './generation.schema.js';
+import { generationJobs, providerUploads, type JobRow } from './generation.schema.js';
 import { MediaService } from './media.service.js';
 import { ProjectFilesService } from '../projects/project-files.service.js';
 import { ProjectMediaService } from '../projects/project-media.service.js';
 import { mediaProfile } from './profiles/media-profiles.js';
 import { ObjectStorageService } from '../object-storage/object-storage.service.js';
+import { imageResponse } from './adapters/image-response.js';
 import {
   arkVideoTasks,
   fastaitokenVideo,
@@ -33,6 +38,7 @@ import { geminiImage } from './adapters/gemini-image.js';
 import { minimaxT2a, openaiSpeech } from './adapters/tts.js';
 import {
   GenerationFailure,
+  adapterFetch,
   type AdapterContext,
   type AdapterResult,
   type GenerationAdapter,
@@ -90,7 +96,22 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   }
   get(id: string): GenerationJob {
     const row = this.row(id);
-    return GenerationJob.parse({ ...row, outputs: row.outputs.map((sha) => this.media.get(sha)) });
+    return GenerationJob.parse({
+      ...row,
+      recoveryAction: this.recoveryAction(row),
+      outputs: row.outputs.map((sha) => this.media.get(sha)),
+    });
+  }
+  private recoveryAction(row: JobRow): NonNullable<GenerationJob['recoveryAction']> {
+    if (!['failed', 'paused', 'download_failed', 'submit_unknown'].includes(row.status))
+      return 'none';
+    if (row.rawResponse?.length) return 'download';
+    if (!row.snapshot || row.snapshot.version !== 1 || row.errorCode === 'UPLOAD_UNKNOWN')
+      return 'none';
+    if (row.remoteTaskId) return this.registry.get(row.profile.protocol).query ? 'query' : 'none';
+    if (row.status === 'submit_unknown')
+      return row.profile.protocol === 'fastaitoken-video' ? 'idempotent_submit' : 'none';
+    return row.status === 'paused' ? 'prepare' : 'new_job';
   }
   list(): GenerationJob[] {
     return this.db
@@ -127,6 +148,11 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     if (!model.enabled || !this.channels.getChannel(model.channelId).enabled)
       throw new DomainError('MODEL_DISABLED', 422, '渠道或模型已禁用');
     const profile = mediaProfile(model);
+    if (
+      profile.protocol === 'fastaitoken-video' &&
+      Buffer.byteLength(request.prompt, 'utf8') > 16_384
+    )
+      throw new DomainError('INVALID_GENERATION_REQUEST', 422, 'FastAIToken 提示词不能超过 16 KiB');
     if (profile.protocol === 'minimax-video-v2' && request.prompt.length > 7000)
       throw new DomainError('INVALID_GENERATION_REQUEST', 422, 'H3 提示词不能超过 7000 字符');
     const issues = checkGenerationRequest(profile, request);
@@ -140,6 +166,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     this.channels.credentials(model.channelId);
     this.registry.get(profile.protocol);
     if (
+      profile.protocol !== 'fastaitoken-video' &&
       request.inputs.some(
         (item) =>
           item.kind !== 'image' ||
@@ -223,7 +250,26 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           },
         },
         status: 'pending',
+        diagnostic: { stage: 'validation', method: 'LOCAL', route: '' },
         request,
+        snapshot: {
+          version: 1,
+          channelId: model.channelId,
+          credentialFingerprint: this.channels.credentialFingerprint(model.channelId),
+          baseUrl: this.channels.getChannel(model.channelId).baseUrl,
+          model: model.upstreamModelId,
+          connection: {
+            ...model.connection,
+            baseUrl:
+              model.connection?.baseUrl ??
+              (profile.protocol === 'minimax-video-v2'
+                ? this.channels.getChannel(model.channelId).baseUrl.replace(/\/v1\/?$/, '')
+                : this.channels.getChannel(model.channelId).baseUrl),
+            routes: { ...serviceRoutes[profile.protocol], ...model.connection?.routes },
+          },
+          idempotencyKey: id,
+          referenceUrls: {},
+        },
         projectId: request.projectId ?? null,
         pageId: request.pageId ?? null,
         outputs: [],
@@ -251,6 +297,34 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   }
   async resubmit(id: string) {
     const row = this.row(id);
+    if (this.recoveryAction(row) === 'none')
+      throw new DomainError(
+        'UNSAFE_RESUBMIT',
+        409,
+        '该任务不能安全重发；请先核实供应商任务及原调用配置',
+      );
+    if (
+      row.remoteTaskId ||
+      row.rawResponse?.length ||
+      row.status === 'paused' ||
+      row.status === 'download_failed'
+    )
+      return this.requery(id);
+    if (row.status === 'submit_unknown') {
+      if (!row.snapshot || row.profile.protocol !== 'fastaitoken-video')
+        throw new DomainError(
+          'UNSAFE_RESUBMIT',
+          409,
+          '提交结果不明，不能安全重发；请先向供应商确认',
+        );
+      this.update(id, {
+        status: 'pending',
+        nextPollAt: null,
+        deadlineAt: new Date(Date.now() + row.profile.runtime.timeoutMs).toISOString(),
+        finishedAt: null,
+      });
+      return this.get(id);
+    }
     if (!['submit_unknown', 'failed', 'cancelled'].includes(row.status))
       throw new DomainError('INVALID_JOB_STATE', 409, '只能重新提交失败、放弃或结果不明的任务');
     return this.create(row.request);
@@ -258,13 +332,29 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   requery(id: string) {
     const row = this.row(id);
     if (
-      !row.remoteTaskId ||
-      !this.registry.get(row.profile.protocol).query ||
-      !['failed', 'submit_unknown'].includes(row.status)
+      row.status === 'paused' &&
+      row.snapshot &&
+      !row.remoteTaskId &&
+      !row.rawResponse?.length &&
+      row.errorCode !== 'UPLOAD_UNKNOWN'
+    ) {
+      this.context(row, new AbortController().signal);
+      this.update(id, {
+        status: 'pending',
+        nextPollAt: null,
+        finishedAt: null,
+        deadlineAt: new Date(Date.now() + row.profile.runtime.timeoutMs).toISOString(),
+      });
+      return this.get(id);
+    }
+    if (
+      (!row.rawResponse?.length &&
+        (!row.remoteTaskId || !this.registry.get(row.profile.protocol).query)) ||
+      !['failed', 'submit_unknown', 'paused', 'download_failed'].includes(row.status)
     )
       throw new DomainError('QUERY_UNAVAILABLE', 422, '该任务没有可重新查询的远端任务');
     this.update(id, {
-      status: 'running',
+      status: row.rawResponse?.length ? 'downloading' : 'running',
       nextPollAt: null,
       attempts: 0,
       errorCategory: null,
@@ -328,21 +418,120 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     }
   }
   private context(row: JobRow, signal: AbortSignal): AdapterContext {
-    const model = this.channels.getModel(row.channelModelId);
-    const { channel, apiKey, headers } = this.channels.credentials(model.channelId);
-    if (!model.enabled || !channel.enabled)
-      throw new GenerationFailure('invalid_params', 'MODEL_DISABLED', '渠道或模型已禁用');
-    if (model.protocol !== row.profile.protocol)
-      throw new GenerationFailure('invalid_params', 'MODEL_CHANGED', '模型协议已改变，请重新提交');
+    const snapshot = row.snapshot;
+    if (!snapshot || snapshot.version !== 1)
+      throw new GenerationFailure(
+        'invalid_params',
+        'LEGACY_SNAPSHOT_MISSING',
+        '旧任务缺少历史调用配置，已暂停；请核实供应商任务后处理',
+      );
+    let credentials: ReturnType<ChannelsRepository['credentials']>;
+    try {
+      credentials = this.channels.credentials(snapshot.channelId);
+    } catch {
+      throw new GenerationFailure(
+        'invalid_params',
+        'MODEL_DISABLED',
+        '原渠道凭据不可用；恢复原渠道后再继续',
+      );
+    }
+    const { channel, apiKey, headers } = credentials;
+    if (
+      !channel.enabled ||
+      !apiKey ||
+      this.channels.credentialFingerprint(snapshot.channelId) !== snapshot.credentialFingerprint
+    )
+      throw new GenerationFailure(
+        'invalid_params',
+        'MODEL_DISABLED',
+        '原渠道已禁用、凭据缺失或凭据已更换；恢复原凭据后再继续',
+      );
     return {
-      baseUrl: channel.baseUrl.replace(/\/+$/, ''),
+      baseUrl: snapshot.baseUrl.replace(/\/+$/, ''),
       apiKey,
       headers,
-      model: model.upstreamModelId,
+      model: snapshot.model,
       profile: row.profile,
-      connection: model.connection ?? {},
+      connection: snapshot.connection,
+      ...(row.profile.protocol === 'fastaitoken-video'
+        ? { idempotencyKey: snapshot.idempotencyKey }
+        : {}),
       signal,
+      stage: row.status === 'running' ? 'query' : 'submit',
+      diagnose: (diagnostic) => this.update(row.id, { diagnostic }),
     };
+  }
+  private async providerReference(row: JobRow, ctx: AdapterContext, sha256: string) {
+    const target = resolveServiceUrl(
+      ctx.connection?.baseUrl ?? ctx.baseUrl,
+      ctx.connection?.routes?.upload ?? 'api/v1/uploads',
+    );
+    const key = createHash('sha256')
+      .update(JSON.stringify([sha256, target, row.snapshot!.credentialFingerprint]))
+      .digest('hex');
+    const previous = this.db
+      .select()
+      .from(providerUploads)
+      .where(eq(providerUploads.key, key))
+      .get();
+    if (previous) {
+      if (previous.status !== 'ready')
+        throw new GenerationFailure(
+          'unknown',
+          'UPLOAD_UNKNOWN',
+          '素材上传结果待确认；为避免重复上传，已暂停',
+        );
+      if (!previous.expiresAt || Date.parse(previous.expiresAt) > Date.now()) return previous.url!;
+      this.db.delete(providerUploads).where(eq(providerUploads.key, key)).run();
+    }
+    const { media, path } = await this.media.resolve(sha256, row.projectId ?? undefined);
+    const form = new FormData();
+    form.set(
+      'file',
+      new Blob([await readFile(path)], { type: media.mime }),
+      `${sha256}.${media.ext}`,
+    );
+    this.db.insert(providerUploads).values({ key, status: 'uploading' }).run();
+    try {
+      const response = await adapterFetch(
+        ctx,
+        target,
+        {
+          method: 'POST',
+          redirect: 'error',
+          signal: ctx.signal,
+          headers: { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },
+          body: form,
+        },
+        'upload',
+      );
+      const json = (await imageResponse(response)) as {
+        url?: string;
+        expires_at?: string;
+        data?: { url?: string; expires_at?: string };
+      };
+      const data = json.data ?? json;
+      const url = await publicReference(data.url ?? '');
+      const expiresAt = data.expires_at ? new Date(data.expires_at).toISOString() : null;
+      if (expiresAt && Date.parse(expiresAt) <= Date.now()) throw new Error('素材已过期');
+      this.db
+        .update(providerUploads)
+        .set({ status: 'ready', url, expiresAt })
+        .where(eq(providerUploads.key, key))
+        .run();
+      return url;
+    } catch {
+      this.db
+        .update(providerUploads)
+        .set({ status: 'unknown' })
+        .where(eq(providerUploads.key, key))
+        .run();
+      throw new GenerationFailure(
+        'unknown',
+        'UPLOAD_UNKNOWN',
+        '素材上传结果或返回地址无效，已暂停；请向供应商确认',
+      );
+    }
   }
   private async execute(row: JobRow, signal: AbortSignal) {
     try {
@@ -381,9 +570,17 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
               { ...ctx.headers, Authorization: `Bearer ${ctx.apiKey}` },
               row.projectId ?? undefined,
               record,
+              (diagnostic) => this.update(row.id, { diagnostic }),
             );
           } else
-            await this.media.save(output, signal, undefined, row.projectId ?? undefined, record);
+            await this.media.save(
+              output,
+              signal,
+              undefined,
+              row.projectId ?? undefined,
+              record,
+              (diagnostic) => this.update(row.id, { diagnostic }),
+            );
         }
         if (signal.aborted || this.row(row.id).status === 'cancelled') return;
         this.update(row.id, {
@@ -410,12 +607,18 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         result = await adapter.query(context, row.remoteTaskId);
       } else {
         const request: GenerationRequest = structuredClone(row.request);
-        context.referenceUrls = {};
+        context.referenceUrls = { ...row.snapshot?.referenceUrls };
         let inlineBytes = 0;
         for (const item of request.inputs) {
           const limit = row.profile.inputs.find((entry) => entry.kind === item.kind)!;
-          if (limit.transport === 'url' || item.kind !== 'image')
-            context.referenceUrls[item.sha256!] = await this.storage.reference(
+          if (row.profile.protocol === 'fastaitoken-video')
+            context.referenceUrls[item.sha256!] ??= await this.providerReference(
+              row,
+              context,
+              item.sha256!,
+            );
+          else if (limit.transport === 'url' || item.kind !== 'image')
+            context.referenceUrls[item.sha256!] ??= await this.storage.reference(
               this.media.get(item.sha256!),
               context.signal,
               row.projectId ?? undefined,
@@ -431,6 +634,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
             item.dataUrl = await this.media.inline(item.sha256!, row.projectId ?? undefined);
           }
         }
+        if (row.snapshot)
+          this.update(row.id, {
+            snapshot: { ...row.snapshot, referenceUrls: context.referenceUrls },
+          });
         // 到这一步之前失败能确认没有提交；此后异常一律按是否明确未受理分类。
         try {
           result = await adapter.submit(context, request);
@@ -508,7 +715,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
               '任务处理失败，请检查渠道、素材与本地存储',
             );
       if (
-        row.status === 'downloading' ||
+        (row.status === 'downloading' && failure.category !== 'invalid_params') ||
         (row.status === 'running' &&
           failure.category !== 'invalid_params' &&
           failure.code !== 'WAIT_TIMEOUT') ||
@@ -531,7 +738,18 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           return;
         }
       }
-      const status = row.status === 'submitting' && failure.uncertain ? 'submit_unknown' : 'failed';
+      const paused =
+        failure.code === 'WAIT_TIMEOUT' ||
+        failure.code === 'UPLOAD_UNKNOWN' ||
+        (failure.category === 'invalid_params' && !!row.remoteTaskId) ||
+        ['MODEL_DISABLED', 'LEGACY_SNAPSHOT_MISSING', 'CHANNEL_NOT_FOUND'].includes(failure.code);
+      const status = paused
+        ? 'paused'
+        : row.status === 'downloading'
+          ? 'download_failed'
+          : row.status === 'submitting' && failure.uncertain
+            ? 'submit_unknown'
+            : 'failed';
       this.update(row.id, {
         status,
         errorCategory: failure.category,

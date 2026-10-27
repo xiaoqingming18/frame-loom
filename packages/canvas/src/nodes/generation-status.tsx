@@ -14,7 +14,9 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
     return !node || isNodeLocked(state.document, node);
   });
   const ids = data.pendingJobIds ?? [];
-  const running = ids.filter((id) => jobs.get(id)?.status !== 'failed');
+  const running = ids.filter((id) =>
+    ['pending', 'submitting', 'running', 'downloading'].includes(jobs.get(id)?.status ?? 'pending'),
+  );
   const api = host.generation;
   if (!api || (!ids.length && !submitting)) return null;
   async function act(id: string, retry: boolean) {
@@ -67,17 +69,51 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
             {job?.status === 'submit_unknown' && (
               <p role="status">提交结果不明：远端可能已受理并计费</p>
             )}
-            <div className="flex justify-center gap-1">
-              {job?.status === 'failed' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={locked || submitting}
-                  onClick={() => void act(id, true)}
-                >
-                  重试任务 {index + 1}
-                </Button>
+            {job?.status === 'paused' && (
+              <p role="status">已暂停等待；恢复将继续原任务，不重新生成</p>
+            )}
+            {job?.status === 'download_failed' && (
+              <p role="status">下载失败；重试只下载已生成的产物</p>
+            )}
+            {job?.remoteTaskId && (
+              <p className="break-all text-muted-foreground">远端任务：{job.remoteTaskId}</p>
+            )}
+            {job?.diagnostic && (
+              <details className="break-all text-muted-foreground">
+                <summary>错误详情</summary>
+                <p>
+                  {job.diagnostic.stage} · {job.diagnostic.method} {job.diagnostic.route}
+                </p>
+                <p>
+                  {job.errorCode} {job.diagnostic.httpStatus} {job.diagnostic.requestId}
+                </p>
+              </details>
+            )}
+            {job?.recoveryAction === 'none' &&
+              ['submit_unknown', 'paused'].includes(job.status) && (
+                <p>请先向供应商确认；当前无法安全恢复</p>
               )}
+            <div className="flex justify-center gap-1">
+              {job &&
+                (job.recoveryAction ? job.recoveryAction !== 'none' : job.status === 'failed') && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={locked || submitting}
+                    onClick={() => void act(id, true)}
+                  >
+                    {job.recoveryAction === 'download'
+                      ? '重试下载'
+                      : job.recoveryAction === 'idempotent_submit'
+                        ? '同键恢复提交'
+                        : job.recoveryAction === 'prepare'
+                          ? '恢复准备'
+                          : job.recoveryAction === 'query'
+                            ? '恢复查询'
+                            : '重试任务'}{' '}
+                    {index + 1}
+                  </Button>
+                )}
               <Button
                 size="sm"
                 variant="ghost"

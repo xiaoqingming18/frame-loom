@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   Channel,
@@ -67,6 +67,18 @@ export class ChannelsRepository {
             .parse(JSON.parse(this.cipher.decrypt(row.headersCipher, 'channel_headers', id)))
         : {},
     };
+  }
+  credentialFingerprint(id: string) {
+    const { apiKey, headers } = this.credentials(id);
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          id,
+          apiKey,
+          Object.entries(headers).sort(([a], [b]) => a.localeCompare(b)),
+        ]),
+      )
+      .digest('hex');
   }
   saveChannel(input: Partial<ChannelWrite>, existingId?: string) {
     if (existingId) this.channelRow(existingId);

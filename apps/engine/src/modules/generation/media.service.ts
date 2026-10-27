@@ -56,6 +56,9 @@ export class MediaService {
     headers?: Record<string, string>,
     projectId?: string,
     onSaved?: (media: StoredMedia, staged: boolean) => void,
+    diagnose?: (
+      value: NonNullable<import('@frame-loom/contracts').GenerationJob['diagnostic']>,
+    ) => void,
   ): Promise<StoredMedia> {
     let chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
     if (output.data) {
@@ -74,11 +77,18 @@ export class MediaService {
           '结果地址必须为 HTTP(S)',
         );
       // 仅受控的厂商内容端点带鉴权，且拒绝重定向；公开 CDN 不携带渠道凭据。
+      const diagnostic = {
+        stage: 'download' as const,
+        method: 'GET',
+        route: url.origin + url.pathname,
+      };
+      diagnose?.(diagnostic);
       const response = await fetch(url, {
         signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
         redirect: headers ? 'error' : 'follow',
         headers,
       });
+      diagnose?.({ ...diagnostic, httpStatus: response.status });
       if (!response.ok || !response.body)
         throw new GenerationFailure(
           'input_unreachable',
