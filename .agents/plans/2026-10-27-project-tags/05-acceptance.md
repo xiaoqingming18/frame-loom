@@ -20,7 +20,7 @@ Parent: plan.md
   - 自定义标签改名后，另一页同步显示。
 
   — 验证：`pnpm --filter @frame-loom/desktop e2e -- project-tags`
-- [ ] T2 人工检查以下项目，截图存入 `.cache/project-tags/` 并逐图核对：明暗两种模式、720×560、键盘路径（菜单 → 卡片 → 编辑和删除图标 → 弹窗）、锁定节点置灰、错误状态 — 验证：截图清单
+- [ ] T2 人工检查以下项目，截图存入 `.cache/project-tags/` 并逐图核对：明暗两种模式、720×560、键盘路径（菜单 → 卡片 → 编辑和删除图标 → 弹窗）、锁定节点在画布菜单中置灰、在删除弹窗中可改派、错误状态 — 验证：截图清单
 - [ ] T3 原地同步[项目库](../../notes/implemented/feature/2026-10-26-project-library.md)的清单格式、[无限画布](../../notes/implemented/feature/2026-10-25-infinite-canvas.md)的 host 和节点头部、[共享契约](../../notes/implemented/architecture/2026-10-24-shared-contracts.md)，以及 `docs/ui-guidelines.md` 的标签 token 说明 — 验证：`pnpm run verify`
 - [ ] T4 将项目标签笔记移入 `implemented/feature/`，并改写为现在时；父子计划转 `done` — 验证：`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm run verify`
 
