@@ -26,6 +26,8 @@ Status: proposed
 
 ## Proposal
 
+后续接入方案见[模型服务接入契约、操作路由与任务恢复](2026-10-27-model-service-protocol-routing.md)：拟补充模型地址覆盖、完整操作路由、FastAIToken JSON 视频、供应商上传和调用快照，并修复流光 H3 路由及外层任务 ID 解析。该方案已获同意但尚未实现；本篇既有实现事实及未完成的整体供应商验收仍保留，不将新提案视为已交付。
+
 ### 当前实现边界
 
 01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型和四种文本协议的两步测试。03 已实现图片档案与三种图片协议、持久化任务调度与恢复、sha256 媒体落盘和 `frame-media://`。04 已实现 ffprobe 预检、S3 兼容对象存储、三种视频协议和对象存储设置；Windows x64 新版 NSIS 安装后 ffprobe 实测通过。05 已实现 OpenAI Speech 与 MiniMax T2A 适配器和音频落盘。临时模型测试页已删除，图片／视频入口由画布承接，文本与 TTS 暂无业务界面。真实供应商冒烟、时间戳能力核对及 NSIS 人工验收仍待具备外部账号的环境执行，本篇保持 proposed。
