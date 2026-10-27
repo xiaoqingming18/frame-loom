@@ -12,7 +12,7 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 
 - 项目存储阶段新增 `projects.ts`：项目清单／页面文件保留未知顶层字段，版本上限为 1，名称与资产路径规则共用；`desktop.ts` 增加偏好（沿用 `theme`）和目录／项目 IPC 参数，`GenerationRequest` 增加可选项目与页面 id。新契约及现有请求兼容测试通过；资产、IPC 与项目画布已按[项目库方案](../../implemented/feature/2026-10-26-project-library.md)接入。
 
-- 项目标签使用 `ProjectTag`、`TagColor`、`TagId`、`TagName` 与增改删／引用 schema；`projectTags(manifest)` 统一解释缺省内置列表与显式空列表。`CanvasNode.tagId` 可选，仅 `TAGGABLE_NODE_TYPES` 中的图片、视频节点可携带，画布命令与文档校验共用该常量，不另设注册表白名单；不升级格式版本。规则与验收见[项目标签](../../proposed/feature/2026-10-27-project-tags.md)。
+- 项目标签使用 `ProjectTag`、`TagColor`、`TagId`、`TagName` 与增改删／引用 schema；`projectTags(manifest)` 统一解释缺省内置列表与显式空列表。`CanvasNode.tagId` 可选，仅 `TAGGABLE_NODE_TYPES` 中的图片、视频节点可携带，画布命令与文档校验共用该常量，不另设注册表白名单；不升级格式版本。规则与验收见[项目标签](../feature/2026-10-27-project-tags.md)。
 
 - `packages/contracts` 发布为私有 ESM workspace 包 `@frame-loom/contracts`，由 tsc 输出 `dist/index.js` 与 `.d.ts`；入口 `exports` 只有 `types`、`default`，分发文件只含 `dist`。相对导出写 `.js` 后缀。
 - `image-params.ts` 与 `image-references.ts` 提供图片语义参数常量／标签、尺寸换算、模型切换回退和提示词引用解析／替换纯函数；`ModelProfile.params[].notes` 是可选的取值说明，不参与生成请求校验。这些跨 engine 与画布的无 IO 规则仍由 contracts 持有，避免两端维护不同的尺寸或编号算法；完整交互与适配器改造见[画布图片节点](../feature/2026-10-26-canvas-image-node.md)。
@@ -20,7 +20,7 @@ engine 的 HTTP 响应与主进程传给 renderer 的连接信息跨越进程边
 - `ThemeSource` 只接受 `system | light | dark`；`WindowCommand` 只接受 `minimize | toggle-maximize | toggle-fullscreen | quit`。主进程在可信 IPC 中校验输入，renderer 桥接校验主题返回值；偏好持久化与窗口行为见[主题与应用外壳](../feature/2026-10-24-theme-and-app-shell.md)。
 - `HealthResponse` 要求 `status: 'ok'`、字符串 `engineVersion` 与 `schemaVersion`，以及带时区的 ISO 日期时间 `startedAt`；接受 `Z` 和显式时区偏移，不接受无时区时间或无效日期。
 - `EngineConnection.baseUrl` 只接受字面形式 `http://127.0.0.1:<port>`，端口为 1–65535 的十进制整数，不允许前导零、路径、用户信息、查询或片段。这样校验不会把其他主机或附加内容正规化成可信连接。`token` 只要求非空字符串；生成和鉴权规则属于 engine／主进程，不在此实现。
-- `ErrorResponse` 要求字符串 `code`、`message`，可选 `issues` 是 `{ path: string; message: string }[]`，不把 HTTP 状态码重复放入响应体。engine 统一错误映射与 stderr 日志见[engine 服务](2026-10-24-engine-service.md)；renderer 健康检查解析此契约，响应损坏时回退到中文 HTTP 状态提示。
+- `ErrorResponse` 要求字符串 `code`、`message`，可选 `issues` 是 `{ path: string; message: string }[]`，可选 `details` 是 `unknown`，由具体业务校验；标签删除冲突 `TAG_IN_USE` 的 `details.usages` 携带最新引用。不把 HTTP 状态码重复放入响应体。engine 统一错误映射与 stderr 日志见[engine 服务](2026-10-24-engine-service.md)；renderer 健康检查解析此契约，响应损坏时回退到中文 HTTP 状态提示。
 - `EngineEvent` 按 type 区分 `heartbeat { timestamp }` 与 `generation.job.updated { jobId }`；时间戳为带时区的 ISO 日期时间，jobId 非空。发布和消费都解析同一 schema，任务通知只要求调用方重新查询；完整任务契约属于后续模型管理阶段。
 - 根 `tsconfig.base.json` 统一 strict、ES2023、NodeNext 与 skipLibCheck。contracts 的 `tsconfig.json` 包含测试，`tsconfig.build.json` 排除测试并输出声明；包内提供 build、test、typecheck，根脚本用 `pnpm -r` 调用。
 - TypeScript 6.0.3、Vitest 4.1.12、zod 4.6.7 精确锁定；Vitest 与 Nest 官方 ESM starter 的 4.x 主版本一致，不采用 registry 最新的 5.x。

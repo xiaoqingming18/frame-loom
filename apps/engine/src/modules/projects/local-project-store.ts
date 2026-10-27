@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ProjectManifest, ProjectPageFile } from '@frame-loom/contracts';
+import { ProjectManifest, ProjectPageFile, projectTags } from '@frame-loom/contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { join, relative, isAbsolute } from 'node:path';
@@ -120,7 +120,11 @@ export class LocalProjectStore extends ProjectStore {
   }
 
   writeManifest(root: string, manifest: ProjectManifest): Promise<void> {
-    return this.atomicWrite(root, 'project.json', ProjectManifest.parse(manifest));
+    return this.atomicWrite(
+      root,
+      'project.json',
+      ProjectManifest.parse({ ...manifest, tags: projectTags(manifest) }),
+    );
   }
 
   async readPage(root: string, pageId: string, saving = false): Promise<ProjectPageFile> {

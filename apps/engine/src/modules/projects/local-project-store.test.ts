@@ -1,3 +1,4 @@
+import { BUILTIN_TAGS } from '@frame-loom/contracts';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +21,36 @@ async function setup() {
   await fs.writeFile(target, '原始内容');
   return { root, target, store: new LocalProjectStore() };
 }
+
+it.each([
+  { name: '旧清单普通写入补齐默认标签', tags: undefined, expected: BUILTIN_TAGS },
+  { name: '普通写入保留显式空标签，不恢复默认标签', tags: [], expected: [] },
+])('$name', async ({ tags, expected }) => {
+  const { root, target, store } = await setup();
+  const original = JSON.stringify({
+    format: 'frame-loom-project',
+    formatVersion: 1,
+    id: '00000000-0000-4000-8000-000000000001',
+    name: '原项目',
+    createdAt: '2026-10-27T00:00:00.000Z',
+    updatedAt: '2026-10-27T00:00:00.000Z',
+    pages: [],
+    tags,
+  });
+  await fs.writeFile(target, original);
+  const manifest = await store.readManifest(root);
+  expect(manifest.tags).toEqual(tags);
+  expect(await fs.readFile(target, 'utf8')).toBe(original);
+
+  manifest.name = '已重命名';
+  await store.writeManifest(root, manifest);
+
+  expect(JSON.parse(await fs.readFile(target, 'utf8'))).toEqual({
+    ...manifest,
+    tags: expected,
+  });
+  expect((await store.readManifest(root)).tags).toEqual(expected);
+});
 
 it('文件被占用后重试，释放时原子替换，临时文件清理', async () => {
   const { root, target, store } = await setup();

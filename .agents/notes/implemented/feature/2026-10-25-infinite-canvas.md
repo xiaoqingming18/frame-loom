@@ -75,11 +75,17 @@ apps/desktop/src/renderer/src/features/projects/canvas/   项目画布宿主与�
       saveView(id: string, view: CanvasView): Promise<void>;
     };
     generation?: CanvasGenerationHost; // 由宿主提供模型配置和任务接口
+    tags?: {
+      list(signal?: AbortSignal): Promise<ProjectTag[]>;
+      create(input: { name: string; color: TagColor }): Promise<ProjectTag[]>;
+      update(id: string, patch: { name?: string; color?: TagColor }): Promise<ProjectTag[]>;
+      remove(tag: ProjectTag): Promise<ProjectTag[] | null>; // 宿主处理删除，取消返回 null
+    };
   }
   ```
 
   项目画布宿主用 EngineClient 实现；画布持久化会话独立持有 revision 与串行保存队列，避免 Query 的缓存刷新覆盖尚未保存的编辑；其他服务端查询继续使用 Query。项目和页面 id 由路由注入，媒体与生成任务归属项目。
-- **项目标签**：可选 `CanvasHost.tags` 注入标签列表与增改删能力，store 的 `tags` 不进入文档历史。图片／视频共用 `NodeHeader` 徽标；批量打标签只修改可打标签且未锁定的节点，一次 apply 可撤销。剪贴板与导出 JSON 携带可选 id／名称旁表，导入／粘贴先保留本项目已有 id，否则按名称忽略大小写匹配，未匹配清空；项目标签尚未加载时阻止粘贴／导入，避免静默丢标签。没有注入标签能力时不显示菜单或徽标。宿主删除与剩余验收见[项目标签](../../proposed/feature/2026-10-27-project-tags.md)。
+- **项目标签**：可选 `CanvasHost.tags` 注入标签列表与增改删能力，store 的 `tags` 不进入文档历史。图片／视频共用 `NodeHeader` 徽标；批量打标签只修改可打标签且未锁定的节点，一次 apply 可撤销。剪贴板与导出 JSON 携带可选 id／名称旁表，导入／粘贴先保留本项目已有 id，否则按名称忽略大小写匹配，未匹配清空；项目标签尚未加载时阻止粘贴／导入，避免静默丢标签。没有注入标签能力时不显示菜单或徽标。节点头部先截断标题，徽标自身也限制最大宽度。宿主删除与 Electron 验收证据见[项目标签](2026-10-27-project-tags.md)。
 - **ESLint**：renderer 的 React Hooks、Fast Refresh、Tailwind correctness 与颜色限制规则扩展到 `packages/ui/**`、`packages/canvas/**`；新增导入边界，`packages/*` 不能导入 `apps/*`，`packages/ui` 不能导入 `packages/canvas`。
 - **新增依赖**精确锁定：`@xyflow/react` 12.12.0、`zustand` 5.0.16（画布包自用；xyflow 内部另带 zustand 4，打包后多一份约 3 KB）。id 用 `crypto.randomUUID()`，快捷键自写，不引入热键库。dagre 留到"按依赖分层"再评估。
 
@@ -102,6 +108,7 @@ type CanvasNode = {
   parentId?: string;
   title?: string;
   locked?: boolean;
+  tagId?: string;      // 仅 TAGGABLE_NODE_TYPES 声明的类型可携带
   data: unknown;       // 由注册表中该类型的 schema 校验
 };
 type CanvasEdge = { id: string; source: string; target: string; sourceHandle: string; targetHandle: string };
@@ -203,7 +210,7 @@ defineNodeType({
 
 - 选中分组或无选区时，先整理作用域内组的直接成员并收紧组框，再整理顶层；选中子节点时仅整理该父级下的选区。锁定组及其成员不参与整理与重新归属。标题排序使用数字感知比较；创建顺序在当前文档中以数组顺序表示，手动置顶置底后随层级顺序变化，未增加创建时间字段。组框始终低于普通节点，同层级顺序由文档数组驱动显式 zIndex。
 - 分组顶部留白 72px，分别容纳组标题和媒体框外标题；颜色单选支持方向键、Home／End，画布快捷键放行单选控件的按键。调整尺寸的结束事件即使不带尺寸也结束事务，尺寸与位置先更新后统一提交，保证一步撤销。
-- 空白右键菜单提供导出 JSON 与「导入 JSON（替换画布，可撤销）」：导出只有文档及媒体 hash 引用，导入先限制 8 MiB、校验 contracts 和已支持节点间的连线，成功后整份替换并记录一步撤销，不修改视图；失败保留原文档与历史。未知或不支持版本的节点与连线保留供降级显示，不打包或迁移媒体文件。
+- 空白右键菜单提供导出 JSON 与「导入 JSON（替换画布，可撤销）」：导出包含文档、媒体 hash 引用及可选标签 id／名称旁表，导入取出标签旁表用于目标项目匹配，再限制 8 MiB、校验 contracts 和已支持节点间的连线，成功后整份替换并记录一步撤销，不修改视图；失败保留原文档与历史。未知或不支持版本的节点与连线保留供降级显示，不打包或迁移媒体文件。
 
 ### 主题与视觉
 

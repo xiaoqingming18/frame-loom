@@ -7,6 +7,7 @@ Frame Loom 的颜色、字体与阴影统一来自 `apps/desktop/src/renderer/sr
 - 使用语义类：`bg-background` 是窗口底层，`bg-canvas` 是主画布，`bg-card` 是输入区／弹窗；`text-foreground` 是正文，`text-muted-foreground` 是次要文字，`text-destructive` 是错误。描边、焦点、阴影分别用 `border-border`、`ring-ring`、`shadow-panel`。
 - 禁止 Tailwind 调色板颜色（如 `bg-zinc-800`）、任意值颜色（如 `text-[#333]`）、任意属性颜色和 JSX 内联颜色。尺寸任意值可以使用。`pnpm lint` 检查 TSX 类名和直接内联颜色；CSS 中仍须人工确认没有绕过 token。
 - 新颜色先判断现有 token 是否足够；确需新增时在 `theme.css` 中同时定义明暗值，并说明语义。主进程窗口背景色由单测与 CSS 对齐，不另建 palette。
+- 项目标签使用 10 色语义 token：`red`、`orange`、`yellow`、`green`、`cyan`、`blue`、`indigo`、`purple`、`pink`、`gray`。`--tag-<color>` 用于色点和徽标文字，`--tag-<color>-bg` 用于徽标浅底；每色必须定义明暗两套值，由画布的 `canvas-tag-<color>` 类映射，徽标文字对底色对比度至少 4.5:1。标题空间不足时先截断节点标题，徽标也限制最大宽度。
 - 主题由主进程 `nativeTheme` 驱动，CSS 使用 `prefers-color-scheme`，不添加 `.dark` class，也不使用 localStorage 保存第二份偏好。设置只能经 `lib/desktop-bridge.ts` 读写。
 - 明亮模式次要文字保留设计稿原值，对比度偏低；后续设计调整应同步 token，不局部加深文字。
 
@@ -21,7 +22,7 @@ Frame Loom 的颜色、字体与阴影统一来自 `apps/desktop/src/renderer/sr
 
 ## 交互与验收
 
-- 弹窗复用 Dialog 的焦点锁、Esc 关闭与读屏语义，关闭后恢复到可操作入口；Tabs 支持键盘导航。
+- 弹窗复用 Dialog 的焦点锁、Esc 关闭与读屏语义，关闭后恢复到可操作入口；Tabs 支持键盘导航。画布标签卡片的编辑和删除图标在悬停或 `focus-within` 时显示，提供中文可访问名；卡片交给宿主删除 Dialog 后不能抢走模态焦点，Esc 关闭卡片后回到画布。
 - 左栏底部的设置中心先向上打开快捷面板，提供主题三段切换与设置入口。快捷面板使用 Radix Popover，主题切换后保持打开；Esc 和点击外部可关闭。设置行关闭面板并将焦点交给模态窗口，避免关闭面板时抢回入口。
 - 设置模态窗口采用大圆角底座、左侧分类导航和右侧独立滚动内容面板；设置行优先左侧标题／描述、右侧控件。快捷面板与外观页复用主题组件和保存状态，保存期间两处均禁用重复写入。
 - 仍未开放的创作控件使用 `aria-disabled` 和只读文本框，阻止实际操作，同时保留键盘聚焦。通过 Tooltip 与常驻 `aria-describedby` 提示「创作功能尚未开放」，不添加虚假项目或版本数据；项目库、创作页和项目资产使用真实本地数据。

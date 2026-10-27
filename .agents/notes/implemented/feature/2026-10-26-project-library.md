@@ -64,7 +64,7 @@ Status: implemented
 
 资产上传完成后采用同卷硬链接原子发布，再删除临时链接；文件移动采用目标链接加移除源，目录仍 rename。普通 rename 的优势是支持更多文件系统，但可能覆盖检查后被外部程序创建的同名文件，因此文件发布与移动不采用覆盖式 rename。收益是不暴露半成品且不会覆盖同名文件；代价是需要支持硬链接的本地磁盘，跨卷或不支持的文件系统没有降级复制。路径检查与实际打开之间仍存在本地外部程序并发替换的窗口，本期不提供目录句柄隔离或文件系统监视。
 
-项目标签由 `ProjectManifest.tags` 持有，缺省解释为 7 个内置标签；画布宿主注入 `host.tags`，增改同步 Query 列表。页面加载先读取标签、清理悬空 `tagId` 再 reset，不计入撤销或未保存状态。删除先保存并扫描全部页面，当前页改派通过 store 一次可撤销修改后保存，其他页交由 engine 改派，锁定节点在项目级删除弹窗中仍可改派；409 后重新扫描并要求重新选择。详细边界与剩余验收见[项目标签](../../proposed/feature/2026-10-27-project-tags.md)。
+项目标签由 `ProjectManifest.tags` 持有，缺省解释为 7 个内置标签；画布宿主注入 `host.tags`，增改同步 Query 列表。页面加载先读取标签、清理悬空 `tagId` 再 reset，不计入撤销或未保存状态。删除先保存并扫描全部页面，当前页改派通过 store 一次可撤销修改后保存，其他页交由 engine 改派，锁定节点在项目级删除弹窗中仍可改派；409 后重新扫描并要求重新选择。详细边界与跨页改派、重启及视觉验收证据见[项目标签](2026-10-27-project-tags.md)。
 
 ### 概念与关系
 
@@ -105,6 +105,15 @@ Status: implemented
   "updatedAt": "<ISO>",
   "pages": [
     { "id": "<uuid>", "name": "第一集", "createdAt": "<ISO>", "updatedAt": "<ISO>", "coverSha256": null }
+  ],
+  "tags": [
+    { "id": "builtin-prop", "name": "道具", "color": "blue", "builtin": true },
+    { "id": "builtin-voice", "name": "音色", "color": "purple", "builtin": true },
+    { "id": "builtin-scene", "name": "场景", "color": "orange", "builtin": true },
+    { "id": "builtin-costume", "name": "服装", "color": "indigo", "builtin": true },
+    { "id": "builtin-character", "name": "人物", "color": "pink", "builtin": true },
+    { "id": "builtin-final", "name": "最终版", "color": "green", "builtin": true },
+    { "id": "builtin-pending", "name": "待定版", "color": "yellow", "builtin": true }
   ]
 }
 ```
@@ -113,6 +122,7 @@ Status: implemented
 
 规则：
 
+- `tags` 最多 50 项，名称在项目内忽略大小写唯一。缺省时由 `projectTags(manifest)` 解释为内置 7 项，读取不写盘，下次普通清单写入时补齐；显式 `tags: []` 表示用户删光，不恢复内置列表。新建项目直接写出内置标签，不升级 `formatVersion`。
 - schema 放在 `packages/contracts/src/projects.ts`。读取时保留未知的顶层字段，重写时原样写回，给以后的同步元数据留位置。
 - `formatVersion` 高于当前支持的版本时，项目显示为「需要更新应用」，不能打开也不能写入；低于当前版本时，读取后迁移，下次写入时升级。
 - `pages[]` 的顺序就是创建顺序。`updatedAt` 和 `coverSha256` 由 engine 在每次保存页面后计算并回写。封面取所有图片节点所有版本中 `createdAt` 最新的一张图片（生成或上传的都算），没有图片时为 `null`，界面显示纯色卡片。
