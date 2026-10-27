@@ -20,6 +20,15 @@ export const serviceRoutes: Record<string, Partial<Record<ServiceOperation, stri
     upload: 'api/v1/uploads',
     catalog: 'api/v1/models',
   },
+  'kling-video': {
+    submit: 'v1/videos/text2video',
+    query: 'v1/videos/{id}',
+    content: 'v1/videos/{id}',
+  },
+  'wan-video': {
+    submit: 'api/v1/services/aigc/video-generation/video-synthesis',
+    query: 'api/v1/tasks/{id}',
+  },
 };
 export const connectionTemplates = [
   {

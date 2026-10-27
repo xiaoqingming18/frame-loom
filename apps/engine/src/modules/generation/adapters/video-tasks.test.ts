@@ -2,7 +2,14 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { GenerationRequest } from '@frame-loom/contracts';
-import { arkVideoTasks, fastaitokenVideo, minimaxVideoV2, openaiVideos } from './video-tasks.js';
+import {
+  arkVideoTasks,
+  fastaitokenVideo,
+  klingVideo,
+  minimaxVideoV2,
+  openaiVideos,
+  wanVideo,
+} from './video-tasks.js';
 import type { AdapterContext } from './types.js';
 
 const request = GenerationRequest.parse({
@@ -255,6 +262,45 @@ it('H3 兼容旧渠道的 /v1 地址并改用 minimax/v2 路由', async () => {
   expect(fetchMock.mock.calls[0]?.[0]).toBe(
     'https://provider.test/minimax/v2/query/video_generation/task-h3',
   );
+});
+
+it('Kling 使用精确文本生成路径并保留受限参数', async () => {
+  const requests: Request[] = [];
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(new Request(input, init));
+    return new Response(
+      JSON.stringify({ code: '0', data: { task_id: 'kling-1', task_status: 'submitted' } }),
+      { status: 200 },
+    );
+  });
+  await klingVideo.submit(
+    { ...context, model: 'kling-v4' },
+    GenerationRequest.parse({
+      ...request,
+      mode: 'text',
+      params: { duration: 5, aspect_ratio: '16:9', ignored: 'drop' },
+    }),
+  );
+  expect(requests[0].url).toBe('https://provider.test/v1/videos/text2video');
+  expect(await requests[0].json()).toEqual({
+    model_name: 'kling-v4',
+    prompt: '测试视频',
+    duration: 5,
+    aspect_ratio: '16:9',
+  });
+});
+
+it('Wan 任务查询缺少视频地址时拒绝伪成功', async () => {
+  vi.stubGlobal(
+    'fetch',
+    async () =>
+      new Response(JSON.stringify({ code: 0, data: { task_status: 'SUCCEEDED', output: {} } }), {
+        status: 200,
+      }),
+  );
+  await expect(
+    wanVideo.query!({ ...context, model: 'wan3.0-video' }, 'wan-1'),
+  ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
 });
 
 it('FastAIToken 视频使用 JSON 任务并映射 processing/completed', async () => {

@@ -7,6 +7,8 @@ export const VideoProtocol = z.enum([
   'minimax-video-v2',
   'openai-videos',
   'fastaitoken-video',
+  'kling-video',
+  'wan-video',
 ]);
 export type VideoProtocol = z.infer<typeof VideoProtocol>;
 export const MediaProtocol = z.enum([

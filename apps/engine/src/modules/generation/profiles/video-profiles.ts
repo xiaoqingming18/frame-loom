@@ -105,13 +105,21 @@ const minimax = [
     runtime,
   }),
 );
-const seedance = ['doubao-seedance-2-0', 'doubao-seedance-2-0-fast'].map((model) =>
+const seedance = [
+  'doubao-seedance-2-5-260628',
+  'doubao-seedance-2-0-260128',
+  'doubao-seedance-2-0-fast-260128',
+].map((model) =>
   ModelProfile.parse({
     id: model,
-    name: model.endsWith('fast') ? 'Seedance 2.0 Fast' : 'Seedance 2.0',
+    name: model.includes('2-5')
+      ? 'Seedance 2.5'
+      : model.includes('fast')
+        ? 'Seedance 2.0 Fast'
+        : 'Seedance 2.0',
     kind: 'video',
     protocol: 'ark-video-tasks',
-    matchIds: [model, `${model}-260128`],
+    matchIds: [model, model.replace(/-260\d+$/, '')],
     generic: false,
     modes,
     params: [
@@ -119,7 +127,7 @@ const seedance = ['doubao-seedance-2-0', 'doubao-seedance-2-0-fast'].map((model)
         key: 'resolution',
         name: '分辨率',
         type: 'enum',
-        values: ['480p', '720p'],
+        values: model.includes('2-5') ? ['480p', '720p', '1080p'] : ['480p', '720p'],
         default: '720p',
       },
       {
@@ -207,9 +215,68 @@ const fastaitokenProfiles = fastaitoken.map(([model, min, max, resolutions, imag
     runtime,
   }),
 );
+const kling = [
+  ['kling-v4', 'Kling 4.0'],
+  ['kling-v3', 'Kling 3.0'],
+].map(([model, name]) =>
+  ModelProfile.parse({
+    id: model,
+    name,
+    kind: 'video',
+    protocol: 'kling-video',
+    matchIds: [model, model.replace('kling-', 'klingai-')],
+    generic: false,
+    modes: modes.slice(0, 2),
+    params: [
+      { key: 'duration', name: '时长（秒）', type: 'enum', values: [5, 10], default: 5 },
+      {
+        key: 'aspect_ratio',
+        name: '画面比例',
+        type: 'enum',
+        values: ['16:9', '9:16', '1:1'],
+        default: '16:9',
+      },
+      { key: 'sound', name: '生成声音', type: 'boolean', default: false },
+    ],
+    constraints: [
+      {
+        when: { mode: 'frames' },
+        forbidRoles: ['last_frame'],
+        message: 'Kling 首帧模式不支持尾帧',
+      },
+    ],
+    inputs: [{ ...image, maxCount: 1 }],
+    runtime,
+  }),
+);
+const wan = ModelProfile.parse({
+  id: 'wan-3.0',
+  name: 'Wan 3.0',
+  kind: 'video',
+  protocol: 'wan-video',
+  matchIds: ['wan3.0-video', 'wan-3.0'],
+  generic: false,
+  modes: modes.slice(0, 2),
+  params: [
+    {
+      key: 'size',
+      name: '尺寸',
+      type: 'enum',
+      values: ['1280*720', '720*1280', '960*960'],
+      default: '1280*720',
+    },
+    { key: 'duration', name: '时长（秒）', type: 'number', min: 2, max: 10, default: 5 },
+    { key: 'audio', name: '生成音频', type: 'boolean', default: false },
+  ],
+  constraints: [],
+  inputs: [{ ...image, maxCount: 2, transport: 'url' }],
+  runtime,
+});
 export const videoProfiles: ModelProfile[] = [
   ...seedance,
   ...minimax,
+  ...kling,
+  wan,
   sora,
   ...fastaitokenProfiles,
   ModelProfile.parse({

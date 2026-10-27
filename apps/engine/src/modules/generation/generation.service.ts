@@ -31,6 +31,8 @@ import {
   fastaitokenVideo,
   minimaxVideoV2,
   openaiVideos,
+  klingVideo,
+  wanVideo,
 } from './adapters/video-tasks.js';
 import { openaiImages } from './adapters/openai-images.js';
 import { arkImages } from './adapters/ark-images.js';
@@ -57,6 +59,8 @@ export class GenerationAdapters {
       minimaxVideoV2,
       openaiVideos,
       fastaitokenVideo,
+      klingVideo,
+      wanVideo,
       openaiSpeech,
       minimaxT2a,
     ].map((adapter) => [adapter.protocol, adapter]),

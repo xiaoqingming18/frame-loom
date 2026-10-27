@@ -323,3 +323,133 @@ export const fastaitokenVideo: GenerationAdapter = {
     );
   },
 };
+
+const taskIdResponse = z.object({
+  code: z.union([z.string(), z.number()]).optional(),
+  message: z.string().optional(),
+  data: z
+    .object({
+      task_id: z.string().min(1).optional(),
+      task_status: z.string().optional(),
+      output: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+  task_id: z.string().min(1).optional(),
+});
+
+function mappedParams(request: GenerationRequest, keys: readonly string[]) {
+  return Object.fromEntries(
+    keys.filter((key) => key in request.params).map((key) => [key, request.params[key]]),
+  );
+}
+
+export const klingVideo: GenerationAdapter = {
+  protocol: 'kling-video',
+  async submit(ctx, request) {
+    const first = request.inputs.find(
+      (input) => input.role === 'first_frame' || input.role === 'reference',
+    );
+    const last = request.inputs.find((input) => input.role === 'last_frame');
+    const body = {
+      model_name: ctx.model,
+      prompt: request.prompt,
+      ...mappedParams(request, ['duration', 'aspect_ratio', 'mode', 'sound'] as const),
+      ...(first ? { image_url: first.dataUrl ?? ctx.referenceUrls?.[first.sha256!] } : {}),
+      ...(last ? { tail_image_url: last.dataUrl ?? ctx.referenceUrls?.[last.sha256!] } : {}),
+    };
+    const json = await call(ctx, ctx.connection?.routes?.submit ?? 'v1/videos/text2video', body);
+    const parsed = taskIdResponse.safeParse(json);
+    if (!parsed.success || (parsed.data.code && String(parsed.data.code) !== '0')) return invalid();
+    const id = parsed.data.data?.task_id ?? parsed.data.task_id;
+    if (!id) return invalid();
+    return {
+      status: 'running',
+      remoteTaskId: id,
+      remoteStatus: parsed.data.data?.task_status ?? 'submitted',
+    };
+  },
+  async query(ctx, id) {
+    const json = await call(
+      ctx,
+      (ctx.connection?.routes?.query ?? 'v1/videos/{id}').replace('{id}', encodeURIComponent(id)),
+    );
+    const parsed = taskIdResponse.safeParse(json);
+    if (!parsed.success) return invalid();
+    const status = parsed.data.data?.task_status ?? 'submitted';
+    const output = parsed.data.data?.output;
+    const url =
+      output && typeof output.video_url === 'string' && /^https?:\/\//.test(output.video_url)
+        ? output.video_url
+        : undefined;
+    if (['succeed', 'succeeded', 'completed'].includes(status)) {
+      if (!url) return invalid();
+      return { status: 'succeeded', outputs: [{ mime: 'video/mp4', url }] };
+    }
+    if (['failed', 'cancelled'].includes(status))
+      return {
+        status: 'failed',
+        category: 'upstream',
+        code: 'VIDEO_FAILED',
+        message: 'Kling 视频任务失败',
+      };
+    return { status: 'running', remoteTaskId: id, remoteStatus: status };
+  },
+};
+
+export const wanVideo: GenerationAdapter = {
+  protocol: 'wan-video',
+  async submit(ctx, request) {
+    const first = request.inputs.find(
+      (input) => input.role === 'first_frame' || input.role === 'reference',
+    );
+    const last = request.inputs.find((input) => input.role === 'last_frame');
+    const input = {
+      prompt: request.prompt,
+      ...(first ? { first_frame_url: first.dataUrl ?? ctx.referenceUrls?.[first.sha256!] } : {}),
+      ...(last ? { last_frame_url: last.dataUrl ?? ctx.referenceUrls?.[last.sha256!] } : {}),
+    };
+    const json = await call(
+      ctx,
+      ctx.connection?.routes?.submit ?? 'api/v1/services/aigc/video-generation/video-synthesis',
+      {
+        model: ctx.model,
+        input,
+        parameters: mappedParams(request, ['size', 'duration', 'audio'] as const),
+      },
+    );
+    const parsed = taskIdResponse.safeParse(json);
+    if (!parsed.success || (parsed.data.code && String(parsed.data.code) !== '0')) return invalid();
+    const id = parsed.data.data?.task_id ?? parsed.data.task_id;
+    if (!id) return invalid();
+    return { status: 'running', remoteTaskId: id, remoteStatus: 'PENDING' };
+  },
+  async query(ctx, id) {
+    const json = await call(
+      ctx,
+      (ctx.connection?.routes?.query ?? 'api/v1/tasks/{id}').replace(
+        '{id}',
+        encodeURIComponent(id),
+      ),
+    );
+    const parsed = taskIdResponse.safeParse(json);
+    if (!parsed.success) return invalid();
+    const status = parsed.data.data?.task_status?.toUpperCase() ?? 'PENDING';
+    const output = parsed.data.data?.output;
+    const url =
+      output && typeof output.video_url === 'string' && /^https?:\/\//.test(output.video_url)
+        ? output.video_url
+        : undefined;
+    if (['SUCCEEDED', 'SUCCESS', 'COMPLETED'].includes(status)) {
+      if (!url) return invalid();
+      return { status: 'succeeded', outputs: [{ mime: 'video/mp4', url }] };
+    }
+    if (['FAILED', 'CANCELED', 'CANCELLED'].includes(status))
+      return {
+        status: 'failed',
+        category: 'upstream',
+        code: 'VIDEO_FAILED',
+        message: 'Wan 视频任务失败',
+      };
+    return { status: 'running', remoteTaskId: id, remoteStatus: status };
+  },
+};

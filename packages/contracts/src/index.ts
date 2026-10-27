@@ -11,3 +11,4 @@ export * from './object-storage.js';
 export * from './canvas.js';
 export * from './projects.js';
 export * from './service-routing.js';
+export * from './model-catalog.js';
