@@ -58,6 +58,10 @@ export function createUploadQueue(
     }
   }
   return {
+    start() {
+      disposed = false;
+      pump();
+    },
     getSnapshot: () => tasks,
     subscribe: (listener: () => void) => {
       listeners.add(listener);

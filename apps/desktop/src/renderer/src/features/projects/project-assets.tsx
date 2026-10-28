@@ -64,7 +64,10 @@ export function ProjectAssets({
       !window.confirm('还有文件正在上传，离开将取消未完成的上传，是否离开？'),
     enableBeforeUnload: () => queue.pending(),
   });
-  useEffect(() => () => queue.dispose(), [queue]);
+  useEffect(() => {
+    queue.start();
+    return () => queue.dispose();
+  }, [queue]);
   const layout = useMutation({
     mutationFn: (value: { assetView: 'list' | 'grid' }) => setPreferences(value),
     onSuccess: (value) => queryClient.setQueryData(preferencesQuery().queryKey, value),
@@ -128,10 +131,10 @@ export function ProjectAssets({
       <div
         className={dragging ? 'rounded-xl outline-2 outline-ring' : ''}
         onDragOver={(event) => {
-          if (event.dataTransfer.types.includes('Files')) {
-            event.preventDefault();
-            setDragging(true);
-          }
+          if (![...event.dataTransfer.types].includes('Files')) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          setDragging(true);
         }}
         onDragLeave={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false);

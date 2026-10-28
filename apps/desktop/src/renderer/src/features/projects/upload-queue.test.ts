@@ -43,6 +43,20 @@ it('上传最多两路；取消等待项不发送，取消在途项后等待结�
   queue.dispose();
 });
 
+it('严格模式的清理后重新启动允许添加文件，最终销毁仍停止上传', async () => {
+  const upload = vi.fn().mockResolvedValue(entry);
+  const queue = createUploadQueue(upload, vi.fn());
+  queue.start();
+  queue.dispose();
+  queue.start();
+  queue.add([new File(['a'], 'a.png')], '');
+  await vi.waitFor(() => expect(queue.getSnapshot()[0].status).toBe('done'));
+  expect(upload).toHaveBeenCalledOnce();
+  queue.dispose();
+  queue.add([new File(['b'], 'b.png')], '');
+  expect(upload).toHaveBeenCalledOnce();
+});
+
 it('失败可重试，销毁中止全部请求且不再启动排队项', async () => {
   const upload = vi
     .fn()

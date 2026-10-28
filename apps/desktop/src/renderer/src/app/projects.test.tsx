@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient } from '@tanstack/react-query';
@@ -100,7 +101,11 @@ async function mount(
   };
   const router = createAppRouter({ engineClient, queryClient }, history);
   await router.load();
-  render(<AppProviders router={router} />);
+  render(
+    <StrictMode>
+      <AppProviders router={router} />
+    </StrictMode>,
+  );
   return { router, request };
 }
 function openMenu(name = '项目 2') {
@@ -211,6 +216,55 @@ it('资产文件夹重名显示错误，删除明确移到回收站并传非空 
   await vi.waitFor(() =>
     expect(trashProject).toHaveBeenCalledWith({ projectId: id, path: '角色' }),
   );
+});
+it('普通文件拖放允许复制并进入上传队列', async () => {
+  let uploadBody: unknown;
+  await mount(`/projects/${id}?tab=assets`, (path, init) => {
+    if (path.includes('/assets/files?')) {
+      uploadBody = init?.body;
+      return new Promise(() => {});
+    }
+  });
+  const content = await screen.findByLabelText('项目资产内容');
+  const target = content.querySelector('[role="list"]')!.parentElement!.parentElement!;
+  const file = new File(['image'], '拖放图片.png', { type: 'image/png' });
+  const dataTransfer = {
+    types: ['Files'],
+    dropEffect: 'none',
+    items: [{ webkitGetAsEntry: () => ({ isDirectory: false }), getAsFile: () => file }],
+    files: [file],
+  };
+  expect(fireEvent.dragOver(target, { dataTransfer })).toBe(false);
+  expect(dataTransfer.dropEffect).toBe('copy');
+  fireEvent.drop(target, { dataTransfer });
+  await vi.waitFor(() => expect(uploadBody).toBe(file));
+  expect(await screen.findByRole('region', { name: '上传队列' })).toBeDefined();
+});
+it('点击上传文件触发文件输入，选中文件后上传完成', async () => {
+  const entry = {
+    name: '图片.png',
+    path: '图片.png',
+    type: 'file',
+    bytes: 1,
+    updatedAt: time,
+    mediaKind: 'image',
+  };
+  const { request } = await mount(`/projects/${id}?tab=assets`, (path) =>
+    path.includes('/assets/files?') ? entry : undefined,
+  );
+  await screen.findByLabelText('项目资产内容');
+  const input = await screen.findByLabelText<HTMLInputElement>('上传项目文件');
+  const clickInput = vi.spyOn(input, 'click');
+  fireEvent.click(screen.getByRole('button', { name: '上传文件' }));
+  expect(clickInput).toHaveBeenCalledOnce();
+  fireEvent.change(input, {
+    target: { files: [new File(['image'], '图片.png', { type: 'image/png' })] },
+  });
+  await screen.findByRole('region', { name: '上传队列' });
+  await screen.findByText('已完成');
+  const upload = request.mock.calls.find(([path]) => path.includes('/assets/files?'));
+  expect(upload?.[1]?.method).toBe('POST');
+  expect(upload?.[1]?.body).toBeInstanceOf(File);
 });
 it('文件夹拖放被跳过，上传未结束时离开确认，确认离开中止请求', async () => {
   let uploadSignal: AbortSignal | undefined;

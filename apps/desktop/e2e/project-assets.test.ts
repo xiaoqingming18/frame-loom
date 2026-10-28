@@ -21,7 +21,9 @@ test('项目资产：上传、目录、移动、搜索、预览、画布双向�
       .click();
     await page.getByRole('tab', { name: '项目资产', exact: true }).click();
     const imagePath = fileURLToPath(new URL('./fixtures/reference-256.png', import.meta.url));
-    await page.getByLabel('上传项目文件').setInputFiles(imagePath);
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: '上传文件', exact: true }).click();
+    await (await chooser).setFiles(imagePath);
     await expect(
       page.getByRole('button', { name: 'reference-256.png', exact: true }),
     ).toBeVisible();
@@ -29,6 +31,41 @@ test('项目资产：上传、目录、移动、搜索、预览、画布双向�
     await page.getByLabel('上传项目文件').setInputFiles(imagePath);
     await expect(
       page.getByRole('button', { name: 'reference-256 (2).png', exact: true }),
+    ).toBeVisible();
+    const dragFeedback = await page.getByLabel('项目资产内容').evaluate(
+      (content, imageBytes) => {
+        const target = content.querySelector('[role="list"]')?.parentElement?.parentElement;
+        if (!target) throw new Error('找不到项目资产拖放区');
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(
+          new File([new Uint8Array(imageBytes)], 'dragged-image.png', { type: 'image/png' }),
+        );
+        const dragOver = new DragEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+        });
+        target.dispatchEvent(dragOver);
+        const result = {
+          prevented: dragOver.defaultPrevented,
+          dropEffect: dataTransfer.dropEffect,
+        };
+        target.dispatchEvent(
+          new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }),
+        );
+        return result;
+      },
+      [...(await readFile(imagePath))],
+    );
+    await expect(
+      page.getByRole('button', { name: 'dragged-image.png', exact: true }),
+    ).toBeVisible();
+    expect(dragFeedback.prevented).toBe(true);
+    expect(await readFile(join(target.rootPath, 'dragged-image.png'))).toEqual(
+      await readFile(imagePath),
+    );
+    await expect(
+      page.getByRole('region', { name: '上传队列' }).getByText('已完成').last(),
     ).toBeVisible();
     await page.getByRole('button', { name: '新建文件夹', exact: true }).click();
     await page.getByRole('textbox', { name: '资产名称' }).fill('角色');
