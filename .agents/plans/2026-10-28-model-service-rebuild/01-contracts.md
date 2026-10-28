@@ -1,6 +1,6 @@
 # Plan: 共享契约
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -315,28 +315,29 @@ Capability = z.discriminatedUnion('kind', [ChatCap, ImageCap, VideoCap, TtsCap])
 
 ## 步骤
 
-- [ ] T1 新建 `semantic-request.ts`、`model-service.ts`、`capabilities.ts`，从 `index.ts` 导出；旧导出暂时保留，名称冲突的旧符号不导出新同名符号（新名称前不加前缀，如有冲突先停下并在父计划登记） — 验证：`pnpm --filter @frame-loom/contracts typecheck`
-- [ ] T2 实现 `protocols.ts` 的类型与 15 个占位描述常量，并新增单测：id 唯一、`kinds` 与 `templates`、`ceiling` 的键一致、每个模板通过对应能力卡 schema、`effectiveCapability(template)` 等于模板本身 — 验证：`pnpm --filter @frame-loom/contracts test -- protocols`
-- [ ] T3 实现 `endpoints.ts`，单测覆盖笔记地址示例表全部 5 行、`deployPrefix`、`operations` 覆盖优先、后缀推导失败、`{model}` 段通配、查询串模板（可灵 `/tasks?task_ids={id}`）、跨主机列入 `foreignHosts`、`fillEndpoint` 拒绝点段与斜杠、`resolveCatalogUrl` 三种格式 — 验证：`pnpm --filter @frame-loom/contracts test -- endpoints`
-- [ ] T4 实现 `image-size.ts`，单测覆盖 openai 面积规则（对比现有 `image-params.test.ts` 的期望像素，保持一致）、Seedream 查表、`provider` 规则返回空、自定义宽高越界、带参考图时的像素上限、未知档位要求手填 — 验证：`pnpm --filter @frame-loom/contracts test -- image-size`
-- [ ] T5 实现 `capability-check.ts`，单测覆盖：留空不限与 0 不支持；每种视频方式的必需角色；混用禁止与允许（构造一个 `withReference: true` 的方式）；参考素材类型；总数上限；协议规则的 only、exclude、forbidRole 及 reason 透出；extras 未声明与类型错误；`validateModel` 的协议为空不能启用、上限外开关、保留字段冲突、multipart 多段 path、未确认外部主机；`changeProtocol` 的兼容值保留与不兼容清单；`restoreCapabilityGroup` 只改目标分组 — 验证：`pnpm --filter @frame-loom/contracts test -- capability-check`
-- [ ] T6 实现 `prompt-references.ts` 与 `imageEditSupport`，单测覆盖三种语法、按素材类型分别计数、编号起点、缺失引用、中英文前缀；`imageEditSupport` 的三种操作边界 — 验证：`pnpm --filter @frame-loom/contracts test -- prompt-references image-edit`
-- [ ] T7 schema 往返测试：每个协议模板构造的 `ModelWrite` 经 `parse` 后再序列化，结果不变；`ModelExport` 不含 `confirmedHosts` 和凭据字段；`Channel` 读模型的 schema 拒绝出现 `apiKey` 字段 — 验证：`pnpm --filter @frame-loom/contracts test`
-- [ ] T8 全仓类型与构建检查，确认新增导出没有破坏现有调用方 — 验证：`pnpm --filter @frame-loom/contracts build`、`pnpm run typecheck`、`pnpm run lint`
+- [x] T1 新建 `semantic-request.ts`、`model-service.ts`、`capabilities.ts`，从 `index.ts` 导出；旧导出暂时保留，名称冲突的旧符号不导出新同名符号（新名称前不加前缀，如有冲突先停下并在父计划登记） — 验证：`pnpm --filter @frame-loom/contracts typecheck`
+- [x] T2 实现 `protocols.ts` 的类型与 15 个占位描述常量，并新增单测：id 唯一、`kinds` 与 `templates`、`ceiling` 的键一致、每个模板通过对应能力卡 schema、`effectiveCapability(template)` 等于模板本身 — 验证：`pnpm --filter @frame-loom/contracts test -- protocols`
+- [x] T3 实现 `endpoints.ts`，单测覆盖笔记地址示例表全部 5 行、`deployPrefix`、`operations` 覆盖优先、后缀推导失败、`{model}` 段通配、查询串模板（可灵 `/tasks?task_ids={id}`）、跨主机列入 `foreignHosts`、`fillEndpoint` 拒绝点段与斜杠、`resolveCatalogUrl` 三种格式 — 验证：`pnpm --filter @frame-loom/contracts test -- endpoints`
+- [x] T4 实现 `image-size.ts`，单测覆盖 openai 面积规则（对比现有 `image-params.test.ts` 的期望像素，保持一致）、Seedream 查表、`provider` 规则返回空、自定义宽高越界、带参考图时的像素上限、未知档位要求手填 — 验证：`pnpm --filter @frame-loom/contracts test -- image-size`
+- [x] T5 实现 `capability-check.ts`，单测覆盖：留空不限与 0 不支持；每种视频方式的必需角色；混用禁止与允许（构造一个 `withReference: true` 的方式）；参考素材类型；总数上限；协议规则的 only、exclude、forbidRole 及 reason 透出；extras 未声明与类型错误；`validateModel` 的协议为空不能启用、上限外开关、保留字段冲突、multipart 多段 path、未确认外部主机；`changeProtocol` 的兼容值保留与不兼容清单；`restoreCapabilityGroup` 只改目标分组 — 验证：`pnpm --filter @frame-loom/contracts test -- capability-check`
+- [x] T6 实现 `prompt-references.ts` 与 `imageEditSupport`，单测覆盖三种语法、按素材类型分别计数、编号起点、缺失引用、中英文前缀；`imageEditSupport` 的三种操作边界 — 验证：`pnpm --filter @frame-loom/contracts test -- prompt-references image-edit`
+- [x] T7 schema 往返测试：每个协议模板构造的 `ModelWrite` 经 `parse` 后再序列化，结果不变；`ModelExport` 不含 `confirmedHosts` 和凭据字段；`Channel` 读模型的 schema 拒绝出现 `apiKey` 字段 — 验证：`pnpm --filter @frame-loom/contracts test`
+- [x] T8 全仓类型与构建检查，确认新增导出没有破坏现有调用方 — 验证：`pnpm --filter @frame-loom/contracts build`、`pnpm run typecheck`、`pnpm run lint`
 
 ## 验证
 
 - 预期：`pnpm --filter @frame-loom/contracts test` 全部通过，新增测试覆盖本文件列出的全部边界；`pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check` 通过；旧调用方行为不变。
-- 实际：未执行。
+- 实际（2026-10-28）：contracts 类型检查与构建通过；新增 6 个测试文件共 82 个用例，全包 19 个文件、278 个用例通过；`pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check`、`pnpm run verify`、`git diff --check` 全部通过。测试仅执行纯函数，无网络请求。
 
 ## 进度
 
 - 2026-10-28：创建子计划草稿。
+- 2026-10-28：完成 T1–T8；旧调用方仍使用旧导出，新契约与纯函数已独立验证。
 
 ## 发现与偏差
 
-无。
+- 新旧同名导出共存方式已登记父计划；`imageEditSupport` 边界测试集中在 `capability-check.test.ts`，旧 `image-edit.test.ts` 保留原回归。
 
 ## 交接
 
-尚未开始。完成后，02、04、05 从 `@frame-loom/contracts` 导入本文件定义的符号；旧符号由 02、05、08 删除。
+无。02 需按父计划登记切换同名包入口；15 个描述仍为 01 要求的占位内容，03 补全。

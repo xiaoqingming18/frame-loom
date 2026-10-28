@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { ModelProfile } from './generation.js';
+import type { ImageCap } from './capabilities.js';
+import type { ProtocolDescriptor } from './protocols.js';
 
 const Sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const FaceBox = z.strictObject({
@@ -70,6 +72,26 @@ export const ImageEditCapabilities = z.strictObject({
   mask: z.boolean(),
 });
 export type ImageEditCapabilities = z.infer<typeof ImageEditCapabilities>;
+
+export function imageEditSupport(cap: ImageCap, descriptor: ProtocolDescriptor) {
+  const max = cap.references.max ?? Infinity;
+  const available = max >= 1;
+  const emotion = !!descriptor.ceiling.image?.edit && max >= 2;
+  const mask =
+    emotion &&
+    max >= 3 &&
+    !!cap.mask &&
+    !!descriptor.ceiling.image?.mask.includes(cap.mask.semantics);
+  return {
+    angle: { available, mask: false, ...(!available ? { reason: '至少需要一个参考图' } : {}) },
+    lighting: { available, mask: false, ...(!available ? { reason: '至少需要一个参考图' } : {}) },
+    emotion: {
+      available: emotion,
+      mask,
+      ...(!emotion ? { reason: '需要编辑接口与至少两个参考图' } : {}),
+    },
+  };
+}
 
 export function imageEditCapabilityIssue(
   recipe: ImageEditRecipe,

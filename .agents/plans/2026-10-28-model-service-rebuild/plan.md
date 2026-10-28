@@ -1,6 +1,6 @@
 # Plan: 模型服务配置层重构
 
-Status: draft
+Status: active
 Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 
 ## 目标
@@ -26,7 +26,7 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [共享契约](01-contracts.md) | draft | — | 渠道／模型 schema、协议描述、地址解析、四类能力卡、语义请求、共享校验与尺寸计算及单测 |
+| 01 | [共享契约](01-contracts.md) | done | — | 渠道／模型 schema、协议描述、地址解析、四类能力卡、语义请求、共享校验与尺寸计算及单测 |
 | 02 | [engine 基座](02-engine-foundation.md) | draft | 01 | 清库迁移、新表与仓库、模型服务 HTTP 接口、协议注册表、执行链与快照、读取模型、旧 engine 代码删除 |
 | 03 | [首批协议适配器](03-protocol-adapters.md) | draft | 01、02 | 15 个协议描述＋适配器、文本经 pi-ai 接入统一地址、契约测试与集成测试 |
 | 04 | [设置页重写](04-settings-ui.md) | draft | 01、02 | 渠道列表与表单、渠道详情、读取模型、模型编辑三个标签、测试、默认模型页、组件测试与 E2E |
@@ -89,4 +89,5 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 
 ## 发现与偏差
 
-无。
+- 2026-10-28：用户授权执行，父计划与 01 转 active；使用 `codex/model-service-rebuild` 独立分支。
+- 01 新旧导出同名：`ModelKind`、`Channel`、`ChannelWrite`、`ChannelPatch`、`ModelDefaults`、`ModelDefaultsPatch`、`IMAGE_QUALITY_LABELS`。按 T1 共存要求，新文件直接导出标准名称；包入口暂保留旧同名符号，仅显式导出无冲突的新符号，02／04 迁移消费者时切换入口，不增加前缀或兼容行为。
