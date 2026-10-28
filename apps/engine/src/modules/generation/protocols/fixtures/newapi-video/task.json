@@ -1,0 +1,6 @@
+{
+  "task_id": "newapi-task",
+  "status": "completed",
+  "url": "http://127.0.0.1:12345/result.mp4",
+  "format": "mp4"
+}

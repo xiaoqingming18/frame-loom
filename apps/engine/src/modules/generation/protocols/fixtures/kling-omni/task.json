@@ -1,0 +1,10 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "kling-task",
+      "status": "succeeded",
+      "outputs": [{ "type": "video", "url": "http://127.0.0.1:12345/result.mp4" }]
+    }
+  ]
+}

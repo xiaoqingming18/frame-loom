@@ -1,0 +1,8 @@
+{
+  "task": {
+    "id": "minimax-task",
+    "status": "succeeded",
+    "content": { "url": "http://127.0.0.1:12345/result.mp4" },
+    "usage": { "total_seconds": 5 }
+  }
+}

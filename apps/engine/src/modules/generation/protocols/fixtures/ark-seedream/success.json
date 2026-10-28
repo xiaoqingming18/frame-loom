@@ -1,0 +1,4 @@
+{
+  "data": [{ "url": "http://127.0.0.1:12345/image.jpeg" }],
+  "usage": { "generated_images": 1 }
+}

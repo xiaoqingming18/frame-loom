@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Capability } from './capabilities.js';
 import { effectiveCapability } from './capability-check.js';
+import { changeProtocol } from './capability-check.js';
+import { ExtraParam, ModelWrite } from './model-service.js';
 import { PROTOCOLS, getProtocol, protocolsForKind } from './protocols.js';
 
 describe('首批协议描述契约', () => {
@@ -17,5 +19,23 @@ describe('首批协议描述契约', () => {
       expect(Capability.parse(template)).toEqual(template);
       expect(effectiveCapability(template, descriptor)).toEqual(template);
     }
+    for (const extra of descriptor.defaultExtras ?? [])
+      expect(ExtraParam.parse(extra)).toEqual(extra);
+  });
+  it('切换 Seedream 预填关闭水印，已有显式选择不被覆盖', () => {
+    const write = ModelWrite.parse({
+      kind: 'image',
+      protocolId: 'openai-images',
+      upstreamModelId: 'alias',
+      displayName: '测试',
+      enabled: false,
+      capability: getProtocol('openai-images')!.templates.image,
+    });
+    const changed = changeProtocol(write, 'ark-seedream');
+    expect(changed.model.extras).toEqual([
+      { key: 'watermark', label: '水印', type: 'boolean', path: 'watermark', default: false },
+    ]);
+    changed.model.extras[0].default = true;
+    expect(changeProtocol(changed.model, 'ark-seedream').model.extras[0].default).toBe(true);
   });
 });

@@ -125,7 +125,10 @@ function differences(
 }
 function reserved(path: string, descriptor: ProtocolDescriptor) {
   return descriptor.reservedFields.some(
-    (field) => path === field || path.startsWith(`${field}.`) || field.startsWith(`${path}.`),
+    (field) =>
+      path === field ||
+      (!descriptor.extensibleContainers?.includes(field) && path.startsWith(`${field}.`)) ||
+      field.startsWith(`${path}.`),
   );
 }
 export function validateModel(
@@ -160,6 +163,11 @@ export function validateModel(
     fields.forEach((field, index) => {
       if (reserved(field.path, descriptor))
         issues.push({ field: `${group}.${index}.path`, message: '不能覆盖协议保留字段' });
+      if (descriptor.extraPathPrefix && !field.path.startsWith(descriptor.extraPathPrefix))
+        issues.push({
+          field: `${group}.${index}.path`,
+          message: '该协议附加参数与固定字段必须写入 metadata',
+        });
       if (multipart && field.path.includes('.'))
         issues.push({ field: `${group}.${index}.path`, message: 'multipart 只允许顶层字段' });
     });
@@ -293,6 +301,12 @@ export function checkRequest(
     )
       add('inputs', '素材总数超过限制');
     choices('aspectRatio', cap.aspectRatios);
+    if (descriptor.customVideoSize) {
+      range('width', 1, undefined, true);
+      range('height', 1, undefined, true);
+      if ((params.width === undefined) !== (params.height === undefined))
+        add('params.width', '视频自定义宽高必须同时填写');
+    }
     choices('resolution', cap.resolutions);
     if (cap.duration.kind === 'values')
       choices('duration', [...cap.duration.values, ...(cap.duration.allowAuto ? [-1] : [])]);
@@ -501,6 +515,12 @@ export function changeProtocol(write: ModelWrite, nextId: string) {
   };
   model.extras = model.extras.filter((item) => keepField('extras', item));
   model.fixedFields = model.fixedFields.filter((item) => keepField('fixedFields', item));
+  for (const item of descriptor.defaultExtras ?? [])
+    if (
+      !model.extras.some((existing) => existing.key === item.key || existing.path === item.path) &&
+      !model.fixedFields.some((existing) => existing.path === item.path)
+    )
+      model.extras.push(structuredClone(item));
   for (const kind of ['image', 'video', 'audio'] as const) {
     const value = model.transport[kind];
     if (value && value !== 'auto' && !descriptor.transports[kind]?.allowed.includes(value)) {

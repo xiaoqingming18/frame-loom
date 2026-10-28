@@ -1,6 +1,6 @@
 # Plan: 首批协议适配器
 
-Status: draft
+Status: active
 Parent: plan.md
 
 ## 目标
@@ -56,8 +56,8 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 搭建 `protocols/` 目录结构、fixtures 目录，以及契约测试辅助函数：给定语义请求、能力卡、渠道和模型，断言最终 URL、方法、头部和请求体；给定上游样例响应，断言解析结果。删除旧的 `adapters/` 目录 — 验证：`pnpm --filter @frame-loom/engine typecheck`
-- [ ] T2 实现 `openai-images`、`ark-seedream` 和 `gemini-generate` 的图像部分，补全对应描述 — 验证：契约测试至少覆盖以下内容。
+- [x] T1 搭建 `protocols/` 目录结构、fixtures 目录，以及契约测试辅助函数：给定语义请求、能力卡、渠道和模型，断言最终 URL、方法、头部和请求体；给定上游样例响应，断言解析结果。删除旧的 `adapters/` 目录 — 验证：`pnpm --filter @frame-loom/engine typecheck`
+- [x] T2 实现 `openai-images`、`ark-seedream` 和 `gemini-generate` 的图像部分，补全对应描述 — 验证：契约测试至少覆盖以下内容。
   - 文生图和参考图两条路径。
   - 蒙版走 multipart。
   - 尺寸三种发送方式。
@@ -67,7 +67,7 @@ Parent: plan.md
   - 提示词引用改写。
   - 带参考图时的像素上限由 `checkRequest` 拒绝。
   - 测试命令：`pnpm --filter @frame-loom/engine test -- protocols/image`
-- [ ] T3 实现 `ark-seedance`、`dashscope-wan`、`minimax-video-v2`、`kling-omni`，补全描述 — 验证：每个协议的契约测试覆盖以下内容。
+- [x] T3 实现 `ark-seedance`、`dashscope-wan`、`minimax-video-v2`、`kling-omni`，补全描述 — 验证：每个协议的契约测试覆盖以下内容。
   - 各方式的素材角色映射：文生、首帧、首尾帧、仅尾帧（若支持）、参考图/视频/音频。
   - 时长交给模型时的写法。
   - 声音开关。
@@ -78,7 +78,7 @@ Parent: plan.md
   - Wan 固定头部。
   - 可灵查询串地址。
   - 测试命令：`pnpm --filter @frame-loom/engine test -- protocols/video`
-- [ ] T4 实现 `openai-videos`、`newapi-video`，补全描述 — 验证：
+- [x] T4 实现 `openai-videos`、`newapi-video`，补全描述 — 验证：
   - multipart 字段与分辨率×比例换算出的 size。
   - content 鉴权下载。
   - new-api 两套状态和 metadata 透传。
@@ -98,7 +98,7 @@ Parent: plan.md
 ## 验证
 
 - 预期：15 个协议的契约测试和集成测试全部通过；不存在访问外网的测试，用 `rg -n "https?://(?!127\.0\.0\.1)" apps/engine/src --pcre2 -g "*.test.ts"` 扫描，只允许出现在 fixtures 的 README 和文档注释里；`pnpm --filter @frame-loom/engine test`、`pnpm run typecheck` 通过。
-- 实际：未执行。
+- 实际（2026-10-29，阶段进度）：T1–T4 完成。图像契约 21 用例，视频契约 34 用例；engine 全量 24 文件、214 用例通过，contracts 19 文件、279 用例通过。全仓 typecheck／lint／format:check 通过。T5–T8 尚未完成，03 不视为已验收。
 
 ## 进度
 
@@ -106,8 +106,11 @@ Parent: plan.md
 
 ## 发现与偏差
 
-无。
+- 2026-10-29：未提供网络搜索工具，直接读取官方文档。Node fetch 部分站点 403／连接失败；改用 PowerShell `Invoke-WebRequest` 后取得 OpenAI Markdown、Gemini 和 Anthropic 官方正文，无模型 API 调用。
+- MiniMax 官方字段为 content 内文本和 ratio；可灵为 contents 数组、settings、options。可灵 voice 需要音色 ID，首批不把本地 audio URL 当 voice_id，不声明音频输入；官方未确认 audio 布尔开关，不加入参考视频静音规则。
+- 协议描述增加 defaultExtras（Seedream 水印默认关闭、Wan 智能提示词改写）、videoSizes／customVideoSize、extraPathPrefix 与 extensibleContainers。最后一项让 parameters／options／metadata 顶层受保护，同时允许已声明的非保留子路径，避免保留字段测试与附加参数功能冲突。
+- 当前 OpenAI 图像文档主力为 GPT Image 2.5 Sunburst／Flare，新增 xhigh／max 质量，像素边界与计划一致。模板按现役模型补齐，能力仍由用户显式配置，运行时不按型号分支。
 
 ## 交接
 
-尚未开始。完成后 05、06、07 可以基于真实协议描述渲染画布，并用模拟上游跑 E2E。
+T1–T4 已完成，下一步 T5 TTS 与音色目录，再执行 T6 四文本协议、T7 严格模拟集成、T8 描述自检。04–08 尚未开始。
