@@ -15,7 +15,7 @@ export function documentReferences(document: CanvasDocument) {
   const hashes = new Set<string>();
   const jobs = new Set<string>();
   for (const node of document.nodes) {
-    if (node.type !== 'image' && node.type !== 'video') continue;
+    if (!['image', 'video', 'audio'].includes(node.type)) continue;
     const data = CanvasMediaData.parse(node.data);
     for (const version of data.versions) {
       hashes.add(version.sha256);

@@ -10,7 +10,7 @@ import { EngineConfig } from '../../core/config/config.js';
 import { DatabaseService } from '../../core/database/database.service.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { mediaFiles, type StoredMedia } from './generation.schema.js';
-import { GenerationFailure, type AdapterOutput } from './adapters/types.js';
+import { GenerationFailure } from './protocols/http.js';
 import { probeMedia } from './media-probe.js';
 import { ProjectFilesService } from '../projects/project-files.service.js';
 import { errorCode, internalPath } from '../projects/local-project-store.js';
@@ -52,7 +52,7 @@ export class MediaService {
     return `data:${media.mime};base64,${bytes.toString('base64')}`;
   }
   async save(
-    output: AdapterOutput,
+    output: { url?: string; data?: string; mime: string },
     signal?: AbortSignal,
     headers?: Record<string, string>,
     projectId?: string,

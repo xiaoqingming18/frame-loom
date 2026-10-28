@@ -3,7 +3,7 @@ import { EngineConfig } from './core/config/config.js';
 import { CoreModule } from './core/core.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { EngineLogger } from './core/logging/engine-logger.js';
-import { ChannelsModule } from './modules/channels/channels.module.js';
+import { ModelServicesModule } from './modules/model-services/model-services.module.js';
 import { GenerationModule } from './modules/generation/generation.module.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 
@@ -15,7 +15,7 @@ export class AppModule {
       imports: [
         CoreModule.register(config, logger),
         HealthModule,
-        ChannelsModule,
+        ModelServicesModule,
         GenerationModule,
         ProjectsModule,
       ],

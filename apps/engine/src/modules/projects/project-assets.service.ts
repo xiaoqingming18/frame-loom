@@ -12,7 +12,7 @@ import { basename, extname, posix } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 import { DomainError } from '../../core/http/domain-error.js';
-import { GenerationFailure } from '../generation/adapters/types.js';
+import { GenerationFailure } from '../generation/protocols/http.js';
 import { MediaService } from '../generation/media.service.js';
 import { ProjectFilesService, assetPath } from './project-files.service.js';
 import { errorCode, internalPath } from './local-project-store.js';

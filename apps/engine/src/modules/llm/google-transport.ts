@@ -32,7 +32,7 @@ export async function googleTransport(
         if (value && !['host', 'connection', 'content-length', 'transfer-encoding'].includes(name))
           headers.set(name, Array.isArray(value) ? value.join(', ') : value);
       }
-      const upstream = await fetch(baseUrl.replace(/\/+$/, '') + request.url.slice(prefix.length), {
+      const upstream = await fetch(baseUrl, {
         method: 'POST',
         headers,
         body: Buffer.concat(chunks),

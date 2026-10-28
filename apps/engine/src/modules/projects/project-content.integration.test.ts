@@ -13,15 +13,18 @@ import {
   ProjectSummary,
   ProjectPageSummary,
   emptyCanvasDocument,
-  GenerationRequest,
+  SemanticRequest,
+  ModelWrite,
 } from '@frame-loom/contracts';
 import { createEngine } from '../../application.js';
 import { EngineConfig } from '../../core/config/config.js';
 import { DatabaseService } from '../../core/database/database.service.js';
 import { MediaService } from '../generation/media.service.js';
-import { GenerationAdapters, GenerationService } from '../generation/generation.service.js';
+import { GenerationService } from '../generation/generation.service.js';
+import { ProtocolRegistry } from '../generation/protocols/registry.js';
+import { fakeProtocol } from '../../testing/fake-protocol.js';
 import { generationJobs, mediaFiles } from '../generation/generation.schema.js';
-import { ChannelsRepository } from '../channels/channels.repository.js';
+import { ModelServicesRepository } from '../model-services/model-services.repository.js';
 import { ProjectMediaService } from './project-media.service.js';
 import { documentReferences } from './project-media.service.js';
 import { ProjectAssetsService } from './project-assets.service.js';
@@ -32,6 +35,7 @@ const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1cAAAAASUVORK5CYII=',
   'base64',
 );
+const originalFetch = globalThis.fetch;
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -45,6 +49,7 @@ async function setup() {
   let base: string;
   async function boot() {
     app = await createEngine(config);
+    app.get(ProtocolRegistry).register(fakeProtocol());
     await app.listen(0, '127.0.0.1');
     base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   }
@@ -147,23 +152,33 @@ it('媒体引用扫描保护编辑源与表情中间工件哈希', () => {
   expect(documentReferences(doc).hashes).toEqual(new Set([source, crop, identity, mask]));
 });
 function model(app: INestApplication<Server>) {
-  const channels = app.get(ChannelsRepository);
+  const channels = app.get(ModelServicesRepository);
+  const adapter = fakeProtocol();
+  app.get(ProtocolRegistry).register(adapter);
   const channel = channels.saveChannel({
     name: '测试',
-    apiFormat: 'openai-completions',
     baseUrl: 'http://127.0.0.1:1',
     apiKey: 'test',
     enabled: true,
   });
-  return channels.saveModel(channel.id, {
-    upstreamModelId: 'gpt-image-1',
-    displayName: '图片',
-    kind: 'image',
-    protocol: 'openai-images',
-    profileId: null,
-    overrides: {},
-    enabled: true,
-  });
+  return channels.saveModels(channel.id, [
+    ModelWrite.parse({
+      upstreamModelId: 'gpt-image-1',
+      displayName: '图片',
+      kind: 'image',
+      protocolId: adapter.descriptor.id,
+      capability: adapter.descriptor.templates.image,
+      endpointOverride: {
+        operations: {
+          submit: 'http://127.0.0.1:1/fake/submit',
+          query: 'http://127.0.0.1:1/fake/tasks/{id}',
+          content: 'http://127.0.0.1:1/fake/content/{id}',
+        },
+        confirmedHosts: [],
+      },
+      enabled: true,
+    }),
+  ])[0];
 }
 
 it('媒体上传、跨项目与全局补齐、回收区找回、元数据重建与缺失保存', async () => {
@@ -380,10 +395,10 @@ it('清理保护全部页面版本、未结束任务和 pending 任务，会话�
   const hashes: string[] = [];
   for (let i = 0; i < 8; i++)
     hashes.push((await media.upload(p.id, [Buffer.concat([png, Buffer.from([i])])])).sha256);
-  const request = GenerationRequest.parse({
+  const request = SemanticRequest.parse({
     modelId: model(s.app).id,
     prompt: '测试',
-    mode: 'text',
+    inputs: [],
     projectId: p.id,
     pageId: page.id,
   });
@@ -395,7 +410,10 @@ it('清理保护全部页面版本、未结束任务和 pending 任务，会话�
     .set({
       status: 'submit_unknown',
       outputs: [hashes[4]],
-      request: { ...request, inputs: [{ kind: 'image', role: 'reference', sha256: hashes[5] }] },
+      request: {
+        ...request,
+        inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: hashes[5] }],
+      },
     })
     .where(eq(generationJobs.id, unfinished.id))
     .run();
@@ -466,10 +484,10 @@ it('全局启动清理保留未结束任务输入和产物、移除项目暂存�
   const s = await setup(),
     generation = s.app.get(GenerationService),
     media = s.app.get(MediaService);
-  const request = GenerationRequest.parse({
+  const request = SemanticRequest.parse({
     modelId: model(s.app).id,
     prompt: '测试',
-    mode: 'text',
+    inputs: [],
   });
   const hashes: string[] = [];
   for (let i = 0; i < 5; i++)
@@ -487,9 +505,12 @@ it('全局启动清理保留未结束任务输入和产物、移除项目暂存�
     .set({
       status: 'submit_unknown',
       outputs: [hashes[0]],
-      request: { ...request, inputs: [{ kind: 'image', role: 'reference', sha256: hashes[1] }] },
+      request: {
+        ...request,
+        inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: hashes[1] }],
+      },
       snapshot: {
-        ...unfinishedRow.snapshot!,
+        ...unfinishedRow.snapshot,
         imageEditPostProcess: { intermediateSha256: hashes[4] },
       },
     })
@@ -547,23 +568,30 @@ it('生成任务落项目，离线产物暂存并恢复复制，启动清全局�
     p = await s.create(),
     page = await s.page(p.id);
   const generation = s.app.get(GenerationService);
-  const request = GenerationRequest.parse({
+  const request = SemanticRequest.parse({
     modelId: model(s.app).id,
     prompt: '测试',
-    mode: 'text',
+    inputs: [],
     projectId: p.id,
     pageId: page.id,
   });
-  s.app.get(GenerationAdapters).adapters.set('openai-images', {
-    protocol: 'openai-images',
-    submit: (_context, input) => {
-      if (input.inputs.length)
-        expect(input.inputs[0].dataUrl).toBe(`data:image/png;base64,${png.toString('base64')}`);
-      return Promise.resolve({
-        status: 'succeeded',
-        outputs: [{ data: png.toString('base64'), mime: 'image/png' }],
-      });
-    },
+  const adapter = fakeProtocol();
+  adapter.buildSubmit = () =>
+    Promise.resolve({
+      operation: 'submit',
+      method: 'POST',
+      url: 'http://127.0.0.1:1/fake/submit',
+      headers: {},
+    });
+  adapter.parseSubmit = () =>
+    Promise.resolve({
+      status: 'succeeded',
+      outputs: [{ kind: 'data', base64: png.toString('base64'), mime: 'image/png' }],
+    });
+  s.app.get(ProtocolRegistry).register(adapter);
+  vi.spyOn(globalThis, 'fetch').mockImplementation((url, init) => {
+    if (url === 'http://127.0.0.1:1/fake/submit') return Promise.resolve(new Response('{}'));
+    return originalFetch(url, init);
   });
   await expect(generation.create({ ...request, pageId: randomUUID() })).rejects.toMatchObject({
     code: 'PAGE_NOT_FOUND',
@@ -571,8 +599,7 @@ it('生成任务落项目，离线产物暂存并恢复复制，启动清全局�
   const reference = await s.app.get(MediaService).upload(p.id, [png]);
   const first = await generation.create({
     ...request,
-    mode: 'reference',
-    inputs: [{ kind: 'image', role: 'reference', sha256: reference.sha256 }],
+    inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: reference.sha256 }],
   });
   expect(
     s.app

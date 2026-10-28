@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import ffprobe from '@ffprobe-installer/ffprobe';
 import { z } from 'zod';
-import { GenerationFailure } from './adapters/types.js';
+import { GenerationFailure } from './protocols/http.js';
 
 const Probe = z.object({
   format: z.object({ format_name: z.string(), duration: z.string() }),

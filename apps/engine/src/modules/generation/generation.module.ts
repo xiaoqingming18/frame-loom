@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ChannelsModule } from '../channels/channels.module.js';
+import { ModelServicesModule } from '../model-services/model-services.module.js';
 import { GenerationController } from './generation.controller.js';
-import { GenerationAdapters, GenerationService } from './generation.service.js';
+import { GenerationService } from './generation.service.js';
 import { ProjectsModule } from '../projects/projects.module.js';
 import { ObjectStorageModule } from '../object-storage/object-storage.module.js';
 
 @Module({
-  imports: [ChannelsModule, ObjectStorageModule, ProjectsModule],
+  imports: [ModelServicesModule, ObjectStorageModule, ProjectsModule],
   controllers: [GenerationController],
-  providers: [GenerationAdapters, GenerationService],
+  providers: [GenerationService],
 })
 export class GenerationModule {}

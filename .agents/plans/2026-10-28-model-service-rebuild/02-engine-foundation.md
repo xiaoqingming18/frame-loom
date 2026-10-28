@@ -1,6 +1,6 @@
 # Plan: engine 基座
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -173,8 +173,8 @@ type OutputRef = { kind: 'url'; url: string; mime?: string } | { kind: 'data'; b
 
 ## 步骤
 
-- [ ] T1 修改 drizzle schema 并生成 `0015_model_service_reset.sql`，手工核对删除顺序、`app_meta` 清理和 `schema_version = 8`；更新 `core/database/database.service.test.ts` — 验证：测试在临时目录用 0000～0014 建库，写入旧渠道、模型、任务、`app_meta` 键，以及项目与 `media_files` 数据，再完整迁移。断言旧表数据清空、新表结构正确、项目与 `media_files` 保留、生成了 `frame-loom.before-*.sqlite` 备份且可读、`schema_version` 为 8；再构造一个故意失败的迁移副本，断言事务回滚。命令：`pnpm --filter @frame-loom/engine test -- database`
-- [ ] T2 实现 `model-services` 模块的仓库、服务和控制器，覆盖上表全部接口（生成任务接口除外）；删除 `modules/channels` 目录并更新 `app.module.ts` — 验证：新增 `model-services.integration.test.ts`，覆盖以下各项：
+- [x] T1 修改 drizzle schema 并生成 `0015_model_service_reset.sql`，手工核对删除顺序、`app_meta` 清理和 `schema_version = 8`；更新 `core/database/database.service.test.ts` — 验证：测试在临时目录用 0000～0014 建库，写入旧渠道、模型、任务、`app_meta` 键，以及项目与 `media_files` 数据，再完整迁移。断言旧表数据清空、新表结构正确、项目与 `media_files` 保留、生成了 `frame-loom.before-*.sqlite` 备份且可读、`schema_version` 为 8；再构造一个故意失败的迁移副本，断言事务回滚。命令：`pnpm --filter @frame-loom/engine test -- database`
+- [x] T2 实现 `model-services` 模块的仓库、服务和控制器，覆盖上表全部接口（生成任务接口除外）；删除 `modules/channels` 目录并更新 `app.module.ts` — 验证：新增 `model-services.integration.test.ts`，覆盖以下各项：
   - 渠道 CRUD 不泄露凭据。
   - 留空保留或清除 apiKey、secretKey、headers。
   - 真实数据库文件和 WAL 中不含明文；沿用现有 `llm.integration.test.ts` 的做法。
@@ -186,8 +186,8 @@ type OutputRef = { kind: 'url'; url: string; mime?: string } | { kind: 'data'; b
   - 导出不含凭据和 `confirmedHosts`。
   - 删除渠道级联删除模型。
   命令：`pnpm --filter @frame-loom/engine test -- model-services`
-- [ ] T3 实现 `catalog.service.ts` — 验证：模拟上游返回 openai（带 `supported_endpoint_types`）、anthropic、gemini 三种格式，断言请求的地址和鉴权头、类别与协议推断结果、候选不写库、`channelId` 复用已保存的密钥、遇到重定向报错且不携带凭据、超时报错。命令同 T2
-- [ ] T4 新建 `testing/mock-upstream.ts`，以及测试专用的假协议 `testing/fake-protocol.ts`（描述与适配器只在测试里注册，不进入 `PROTOCOLS`）；实现注册表、`http.ts` 和新执行链，删除供应商上传 — 验证：新的 `generation.integration.test.ts` 用假协议覆盖以下各项：
+- [x] T3 实现 `catalog.service.ts` — 验证：模拟上游返回 openai（带 `supported_endpoint_types`）、anthropic、gemini 三种格式，断言请求的地址和鉴权头、类别与协议推断结果、候选不写库、`channelId` 复用已保存的密钥、遇到重定向报错且不携带凭据、超时报错。命令同 T2
+- [x] T4 新建 `testing/mock-upstream.ts`，以及测试专用的假协议 `testing/fake-protocol.ts`（描述与适配器只在测试里注册，不进入 `PROTOCOLS`）；实现注册表、`http.ts` 和新执行链，删除供应商上传 — 验证：新的 `generation.integration.test.ts` 用假协议覆盖以下各项：
   - 同步成功与写回。
   - 异步提交、查询、下载。
   - `url` 产物下载不带凭据；`content` 产物下载带凭据。
@@ -203,10 +203,10 @@ type OutputRef = { kind: 'url'; url: string; mime?: string } | { kind: 'data'; b
   - 快照包含有效能力与最终地址，且不含密钥。
   - 诊断信息脱敏。
   命令：`pnpm --filter @frame-loom/engine test -- generation`
-- [ ] T5 改造 `recovery.integration.test.ts` 与 `public-reference.test.ts` 以适配新快照；删除旧测试文件 — 验证：`pnpm --filter @frame-loom/engine test`
-- [ ] T6 改造 `llm.service.ts` 的模型来源与地址，删除基于内置目录的能力推断；暂用 `openai-chat` 的占位描述跑通现有文本测试，测试代码迁移到新接口 — 验证：`pnpm --filter @frame-loom/engine test -- llm`
-- [ ] T7 改造 `project-media.service.ts` 的引用计算，并更新 `project-content.integration.test.ts`；需要渠道和模型的测试改用新接口与假协议 — 验证：`pnpm --filter @frame-loom/engine test -- project`
-- [ ] T8 删除 `smoke-providers.mjs` 及脚本项，扫描 engine 中的旧符号 — 验证：在 `apps/engine/src` 下执行 `rg -n "ModelProfile|profileId|channelModelId|model_catalog|ModelConnection|serviceRoutes|resolveModelOperation|executionContract|retiredVideoIds|provider_uploads|providerContent|apiFormat" apps/engine/src`，结果为空；`pnpm --filter @frame-loom/engine typecheck`、`pnpm --filter @frame-loom/engine build`
+- [x] T5 改造 `recovery.integration.test.ts` 与 `public-reference.test.ts` 以适配新快照；删除旧测试文件 — 验证：`pnpm --filter @frame-loom/engine test`
+- [x] T6 改造 `llm.service.ts` 的模型来源与地址，删除基于内置目录的能力推断；暂用 `openai-chat` 的占位描述跑通现有文本测试，测试代码迁移到新接口 — 验证：`pnpm --filter @frame-loom/engine test -- llm`
+- [x] T7 改造 `project-media.service.ts` 的引用计算，并更新 `project-content.integration.test.ts`；需要渠道和模型的测试改用新接口与假协议 — 验证：`pnpm --filter @frame-loom/engine test -- project`
+- [x] T8 删除 `smoke-providers.mjs` 及脚本项，扫描 engine 中的旧符号 — 验证：在 `apps/engine/src` 下执行 `rg -n "ModelProfile|profileId|channelModelId|model_catalog|ModelConnection|serviceRoutes|resolveModelOperation|executionContract|retiredVideoIds|provider_uploads|providerContent|apiFormat" apps/engine/src`，结果为空；`pnpm --filter @frame-loom/engine typecheck`、`pnpm --filter @frame-loom/engine build`
 
 ## 验证
 
@@ -214,16 +214,20 @@ type OutputRef = { kind: 'url'; url: string; mime?: string } | { kind: 'data'; b
   - engine 全部测试通过；临时旧库迁移有备份、清表、项目保留与回滚证据。
   - 新执行链的每条状态路径都有测试，提交次数、凭据外发与重定向有断言。
   - 全仓 `pnpm run typecheck` 通过；desktop 与 canvas 允许因调用旧接口而有待 04、05 修复的运行时失败，但类型检查必须通过。若做不到，就在 desktop 中保留类型兼容的临时适配，并在「发现与偏差」登记，由 04、05 删除。
-- 实际：未执行。
+- 实际（2026-10-28）：`pnpm --filter @frame-loom/engine test`（含依赖及 engine 构建）21 个文件、159 个用例通过；覆盖旧库备份、项目保留与回滚，严格本地 mock 的目录鉴权、任务状态机、两种并发收窄、远端取消三种回执、凭据加密、诊断脱敏和 multipart 大小限制。全仓 `pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check` 通过。未调用真实模型服务，未运行 E2E 或打包。
 
 ## 进度
 
 - 2026-10-28：创建子计划草稿。
+- 2026-10-28：完成 T1–T8；请求创建前校验大小，快照在入库前冻结，内联素材使用哈希占位。
 
 ## 发现与偏差
 
-无。
+- 临时 contracts 子路径已登记父计划，04／05 迁移消费者，08 删除。
+- 旧恢复用例合入 `generation.integration.test.ts`，旧文件删除。
+- T8 扫描仅命中 `database.service.test.ts` 中断言旧表已删除的三个表名；生产代码无旧符号。该断言是清库验收证据，保留。
+- 旧 `adapters/` 仅余素材 fixtures，03 T1 迁移所需素材后删除。
 
 ## 交接
 
-尚未开始。完成后，03 在 `modules/generation/protocols/` 下实现 15 个协议并替换占位描述；04 使用本文件的 HTTP 接口。
+02 已完成。03 在 `modules/generation/protocols/` 下实现 15 个协议并替换占位描述；04 使用本文件的 HTTP 接口。

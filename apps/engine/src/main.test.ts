@@ -234,7 +234,7 @@ it('独立入口从其他工作目录启动，迁移后输出端口并提供鉴�
   };
   expect(HealthResponse.parse(await response.json())).toMatchObject({
     engineVersion: version,
-    schemaVersion: '7',
+    schemaVersion: '8',
   });
   expect(output().stdout.trim().split(/\r?\n/)).toEqual([JSON.stringify({ type: 'ready', port })]);
   expect(output().stderr).toContain('NestFactory');
