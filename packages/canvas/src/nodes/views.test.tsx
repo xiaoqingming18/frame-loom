@@ -278,6 +278,53 @@ it('模式切换保留首尾帧连线和提示词，文生模式保留端口但�
   );
 });
 
+it('编辑方式按能力卡显示，切换后保留待编辑视频端口但禁用', () => {
+  const source = media('source', 'video');
+  source.data = {
+    ...(source.data as CanvasMediaData),
+    versions: [{ ...generationJob().outputs[0], mime: 'video/mp4', durationMs: 5000 }],
+  };
+  const node = media('video', 'video', {
+    data: { versions: [], activeVersion: 0, prompt: '编辑视频', inputOrder: [], mode: 'edit' },
+  });
+  const document = doc([source, node], [edge('base', 'source', 'video', 'base_video')]);
+  const store = createCanvasStore(document);
+  store
+    .getState()
+    .setGenerationConfig({ storageReady: true, models: [generationModelFixture('ark-seedance')] });
+  function View() {
+    const current = useCanvasState((state) => state.document.nodes[1]);
+    return <VideoNodeView node={{ ...current, data: current.data as CanvasMediaData }} selected />;
+  }
+  render(
+    <CanvasContext.Provider
+      value={{
+        store,
+        registry: createBuiltinRegistry(),
+        host: {
+          media: { url: (hash) => hash, upload: vi.fn() },
+          generation: {
+            load: vi.fn(),
+            create: vi.fn(),
+            get: vi.fn(),
+            cancel: vi.fn(),
+            resubmit: vi.fn(),
+            subscribe: vi.fn(),
+          },
+        },
+      }}
+    >
+      <View />
+    </CanvasContext.Provider>,
+  );
+  expect(screen.getByRole('radio', { name: '视频编辑' })).toBeDefined();
+  expect(screen.getByRole('radio', { name: '视频续写' })).toBeDefined();
+  expect(screen.getByText('待编辑视频 · 5.0 秒')).toBeDefined();
+  fireEvent.click(screen.getByRole('radio', { name: '文生视频' }));
+  expect(store.getState().document.edges).toEqual(document.edges);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'base_video' }).disabled).toBe(true);
+});
+
 it('公共头部显示标签并先截断标题；悬空 id 和未注入宿主时隐藏徽标', () => {
   const node = media('a', 'image', { tagId: 'tag', title: '很长的节点标题' });
   const store = createCanvasStore(doc([node]));

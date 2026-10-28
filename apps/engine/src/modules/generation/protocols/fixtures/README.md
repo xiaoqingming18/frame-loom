@@ -16,6 +16,8 @@
 
 `reference.mp4` 沿用本地 FFmpeg `testsrc2` 生成的 2 秒、320 × 256、24fps H.264 素材，仅供测试。
 
+编辑规则于 2026-10-29 再核对上述官方正文：Seedance 的 edit／extend 均要求 adaptive 比例，仅 edit 要求 duration=-1，待编辑素材至少 4 秒；Kling 确认最多一个 base_video，未声明 extend。`video.test.ts` 覆盖请求翻译；桌面 `video-edit.test.ts` 将本地素材时钟放慢为 6 秒，覆盖编辑与续写写回，不访问真实服务。
+
 语音和文本样例在 `tts.test.ts`、`llm-protocols.test.ts` 中按以下结构构造；PCM 为本地静音字节，不是服务商录音。
 
 | 协议                | 官方来源                                                                                                                             | 样例与模板依据                                                                  |

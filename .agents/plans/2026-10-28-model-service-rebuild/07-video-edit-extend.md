@@ -1,6 +1,6 @@
 # Plan: 视频编辑与续写
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -38,31 +38,33 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 核对两份官方文档，更新协议描述的能力上限、模板、规则与 `sources` — 验证：`pnpm --filter @frame-loom/contracts test -- protocols`
-- [ ] T2 实现适配器的编辑与续写请求翻译 — 验证：契约测试覆盖以下内容，命令为 `pnpm --filter @frame-loom/engine test -- protocols/video`：
+- [x] T1 核对两份官方文档，更新协议描述的能力上限、模板、规则与 `sources` — 验证：`pnpm --filter @frame-loom/contracts test -- protocols`
+- [x] T2 实现适配器的编辑与续写请求翻译 — 验证：契约测试覆盖以下内容，命令为 `pnpm --filter @frame-loom/engine test -- protocols/video`：
   - Seedance 的编辑、续写请求体，含 `omni_reference_task_type`、`reference_video` 和规则锁定值。
   - Kling 的 `base_video` 请求体。
   - 缺少 `base_video`、有多个 `base_video`、混用参考素材但能力不允许时，`checkRequest` 报错。
-- [ ] T3 实现画布的「待编辑视频」槽位与选取 — 验证：组件测试覆盖以下内容：
+- [x] T3 实现画布的「待编辑视频」槽位与选取 — 验证：组件测试覆盖以下内容：
   - 方式只在能力卡中勾选后才出现。
   - 槽位只接受视频，数量上限为 1。
   - 时长超限时阻止提交。
   - 切换方式后连线保留，不兼容的端口被禁用。
-- [ ] T4 E2E：在 `generation-image.test.ts` 的视频场景中，或新建 `video-edit.test.ts`，覆盖「先生成视频 → 新视频节点选择编辑方式 → 连接待编辑视频 → 提交 → 模拟上游断言请求体 → 写回」— 验证：`pnpm --filter @frame-loom/desktop test:e2e -- video-edit`（或所在文件名）
+- [x] T4 E2E：在 `generation-image.test.ts` 的视频场景中，或新建 `video-edit.test.ts`，覆盖「先生成视频 → 新视频节点选择编辑方式 → 连接待编辑视频 → 提交 → 模拟上游断言请求体 → 写回」— 验证：`pnpm --filter @frame-loom/desktop test:e2e -- video-edit`（或所在文件名）
 
 ## 验证
 
 - 预期：contracts、engine、canvas 受影响的测试和对应的 E2E 通过；文档未确认的方式没有写入能力上限，并有记录。
-- 实际：未执行。
+- 实际：contracts 17 文件 237 用例、engine 视频协议 2 文件 39 用例、canvas 26 文件 147 用例、desktop 21 文件 214 用例通过；全仓 typecheck 通过。video-edit E2E 1 passed（19.7 秒），断言三次提交、一次素材上传、edit／extend 字段及结果写回。
 
 ## 进度
 
 - 2026-10-28：创建子计划草稿。
+- 2026-10-29：完成 T1–T4，读取官方文档，本地 mock 契约与编辑续写 E2E 通过。
 
 ## 发现与偏差
 
-无。
+- 2026-10-29 实际读取两份官方正文：Seedance 支持 edit／extend，二者比例均 adaptive，但只有 edit 要求 duration=-1；extend 可指定延长时长。edit 的输入视频至少 4 秒，其他方式至少 2 秒。增加代码协议的素材时长规则，由 checkMedia 同时供画布与 engine 执行，避免提高全局下限而误拒绝普通参考视频。
+- Kling 4.0 正文确认 base_video 用于编辑、最多一个；未声明续写，本期只开放 edit，不虚构 extend。
 
 ## 交接
 
-尚未开始。
+无。

@@ -187,6 +187,8 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     const mediaIssues = checkMedia(
       request.inputs.map((input) => ({ input, media: this.media.get(input.sha256) })),
       capability,
+      descriptor,
+      request.mode,
     );
     if (mediaIssues.length)
       throw new DomainError(

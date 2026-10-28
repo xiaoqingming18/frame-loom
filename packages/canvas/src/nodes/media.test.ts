@@ -4,6 +4,56 @@ import { videoInputs } from './media';
 import { generationModelFixture } from '../test-utils';
 import { referenceCandidateIssue } from './reference-check';
 
+it('编辑续写只接受单个待编辑视频，素材时长执行协议规则', () => {
+  const model = generationModelFixture('ark-seedance');
+  if (model.capability.kind !== 'video') throw new Error('视频夹具错误');
+  expect(videoInputs({ mode: 'edit' }, model.capability)).toEqual([
+    { id: 'base_video', label: '待编辑视频', accepts: ['video'], max: 1 },
+  ]);
+  const data = {
+    versions: [],
+    activeVersion: 0,
+    prompt: '编辑',
+    inputOrder: [],
+    mode: 'edit' as const,
+  };
+  const input = {
+    kind: 'video' as const,
+    role: 'base_video' as const,
+    order: 0,
+    sha256: 'a'.repeat(64),
+  };
+  expect(
+    referenceCandidateIssue(model, data, [], {
+      input,
+      media: { mime: 'video/mp4', durationMs: 3000 },
+    }),
+  ).toBe('Seedance 待编辑视频至少需要 4 秒');
+  expect(
+    referenceCandidateIssue(model, data, [], {
+      input,
+      media: { mime: 'video/mp4', durationMs: 5000 },
+    }),
+  ).toBeUndefined();
+  expect(
+    referenceCandidateIssue(model, data, [], {
+      input,
+      media: { mime: 'video/mp4', durationMs: 31000 },
+    }),
+  ).toBeTruthy();
+  expect(
+    referenceCandidateIssue(
+      model,
+      data,
+      [{ input, media: { mime: 'video/mp4', durationMs: 5000 } }],
+      { input, media: { mime: 'video/mp4', durationMs: 5000 } },
+    ),
+  ).toBeTruthy();
+  expect(
+    referenceCandidateIssue(model, data, [], { input: { ...input, kind: 'image' }, media: {} }),
+  ).toBe('当前方式不支持此素材角色或类型');
+});
+
 it('首尾帧、关键帧和参考端口取能力卡，混合方式按卡片开放', () => {
   const cap = structuredClone(getProtocol('ark-seedance')!.templates.video!);
   expect(videoInputs({ mode: 'first_last' }, cap).map((port) => port.id)).toEqual([

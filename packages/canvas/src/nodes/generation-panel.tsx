@@ -96,7 +96,7 @@ export function GenerationPanel({
             { kind: model.kind, capability: model.capability, extras: model.extras },
             model.protocol,
           ),
-          ...checkMedia(references, model.capability),
+          ...checkMedia(references, model.capability, model.protocol, mode),
         ]
       : [];
   const storageMissing =

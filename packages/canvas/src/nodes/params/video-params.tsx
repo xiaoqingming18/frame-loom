@@ -86,7 +86,10 @@ export function VideoParams(props: CapabilityParamsProps) {
             min={cap.duration.min}
             max={cap.duration.max}
             step={cap.duration.step}
-            disabled={disabled}
+            disabled={
+              disabled ||
+              options.durations.filter((item) => item.value !== -1).every((item) => item.disabled)
+            }
             value={[
               params.duration === -1
                 ? cap.duration.default

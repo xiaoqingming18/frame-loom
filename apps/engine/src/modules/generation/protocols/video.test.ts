@@ -23,6 +23,53 @@ const input = (
 const fields = (body: string | FormData | Uint8Array | undefined) =>
   JSON.parse(body as string) as Record<string, unknown>;
 
+it.each(['edit', 'extend'] as const)('Seedance %s 翻译待编辑视频与任务类型', async (mode) => {
+  const ctx = protocolContext(arkSeedance.descriptor, 'video');
+  const req = semanticRequest(ctx, {
+    mode,
+    inputs: [input('base_video', 'video')],
+    params: { aspectRatio: 'adaptive', duration: mode === 'edit' ? -1 : 5 },
+  });
+  expect(
+    fields((await arkSeedance.buildSubmit(ctx, req, ctx.snapshot.capability)).body),
+  ).toMatchObject({
+    omni_reference_task_type: mode,
+    ratio: 'adaptive',
+    duration: mode === 'edit' ? -1 : 5,
+    content: [
+      { type: 'text' },
+      {
+        type: 'video_url',
+        role: 'reference_video',
+        video_url: { url: `http://127.0.0.1:12345/media/${imageHash}` },
+      },
+    ],
+  });
+});
+it('Kling 编辑使用 base_video，允许按能力卡混入参考图', async () => {
+  const ctx = protocolContext(klingOmni.descriptor, 'video');
+  const req = semanticRequest(ctx, {
+    mode: 'edit',
+    inputs: [input('base_video', 'video'), input('reference', 'image', 1)],
+  });
+  expect(
+    checkRequest(
+      req,
+      { kind: 'video', capability: ctx.snapshot.capability, extras: [] },
+      klingOmni.descriptor,
+    ),
+  ).toEqual([]);
+  expect(
+    fields((await klingOmni.buildSubmit(ctx, req, ctx.snapshot.capability)).body),
+  ).toMatchObject({
+    contents: [
+      { type: 'prompt' },
+      { type: 'base_video', url: `http://127.0.0.1:12345/media/${imageHash}`, id: 'video_1' },
+      { type: 'refer_image', id: 'image_1' },
+    ],
+  });
+});
+
 it.each(adapters)(
   '$descriptor.id 参考图视频音频按能力卡映射，模型别名不改变请求',
   async (adapter) => {

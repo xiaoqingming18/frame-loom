@@ -22,6 +22,8 @@ export function videoInputs(
   const entry = capability?.modes.find((item) => item.id === mode);
   if (capability && !entry) return [];
   const ports: InputPort[] = [];
+  if (mode === 'edit' || mode === 'extend')
+    ports.push({ id: 'base_video', label: '待编辑视频', accepts: ['video'], max: 1 });
   const first =
     mode === 'first' ||
     mode === 'first_last' ||
@@ -51,6 +53,7 @@ export function videoInputs(
 
 /** 历史连线可保留在非当前方式端口，提交时由 checkRequest 拒绝。 */
 export const retainedVideoInputs: readonly InputPort[] = [
+  { id: 'base_video', label: '待编辑视频', accepts: ['video'], max: 1 },
   { id: 'first_frame', label: '首帧', accepts: ['image'], max: 1 },
   { id: 'last_frame', label: '尾帧', accepts: ['image'], max: 1 },
   { id: 'keyframe', label: '关键帧', accepts: ['image'], max: 50 },

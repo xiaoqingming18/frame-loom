@@ -95,6 +95,7 @@ export type ProtocolDescriptor = {
   ceiling: { chat?: ChatCeiling; image?: ImageCeiling; video?: VideoCeiling; tts?: TtsCeiling };
   sizeRule?: ImageSizeRule;
   rules: ProtocolRule[];
+  mediaRules?: { modes: VideoModeId[]; role: InputRole; minDurationSec: number; message: string }[];
   reservedFields: string[];
   extensibleContainers?: string[];
   templates: { chat?: ChatCap; image?: ImageCap; video?: VideoCap; tts?: TtsCap };
@@ -702,7 +703,7 @@ videoDescriptor(
   ARK_SEEDANCE,
   {
     kind: 'video',
-    modes: structuredClone(referenceModes),
+    modes: [...structuredClone(referenceModes), { id: 'edit' }, { id: 'extend' }],
     defaultMode: 't2v',
     references: {
       image: {
@@ -749,9 +750,27 @@ videoDescriptor(
 );
 ARK_SEEDANCE.rules = [
   {
+    when: { modes: ['edit', 'extend'] },
+    then: { param: 'aspectRatio', only: ['adaptive'] },
+    message: 'Seedance 编辑与续写由输入视频决定比例，只能选择自适应',
+  },
+  {
+    when: { modes: ['edit'] },
+    then: { param: 'duration', only: [-1] },
+    message: 'Seedance 编辑保持输入视频时长，只能选择自动时长',
+  },
+  {
     when: { modes: ['first', 'first_last'] },
     then: { param: 'aspectRatio', only: ['adaptive'] },
     message: 'Seedance 首帧与首尾帧方式由输入图决定比例，只能选择自适应',
+  },
+];
+ARK_SEEDANCE.mediaRules = [
+  {
+    modes: ['edit'],
+    role: 'base_video',
+    minDurationSec: 4,
+    message: 'Seedance 待编辑视频至少需要 4 秒',
   },
 ];
 ARK_SEEDANCE.reservedFields = [
@@ -763,8 +782,11 @@ ARK_SEEDANCE.reservedFields = [
   'generate_audio',
   'watermark',
   'seed',
+  'omni_reference_task_type',
 ];
-ARK_SEEDANCE.notes = ['模板依据 Seedance 2.5；编辑与续写在后续阶段开放。'];
+ARK_SEEDANCE.notes = [
+  '模板依据 Seedance 2.5；编辑固定自适应比例与自动时长，续写仅固定自适应比例。',
+];
 
 videoDescriptor(
   DASHSCOPE_WAN,
@@ -900,6 +922,7 @@ videoDescriptor(
       { id: 'first_last', withReference: true },
       { id: 'keyframes', withReference: true, keyframes: { min: 1, max: 10 } },
       { id: 'reference', reference: { accept: ['image', 'video'], withFrames: true } },
+      { id: 'edit', withReference: true },
     ],
     defaultMode: 't2v',
     references: {

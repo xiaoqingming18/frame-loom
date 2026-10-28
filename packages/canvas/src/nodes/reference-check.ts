@@ -49,7 +49,7 @@ export function referenceCandidateIssue(
     model.protocol,
   );
   return (
-    checkMedia([...refs, candidate], model.capability)[0]?.message ??
+    checkMedia([...refs, candidate], model.capability, model.protocol, data.mode)[0]?.message ??
     after.find(
       (issue) =>
         issue.field === 'inputs' &&

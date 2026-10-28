@@ -96,7 +96,8 @@ export function VideoReferencePicker({
   const document = useCanvasState((state) => state.document);
   const [open, setOpen] = useState(false);
   const refs = generationSources(document, nodeId).filter((ref) => ref.input.role === role);
-  const current = role === 'first_frame' || role === 'last_frame' ? refs[0] : undefined;
+  const current =
+    role === 'first_frame' || role === 'last_frame' || role === 'base_video' ? refs[0] : undefined;
   const label = MEDIA_ROLE_LABELS[role];
   const candidates = videoReferenceCandidates(registry, document, nodeId, model, role);
   const target = document.nodes.find((node) => node.id === nodeId)?.data as
@@ -121,7 +122,10 @@ export function VideoReferencePicker({
           >
             {current ? (
               <img
-                src={host.media.url(current.input.sha256)}
+                src={host.media.url(
+                  ('posterSha256' in current.media ? current.media.posterSha256 : undefined) ??
+                    current.input.sha256,
+                )}
                 alt={label}
                 className="size-full object-cover"
               />
@@ -202,7 +206,12 @@ export function VideoReferencePicker({
           )}
         </PopoverContent>
       </Popover>
-      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <span className="text-[10px] text-muted-foreground">
+        {label}
+        {role === 'base_video' && current?.media.durationMs != null
+          ? ` · ${(current.media.durationMs / 1000).toFixed(1)} 秒`
+          : ''}
+      </span>
     </div>
   );
 }

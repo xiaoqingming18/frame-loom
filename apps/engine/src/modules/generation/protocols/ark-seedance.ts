@@ -24,7 +24,13 @@ export const arkSeedance: ProtocolAdapter = {
       throw new GenerationFailure('invalid_params', 'INVALID_KIND', '需要视频能力卡');
     return jsonCall(ctx, ARK_SEEDANCE, req, {
       model: ctx.snapshot.upstreamModelId,
-      content: await roleContent(ctx, req),
+      content: await roleContent(ctx, {
+        ...req,
+        inputs: req.inputs.map((input) =>
+          input.role === 'base_video' ? { ...input, role: 'reference' } : input,
+        ),
+      }),
+      omni_reference_task_type: req.mode === 'edit' || req.mode === 'extend' ? req.mode : undefined,
       ratio: req.params.aspectRatio ?? cap.defaultAspectRatio,
       resolution: req.params.resolution ?? cap.defaultResolution,
       duration: durationValue(req, cap),

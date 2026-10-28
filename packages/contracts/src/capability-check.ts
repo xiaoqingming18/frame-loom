@@ -398,8 +398,22 @@ export function checkRequest(
 export function checkMedia(
   inputs: { input: SemanticInput; media: Partial<MediaFile> }[],
   cap: Capability,
+  descriptor?: ProtocolDescriptor,
+  mode?: VideoModeId,
 ): CapabilityIssue[] {
   const issues: CapabilityIssue[] = [];
+  for (const rule of descriptor?.mediaRules ?? []) {
+    if (!mode || !rule.modes.includes(mode)) continue;
+    if (
+      inputs.some(
+        ({ input, media }) =>
+          input.role === rule.role &&
+          media.durationMs != null &&
+          media.durationMs / 1000 < rule.minDurationSec,
+      )
+    )
+      issues.push({ field: 'inputs', message: rule.message });
+  }
   for (const kind of ['image', 'video', 'audio'] as const) {
     const group = inputs.filter((item) => item.input.kind === kind);
     const limit =

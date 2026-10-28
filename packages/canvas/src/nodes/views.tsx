@@ -564,9 +564,7 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
         >
           <div className="flex gap-0.5 rounded-lg border bg-popover p-0.5 shadow-canvas-panel">
             {(capability?.kind === 'video'
-              ? capability.modes
-                  .filter((item) => item.id !== 'edit' && item.id !== 'extend')
-                  .map((item) => ({ id: item.id, label: VIDEO_MODE_LABELS[item.id] }))
+              ? capability.modes.map((item) => ({ id: item.id, label: VIDEO_MODE_LABELS[item.id] }))
               : []
             ).map((item) => (
               <button
