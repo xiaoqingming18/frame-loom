@@ -1,5 +1,6 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
+import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   ModelImportPackage,
@@ -92,8 +93,10 @@ const builtins = (): ModelImportPackage =>
 export class ModelCatalogService implements OnModuleInit {
   constructor(private readonly database: DatabaseService) {}
   onModuleInit() {
-    if (this.database.db.select().from(appMeta).where(eq(appMeta.key, 'model_bindings_v1')).get())
+    if (this.database.db.select().from(appMeta).where(eq(appMeta.key, 'model_bindings_v1')).get()) {
+      this.upgradeImageEditCapabilities();
       return;
+    }
     this.database.db.transaction((tx) => {
       const current = this.get();
       const defaults = builtins();
@@ -235,6 +238,41 @@ export class ModelCatalogService implements OnModuleInit {
         })
         .run();
       tx.insert(appMeta).values({ key: 'model_bindings_v1', value: '1' }).run();
+    });
+    this.upgradeImageEditCapabilities();
+  }
+
+  private upgradeImageEditCapabilities() {
+    const key = 'image_edit_capabilities_v1';
+    if (this.database.db.select().from(appMeta).where(eq(appMeta.key, key)).get()) return;
+    const current = this.get();
+    const defaults = builtins();
+    let changed = false;
+    const definitions = current.definitions.map((definition) => {
+      if (definition.kind !== 'image' || definition.profile.imageEditCapabilities !== undefined)
+        return definition;
+      const builtin = defaults.definitions.find((item) => item.id === definition.id);
+      if (!builtin) return definition;
+      const { imageEditCapabilities, ...legacyProfile } = builtin.profile;
+      // 全部旧字段匹配才视为内置旧定义；同名自定义和收窄版本必须走显式更新。
+      if (
+        !isDeepStrictEqual(
+          definition,
+          JSON.parse(JSON.stringify({ ...builtin, profile: legacyProfile })),
+        )
+      )
+        return definition;
+      changed = true;
+      return { ...definition, profile: { ...definition.profile, imageEditCapabilities } };
+    });
+    if (changed) this.database.backupMetadataUpgrade();
+    this.database.db.transaction((tx) => {
+      if (changed)
+        tx.update(modelCatalog)
+          .set({ package: { ...current, definitions } })
+          .where(eq(modelCatalog.id, 'catalog'))
+          .run();
+      tx.insert(appMeta).values({ key, value: '1' }).run();
     });
   }
   get() {

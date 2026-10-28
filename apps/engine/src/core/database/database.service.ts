@@ -62,6 +62,13 @@ export class DatabaseService implements OnModuleDestroy {
     return meta.value;
   }
 
+  backupMetadataUpgrade() {
+    const databasePath = this.sqlite.name;
+    this.sqlite
+      .prepare('VACUUM INTO ?')
+      .run(`${databasePath}.before-image-edit-${Date.now()}.sqlite`);
+  }
+
   onModuleDestroy(): void {
     this.sqlite.close();
   }

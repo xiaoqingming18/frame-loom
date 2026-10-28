@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ModelProfile } from './generation.js';
 
 const Sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const FaceBox = z.strictObject({
@@ -72,17 +73,32 @@ export type ImageEditCapabilities = z.infer<typeof ImageEditCapabilities>;
 
 export function imageEditCapabilityIssue(
   recipe: ImageEditRecipe,
-  capability: ImageEditCapabilities | undefined,
+  profile: Pick<ModelProfile, 'kind' | 'protocol' | 'modes' | 'inputs' | 'imageEditCapabilities'>,
 ): string | undefined {
-  if (!capability?.operations.includes(recipe.operation)) return '所选模型不支持此图片编辑操作';
-  if (recipe.operation === 'emotion' && !capability.openAiImageEdit)
+  const capability = profile.imageEditCapabilities;
+  if (!capability) return '所选模型的图片编辑能力尚未确认，请更新模型定义';
+  if (
+    recipe.operation === 'emotion' &&
+    (profile.protocol !== 'openai-images' || !capability.openAiImageEdit)
+  )
     return '表情编辑需要 OpenAI Images 编辑协议';
+  if (!capability.operations.includes(recipe.operation)) return '所选模型已禁用此图片编辑操作';
+  if (
+    profile.kind !== 'image' ||
+    !['openai-images', 'gemini-image', 'ark-images'].includes(profile.protocol)
+  )
+    return '所选模型协议不支持图片编辑';
+  if (!profile.modes.some((mode) => mode.id === 'reference')) return '所选模型未开放参考图模式';
+  const maxReferences = Math.min(
+    capability.maxReferenceImages,
+    profile.inputs.find((input) => input.kind === 'image' && input.transport === 'inline')
+      ?.maxCount ?? 0,
+  );
   if (recipe.operation === 'emotion' && recipe.maskMode === 'provider' && !capability.mask)
     return '所选模型不支持蒙版';
-  if (recipe.operation === 'emotion') {
-    const requiredReferences = recipe.artifacts ? (recipe.artifacts.mask ? 3 : 2) : 1;
-    if (capability.maxReferenceImages < requiredReferences)
-      return `表情编辑需要至少 ${requiredReferences} 个图片参考`;
-  }
+  const requiredReferences =
+    recipe.operation === 'emotion' ? (recipe.maskMode === 'provider' ? 3 : 2) : 1;
+  if (maxReferences < requiredReferences)
+    return `${recipe.operation === 'emotion' ? '表情编辑' : '图片编辑'}需要至少 ${requiredReferences} 个图片参考`;
   return undefined;
 }

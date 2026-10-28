@@ -74,7 +74,7 @@ export function EmotionWorkspace({
           characterName: '角色1',
           maskMode: model.profile.imageEditCapabilities?.mask ? 'provider' : 'local',
         }),
-        model.profile.imageEditCapabilities,
+        model.profile,
       )
     : undefined;
 
@@ -144,7 +144,7 @@ export function EmotionWorkspace({
       setError('表情编辑参数无效');
       return;
     }
-    const issue = imageEditCapabilityIssue(base.data, model.profile.imageEditCapabilities);
+    const issue = imageEditCapabilityIssue(base.data, model.profile);
     if (issue) {
       setError(issue);
       return;

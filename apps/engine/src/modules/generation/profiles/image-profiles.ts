@@ -88,7 +88,12 @@ function profile(
             openAiImageEdit: true,
             mask: suffix !== 'gpt-image-2.5',
           }
-        : undefined,
+        : {
+            operations: ['angle', 'lighting'],
+            maxReferenceImages: suffix === 'generic' ? 1 : imageInput.maxCount,
+            openAiImageEdit: false,
+            mask: false,
+          },
     protocol,
     matchIds,
     generic: suffix === 'generic',

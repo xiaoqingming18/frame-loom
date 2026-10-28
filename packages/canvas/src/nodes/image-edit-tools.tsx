@@ -77,7 +77,7 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
       return;
     }
     const params = recipe(operation);
-    const issue = imageEditCapabilityIssue(params, selectedModel.profile.imageEditCapabilities);
+    const issue = imageEditCapabilityIssue(params, selectedModel.profile);
     if (issue) {
       store.getState().notify(issue);
       return;
@@ -129,10 +129,9 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
   const activeModel = model;
   const visibleRecipe = recipe(tool ?? 'angle');
   const disabled =
-    !activeModel?.profile ||
-    !!imageEditCapabilityIssue(visibleRecipe, activeModel.profile.imageEditCapabilities);
+    !activeModel?.profile || !!imageEditCapabilityIssue(visibleRecipe, activeModel.profile);
   const issue = activeModel?.profile
-    ? imageEditCapabilityIssue(visibleRecipe, activeModel.profile.imageEditCapabilities)
+    ? imageEditCapabilityIssue(visibleRecipe, activeModel.profile)
     : undefined;
   return (
     <div className="nodrag nopan relative inline-flex items-center gap-1">

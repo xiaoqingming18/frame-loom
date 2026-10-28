@@ -19,6 +19,16 @@ export function executionProfile(profile: ModelProfile): ModelProfile {
   );
   return {
     ...profile,
+    ...(profile.imageEditCapabilities
+      ? {
+          imageEditCapabilities: {
+            ...profile.imageEditCapabilities,
+            openAiImageEdit:
+              profile.protocol === 'openai-images' && profile.imageEditCapabilities.openAiImageEdit,
+            mask: profile.protocol === 'openai-images' && profile.imageEditCapabilities.mask,
+          },
+        }
+      : {}),
     promptMaxLength: Math.min(profile.promptMaxLength ?? maxLength, maxLength),
     ...(maxBytes.length
       ? { promptMaxBytes: Math.min(profile.promptMaxBytes ?? Infinity, ...maxBytes) }

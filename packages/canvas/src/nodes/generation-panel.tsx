@@ -75,7 +75,7 @@ export function GenerationPanel({
       : undefined;
   const imageEditIssue =
     request?.imageEdit && profile
-      ? imageEditCapabilityIssue(request.imageEdit, profile.imageEditCapabilities)
+      ? imageEditCapabilityIssue(request.imageEdit, profile)
       : undefined;
   const issues =
     request && profile

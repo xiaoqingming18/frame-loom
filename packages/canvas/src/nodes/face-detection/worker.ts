@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { FaceDetector } from '@mediapipe/tasks-vision';
+import { loaderUrl } from './loader-url';
 
 import type { CanvasFaceBox } from '../image-emotion';
 
@@ -30,7 +31,7 @@ workerGlobal.importScripts = () => {
   throw new TypeError('module worker uses dynamic import');
 };
 workerGlobal.import = (url: string) =>
-  import(/* @vite-ignore */ url.replace(/\?import(?:&.*)?$/, ''));
+  import(/* @vite-ignore */ loaderUrl(url, self.location.href));
 
 function getDetector() {
   if (!detectorPromise) {

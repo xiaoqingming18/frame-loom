@@ -1,13 +1,13 @@
 # Plan: 图片编辑 WASM 加载与有效模型能力修复
 
-Status: draft
-Note: ../../notes/proposed/bug-fix/2026-10-28-canvas-image-edit-runtime.md
+Status: done
+Note: ../../notes/implemented/bug-fix/2026-10-28-canvas-image-edit-runtime.md
 
 ## 目标
 
 消除表情工具在 Vite 开发模式中的 public loader 导入错误，并修正旧模型档案及不同图片操作的能力判定；不绕过 engine 校验、不扩大用户明确限制。
 
-2026-10-28 用户确认按诊断方向编写并提交文档，本次未授权执行修复。以下步骤均未开始；保留 draft，不将文档完成当作编码完成。
+2026-10-28 用户通过 /goal 授权完成全部子计划，现按已评审方向实施并记录实际验证。
 
 ## 范围与非目标
 
@@ -20,9 +20,9 @@ Note: ../../notes/proposed/bug-fix/2026-10-28-canvas-image-edit-runtime.md
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [完整同源 URL 与 loader 加载](01-wasm-loader.md) | draft | — | 保留 Worker 架构与 CSP 的最小加载修复及 URL 边界测试 |
-| 02 | [有效编辑能力与旧目录兼容](02-edit-capabilities.md) | draft | — | 脱敏诊断、共享能力判定、受控目录升级与跨层定向测试 |
-| 03 | [必要回归与运行验收](03-focused-acceptance.md) | draft | 01、02 | 真实开发检测、旧目录到 UI／提交验证及一次目录版加载冒烟 |
+| 01 | [完整同源 URL 与 loader 加载](01-wasm-loader.md) | done | — | 保留 Worker 架构与 CSP 的最小加载修复及 URL 边界测试 |
+| 02 | [有效编辑能力与旧目录兼容](02-edit-capabilities.md) | done | — | 脱敏诊断、共享能力判定、受控目录升级与跨层定向测试 |
+| 03 | [必要回归与运行验收](03-focused-acceptance.md) | done | 01、02 | 真实开发检测、旧目录到 UI／提交验证及一次目录版加载冒烟 |
 
 ## 依赖与顺序
 
@@ -43,4 +43,6 @@ Note: ../../notes/proposed/bug-fix/2026-10-28-canvas-image-edit-runtime.md
 ## 发现与偏差
 
 - 2026-10-28：前次诊断确认当前开发加载与目录快照两条缺口；未取得现场 `/channel-models` 脱敏返回，不能断言用户实际选中的模型因旧目录受阻。
-- 2026-10-28：只创建修复提案与父子计划，未修改源码、public 资源、配置、依赖、数据库或测试。暂无实施偏差。
+- 2026-10-28：先建提案与计划，后获 /goal 授权完成全部子计划。01／02 定向测试、03 开发与当前加固目录包验收通过，详见子计划验证记录。
+- 仅对全部旧字段匹配的内置定义自动补齐；自定义、migrated 和已收窄定义保留原限制并走显式更新。无 schema、默认模型、依赖、CSP 或历史任务变更。
+- 真实用户所选模型的有效档案仍未取得，用户现场能力根因未核实。

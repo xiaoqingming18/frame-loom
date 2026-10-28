@@ -145,7 +145,7 @@ export function checkGenerationRequest(
     add('prompt', `提示词最多 ${profile.promptMaxBytes} UTF-8 字节`);
   if (!profile.modes.some((mode) => mode.id === request.mode)) add('mode', '当前档案不支持此模式');
   if (request.imageEdit) {
-    const issue = imageEditCapabilityIssue(request.imageEdit, profile.imageEditCapabilities);
+    const issue = imageEditCapabilityIssue(request.imageEdit, profile);
     if (issue) add('imageEdit', issue);
     const required =
       request.imageEdit.operation === 'emotion'

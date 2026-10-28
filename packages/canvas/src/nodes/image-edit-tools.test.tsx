@@ -16,7 +16,7 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function setup() {
+function setup(overrides: Partial<ModelProfile> = {}) {
   const job = generationJob();
   const data: CanvasMediaData = {
     versions: job.outputs,
@@ -35,7 +35,15 @@ function setup() {
     modes: [{ id: 'reference', name: '参考图' }],
     params: [],
     constraints: [],
-    inputs: [],
+    inputs: [
+      {
+        kind: 'image',
+        transport: 'inline',
+        maxCount: 3,
+        maxBytes: 1000000,
+        mimeTypes: ['image/png'],
+      },
+    ],
     runtime: {
       concurrency: 1,
       pollInitialMs: 1000,
@@ -50,6 +58,7 @@ function setup() {
       openAiImageEdit: true,
       mask: true,
     },
+    ...overrides,
   });
   store.getState().setGenerationConfig({
     storageReady: true,
@@ -90,6 +99,31 @@ it('单一模型仍要求显式选择，角度只提交一次并保留源图', a
     job.outputs,
   );
 });
+
+it.each(['gemini-image', 'ark-images'] as const)(
+  '%s 单参考操作可选用，表情显示协议拒绝',
+  async (protocol) => {
+    vi.mocked(detectFaces).mockResolvedValue({ faces: [], imageWidth: 256, imageHeight: 256 });
+    const { create, job } = setup({
+      protocol,
+      imageEditCapabilities: {
+        operations: ['angle', 'lighting'],
+        maxReferenceImages: 1,
+        openAiImageEdit: false,
+        mask: false,
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '多角度编辑' }));
+    fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.channelModelId } });
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '确认' }).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: '表情编辑' }));
+    fireEvent.change(screen.getByLabelText('表情模型'), { target: { value: job.channelModelId } });
+    expect(screen.getByText('表情编辑需要 OpenAI Images 编辑协议')).toBeDefined();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成表情' }).disabled).toBe(true);
+  },
+);
 
 it('打光模板关闭编辑仍即时生效，关闭面板后重开恢复默认且不提交任务', () => {
   const { create, store, job } = setup();
