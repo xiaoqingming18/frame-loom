@@ -161,5 +161,10 @@ export async function send(
   const data = new Uint8Array(await response.arrayBuffer());
   if (data.byteLength > 64 * 1024 * 1024)
     throw new GenerationFailure('upstream', 'RESPONSE_TOO_LARGE', '上游响应超过 64MB');
-  return { status: response.status, headers: response.headers, bytes: data };
+  return {
+    status: response.status,
+    headers: response.headers,
+    bytes: data,
+    responseAudio: call.responseAudio,
+  };
 }

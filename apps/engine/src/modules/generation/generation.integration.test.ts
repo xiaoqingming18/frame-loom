@@ -32,6 +32,7 @@ async function setup(
     submitStatus?: number;
     content?: boolean;
     downloadFailure?: boolean;
+    expiredOutput?: boolean;
     holdSubmit?: boolean;
     cancel?: 'confirmed' | 'pending' | 'unknown';
     channelConcurrency?: number;
@@ -107,7 +108,11 @@ async function setup(
         expect(req.headers.authorization).toBeUndefined();
         expect(req.headers['x-private']).toBeUndefined();
         return {
-          status: options.downloadFailure ? 503 : 200,
+          status: options.downloadFailure
+            ? 503
+            : options.expiredOutput && downloads === 1
+              ? 403
+              : 200,
           headers: { 'Content-Type': 'image/png' },
           body: png,
         };
@@ -241,6 +246,14 @@ it('异步任务查询下载，无凭据下载，重启有远端 ID 只查询', 
   expect(t.counts().downloads).toBe(1);
   expect(t.upstream.violations).toEqual([]);
 });
+it('签名产物过期重新查询，不重投生成，下载仍不带凭据', async () => {
+  const t = await setup({ async: true, expiredOutput: true });
+  const job = await t.generation.create(t.request());
+  await expect.poll(() => t.generation.get(job.id).status, { timeout: 15000 }).toBe('succeeded');
+  expect(t.counts()).toEqual({ polls: 2, downloads: 2 });
+  expect(t.upstream.requests.filter((req) => req.method === 'POST')).toHaveLength(1);
+  expect(t.upstream.violations).toEqual([]);
+}, 16000);
 it('content 下载带凭据，重定向不跟随', async () => {
   const t = await setup({ content: true });
   const job = await t.generation.create(t.request());

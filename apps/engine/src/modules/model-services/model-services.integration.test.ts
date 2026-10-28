@@ -117,7 +117,7 @@ it('批量创建整体事务，字段校验，默认模型类别，测试哈希�
       ...write('foreign'),
       endpointOverride: { submitUrl: 'http://127.0.0.1:2/v1/chat/completions', confirmedHosts: [] },
     },
-    { ...write('ceiling'), capability: { ...write().capability, tools: true } },
+    { ...write('ceiling'), capability: { ...write().capability, inputModalities: ['pdf'] } },
   ]) {
     const response = await s.request(`/channels/${channel.id}/models`, 'POST', [invalid]);
     expect(response.status).toBe(422);

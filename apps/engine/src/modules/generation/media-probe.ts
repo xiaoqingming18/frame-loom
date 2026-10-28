@@ -50,7 +50,13 @@ export async function probeMedia(path: string) {
           ? { mime: 'audio/mpeg', ext: 'mp3' }
           : !video && container.includes('wav')
             ? { mime: 'audio/wav', ext: 'wav' }
-            : null;
+            : !video && container.includes('ogg')
+              ? { mime: 'audio/ogg', ext: 'ogg' }
+              : !video && container.includes('flac')
+                ? { mime: 'audio/flac', ext: 'flac' }
+                : !video && container.includes('aac')
+                  ? { mime: 'audio/aac', ext: 'aac' }
+                  : null;
     if (
       !format ||
       !Number.isFinite(durationMs) ||
@@ -73,7 +79,7 @@ export async function probeMedia(path: string) {
     throw new GenerationFailure(
       'invalid_params',
       'INVALID_MEDIA',
-      '无法探测媒体，请使用有效 MP4/MOV、MP3 或 WAV 文件',
+      '无法探测媒体，请使用有效 MP4/MOV、MP3、WAV、OGG、FLAC 或 AAC 文件',
     );
   }
 }

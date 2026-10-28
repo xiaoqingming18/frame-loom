@@ -19,12 +19,29 @@ export const newapiVideo: ProtocolAdapter = {
       throw new GenerationFailure('invalid_params', 'INVALID_KIND', '需要视频能力卡');
     const inputs = [...req.inputs].sort((a, b) => a.order - b.order);
     const duration = durationValue(req, cap);
+    let width = req.params.width;
+    let height = req.params.height;
+    const resolution = req.params.resolution ?? cap.defaultResolution;
+    const ratio = req.params.aspectRatio ?? cap.defaultAspectRatio;
+    if (width === undefined && height === undefined && (resolution || ratio)) {
+      const edge = Number(resolution?.match(/^(\d+)p$/i)?.[1]);
+      const parts = ratio?.match(/^(\d+):(\d+)$/);
+      if (!edge || !parts)
+        throw new GenerationFailure(
+          'invalid_params',
+          'INVALID_VIDEO_SIZE',
+          '请填写自定义宽高，或选择数字分辨率与画面比例',
+        );
+      const aspect = Number(parts[1]) / Number(parts[2]);
+      width = Math.round((edge * Math.max(1, aspect)) / 2) * 2;
+      height = Math.round((edge * Math.max(1, 1 / aspect)) / 2) * 2;
+    }
     const body: Record<string, unknown> = {
       model: ctx.snapshot.upstreamModelId,
       prompt: ctx.resolvePrompt(req.prompt, inputs),
       duration: duration === -1 ? undefined : duration,
-      width: req.params.width,
-      height: req.params.height,
+      width,
+      height,
       image: inputs[0] ? await dataUrl(ctx, inputs[0].sha256) : undefined,
       seed: req.params.seed,
     };

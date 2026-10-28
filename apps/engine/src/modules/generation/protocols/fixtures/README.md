@@ -15,3 +15,15 @@
 | newapi-video     | https://doc.newapi.pro/api/generate-video/ 、https://docs.newapi.ai/zh/docs/api/ai-model/videos/getvideogeneration                                                      | 统一视频请求、metadata 与两套状态；不猜测厂商型号参数范围                                                   |
 
 `reference.mp4` 沿用本地 FFmpeg `testsrc2` 生成的 2 秒、320 × 256、24fps H.264 素材，仅供测试。
+
+语音和文本样例在 `tts.test.ts`、`llm-protocols.test.ts` 中按以下结构构造；PCM 为本地静音字节，不是服务商录音。
+
+| 协议                | 官方来源                                                                                                                             | 样例与模板依据                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| openai-chat         | https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create                                   | Chat Completions SSE、usage；默认不发送采样参数                                 |
+| openai-responses    | https://developers.openai.com/api/reference/resources/responses/methods/create                                                       | response 事件、输出文本和 usage                                                 |
+| anthropic-messages  | https://platform.claude.com/docs/en/api/messages                                                                                     | message/content_block 事件；默认不发 temperature/top_p/top_k                    |
+| openai-speech       | https://developers.openai.com/api/docs/guides/text-to-speech.md                                                                      | 13 个预置音色、二进制响应、PCM 24kHz；官方将于 2027-01-06 停服                  |
+| minimax-t2a         | https://platform.minimax.io/docs/api-reference/speech-t2a-http 、https://platform.minimax.io/docs/api-reference/voice-management-get | hex 音频、voice_setting、audio_setting、三类音色目录                            |
+| elevenlabs          | https://elevenlabs.io/docs/api-reference/text-to-speech/convert.mdx 、https://elevenlabs.io/docs/api-reference/voices/search         | v1 合成与 v2 分页目录；采样率包含在输出格式编码中；未确认语速上下限，模板不填写 |
+| gemini-generate TTS | https://ai.google.dev/gemini-api/docs/speech-generation 、https://ai.google.dev/api/generate-content                                 | 单／双说话人、30 个预置音色；兼容早期 raw PCM 与新版 WAV，按 MIME 处理          |

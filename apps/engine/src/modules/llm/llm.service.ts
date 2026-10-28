@@ -73,9 +73,9 @@ export class LlmService {
       '{model}',
       encodeURIComponent(row.upstreamModelId),
     );
-    if (!submit.url.endsWith(operation))
-      throw new DomainError('INVALID_ENDPOINT', 422, '文本运行时要求提交地址保持协议操作后缀');
-    const baseUrl = submit.url.slice(0, -operation.length);
+    const baseUrl = submit.url.endsWith(operation)
+      ? submit.url.slice(0, -operation.length)
+      : new URL(submit.url).origin;
     const model: Model<typeof api> = {
       id: row.upstreamModelId,
       name: row.displayName,
@@ -88,7 +88,7 @@ export class LlmService {
       contextWindow: cap.contextWindow ?? 8192,
       maxTokens: cap.maxOutput ?? 1024,
       reasoning: cap.reasoningLevels.length > 0,
-      compat: {},
+      compat: descriptor.chatRuntime?.compat,
     };
     const models = createModels();
     models.setProvider(
@@ -129,7 +129,8 @@ export class LlmService {
           ? {}
           : {
               fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-                const response = await fetch(input, { ...init, redirect: 'error' });
+                void input;
+                const response = await fetch(endpoint, { ...init, redirect: 'error' });
                 status = response.status;
                 return response;
               },
@@ -150,6 +151,9 @@ export class LlmService {
               ...(value.config as Record<string, unknown>),
               httpOptions: { timeout: 60000, retryOptions: { attempts: 1 } },
             };
+            for (const key of Object.keys(sampling))
+              if (!cap.samplingParams.includes(key as keyof typeof sampling))
+                delete (config as Record<string, unknown>)[key];
             return { ...value, config };
           }
           return value;

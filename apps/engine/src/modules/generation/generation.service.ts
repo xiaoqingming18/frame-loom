@@ -700,7 +700,14 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         ['running', 'downloading'].includes(row.status) &&
         Date.now() < Date.parse(row.deadlineAt)
       ) {
+        // 签名产物过期后只刷新查询，已保存的产物索引仍由快照去重。
+        const refreshOutput =
+          row.status === 'downloading' &&
+          row.remoteTaskId &&
+          ['DOWNLOAD_401', 'DOWNLOAD_403', 'DOWNLOAD_404', 'DOWNLOAD_410'].includes(failure.code) &&
+          !!this.registry.get(row.snapshot.protocolId).buildQuery;
         this.update(row.id, {
+          ...(refreshOutput ? { status: 'running' as const, rawResponse: null } : {}),
           attempts: row.attempts + 1,
           nextPollAt: this.nextPoll(row),
           errorCategory: failure.category,

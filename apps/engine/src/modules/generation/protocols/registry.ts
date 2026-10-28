@@ -10,6 +10,9 @@ import { minimaxVideoV2 } from './minimax-video-v2.js';
 import { klingOmni } from './kling-omni.js';
 import { openaiVideos } from './openai-videos.js';
 import { newapiVideo } from './newapi-video.js';
+import { openaiSpeech } from './openai-speech.js';
+import { minimaxT2a } from './minimax-t2a.js';
+import { elevenlabs } from './elevenlabs.js';
 
 @Injectable()
 export class ProtocolRegistry {
@@ -25,6 +28,9 @@ export class ProtocolRegistry {
       klingOmni,
       openaiVideos,
       newapiVideo,
+      openaiSpeech,
+      minimaxT2a,
+      elevenlabs,
     ])
       this.register(adapter);
   }

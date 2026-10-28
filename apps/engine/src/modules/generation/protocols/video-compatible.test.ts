@@ -12,6 +12,19 @@ import { openaiVideos } from './openai-videos.js';
 import { newapiVideo } from './newapi-video.js';
 
 it.each([
+  ['16:9', 1920, 1080],
+  ['9:16', 1080, 1920],
+] as const)('new-api %s 比例与分辨率翻译为宽高', async (aspectRatio, width, height) => {
+  const ctx = protocolContext(newapiVideo.descriptor, 'video');
+  const call = await newapiVideo.buildSubmit(
+    ctx,
+    semanticRequest(ctx, { params: { aspectRatio, resolution: '1080p' } }),
+    ctx.snapshot.capability,
+  );
+  expect(JSON.parse(call.body as string)).toMatchObject({ width, height });
+});
+
+it.each([
   ['720p', '16:9', '1280x720'],
   ['720p', '9:16', '720x1280'],
   ['1080p', '16:9', '1920x1080'],

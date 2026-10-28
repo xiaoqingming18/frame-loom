@@ -104,6 +104,10 @@ export type ProtocolDescriptor = {
   extraPathPrefix?: string;
   sources: { url: string; checkedAt: string }[];
   notes?: string[];
+  chatRuntime?: {
+    api: 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai';
+    compat: Record<string, boolean | string>;
+  };
 };
 
 // 03 核对官方文档后补全能力上限、模板、规则与来源。
@@ -256,6 +260,118 @@ export const GEMINI_GENERATE = descriptor(
   '/models/{model}:generateContent',
   'x-goog-api-key',
 );
+OPENAI_CHAT.chatRuntime = {
+  api: 'openai-completions',
+  compat: {
+    supportsStore: false,
+    supportsDeveloperRole: false,
+    supportsReasoningEffort: true,
+    supportsUsageInStreaming: true,
+    maxTokensField: 'max_tokens',
+    requiresReasoningContentOnAssistantMessages: false,
+    thinkingFormat: 'openai',
+    sendSessionAffinityHeaders: false,
+    sessionAffinityFormat: 'openai',
+    supportsLongCacheRetention: false,
+  },
+};
+OPENAI_RESPONSES.chatRuntime = {
+  api: 'openai-responses',
+  compat: {
+    supportsDeveloperRole: false,
+    supportsMaxOutputTokens: true,
+    sessionAffinityFormat: 'openai',
+    supportsLongCacheRetention: false,
+  },
+};
+ANTHROPIC_MESSAGES.chatRuntime = { api: 'anthropic-messages', compat: {} };
+GEMINI_GENERATE.chatRuntime = { api: 'google-generative-ai', compat: {} };
+for (const item of [OPENAI_CHAT, OPENAI_RESPONSES, ANTHROPIC_MESSAGES, GEMINI_GENERATE]) {
+  const sampling: SamplingParam[] =
+    item === GEMINI_GENERATE
+      ? ['temperature', 'topP', 'topK', 'presencePenalty', 'frequencyPenalty']
+      : item === ANTHROPIC_MESSAGES
+        ? ['temperature', 'topP', 'topK']
+        : ['temperature', 'topP', 'presencePenalty', 'frequencyPenalty'];
+  item.ceiling.chat = {
+    inputModalities: ['image'],
+    samplingParams: sampling,
+    tools: true,
+    reasoning: true,
+  };
+  item.templates.chat = {
+    kind: 'chat',
+    inputModalities: ['image'],
+    tools: false,
+    streaming: true,
+    reasoningLevels: [],
+    samplingParams: [],
+  };
+}
+OPENAI_CHAT.sources = [
+  {
+    url: 'https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create',
+    checkedAt: '2026-10-29',
+  },
+];
+OPENAI_RESPONSES.sources = [
+  {
+    url: 'https://developers.openai.com/api/reference/resources/responses/methods/create',
+    checkedAt: '2026-10-29',
+  },
+];
+ANTHROPIC_MESSAGES.sources = [
+  { url: 'https://platform.claude.com/docs/en/api/messages', checkedAt: '2026-10-29' },
+];
+GEMINI_GENERATE.sources = [
+  { url: 'https://ai.google.dev/api/generate-content', checkedAt: '2026-10-29' },
+];
+ANTHROPIC_MESSAGES.fixedHeaders = { 'anthropic-version': '2023-06-01' };
+OPENAI_CHAT.reservedFields = [
+  'model',
+  'messages',
+  'stream',
+  'stream_options',
+  'store',
+  'max_tokens',
+  'max_completion_tokens',
+  'temperature',
+  'top_p',
+  'presence_penalty',
+  'frequency_penalty',
+  'tools',
+  'tool_choice',
+  'reasoning_effort',
+];
+OPENAI_RESPONSES.reservedFields = [
+  'model',
+  'input',
+  'stream',
+  'store',
+  'max_output_tokens',
+  'temperature',
+  'top_p',
+  'presence_penalty',
+  'frequency_penalty',
+  'tools',
+  'tool_choice',
+  'reasoning',
+  'instructions',
+  'include',
+];
+ANTHROPIC_MESSAGES.reservedFields = [
+  'model',
+  'messages',
+  'system',
+  'max_tokens',
+  'stream',
+  'temperature',
+  'top_p',
+  'top_k',
+  'tools',
+  'tool_choice',
+  'thinking',
+];
 export const OPENAI_IMAGES = descriptor(
   'openai-images',
   'OpenAI Images',
@@ -936,6 +1052,222 @@ export const ELEVENLABS = descriptor(
   '/text-to-speech/{voice_id}',
   'xi-api-key',
   { voices: { method: 'GET', path: '/voices' } },
+);
+OPENAI_SPEECH.ceiling.tts = {
+  voiceSources: ['preset', 'manual'],
+  instructions: true,
+  speed: true,
+  pitch: false,
+  volume: false,
+  formats: ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'],
+  sampleRates: [],
+  multiSpeaker: false,
+};
+OPENAI_SPEECH.templates.tts = {
+  kind: 'tts',
+  voices: {
+    sources: ['preset', 'manual'],
+    presets: [
+      'alloy',
+      'ash',
+      'ballad',
+      'coral',
+      'echo',
+      'fable',
+      'nova',
+      'onyx',
+      'sage',
+      'shimmer',
+      'verse',
+      'marin',
+      'cedar',
+    ].map((id) => ({ id, name: id })),
+    default: 'coral',
+  },
+  instructions: true,
+  speed: { min: 0.25, max: 4, default: 1 },
+  formats: ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'],
+  defaultFormat: 'mp3',
+  sampleRates: [],
+  maxChars: 4096,
+};
+OPENAI_SPEECH.reservedFields = [
+  'model',
+  'input',
+  'voice',
+  'instructions',
+  'response_format',
+  'speed',
+];
+OPENAI_SPEECH.sources = [
+  {
+    url: 'https://developers.openai.com/api/docs/guides/text-to-speech.md',
+    checkedAt: '2026-10-29',
+  },
+  {
+    url: 'https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create',
+    checkedAt: '2026-10-29',
+  },
+];
+OPENAI_SPEECH.notes = [
+  'OpenAI 官方 TTS 将于 2027-01-06 停服，主要用于中转站。模板依据 gpt-4o-mini-tts。',
+];
+
+MINIMAX_T2A.ceiling.tts = {
+  voiceSources: ['remote', 'manual'],
+  instructions: false,
+  speed: true,
+  pitch: true,
+  volume: true,
+  formats: ['mp3', 'wav', 'pcm', 'flac', 'opus'],
+  sampleRates: [8000, 16000, 22050, 24000, 32000, 44100],
+  multiSpeaker: false,
+};
+MINIMAX_T2A.templates.tts = {
+  kind: 'tts',
+  voices: { sources: ['remote', 'manual'], presets: [] },
+  instructions: false,
+  speed: { min: 0.5, max: 2, default: 1 },
+  pitch: { min: -12, max: 12, default: 0 },
+  volume: { min: 0.01, max: 10, default: 1 },
+  formats: ['mp3', 'wav', 'pcm', 'flac', 'opus'],
+  defaultFormat: 'mp3',
+  sampleRates: [8000, 16000, 22050, 24000, 32000, 44100],
+  defaultSampleRate: 32000,
+  maxChars: 9999,
+};
+MINIMAX_T2A.reservedFields = [
+  'model',
+  'text',
+  'stream',
+  'voice_setting',
+  'voice_setting.voice_id',
+  'voice_setting.speed',
+  'voice_setting.vol',
+  'voice_setting.pitch',
+  'audio_setting',
+  'audio_setting.sample_rate',
+  'audio_setting.format',
+  'audio_setting.channel',
+  'output_format',
+];
+MINIMAX_T2A.extensibleContainers = ['voice_setting', 'audio_setting'];
+MINIMAX_T2A.sources = [
+  {
+    url: 'https://platform.minimax.io/docs/api-reference/speech-t2a-http.md',
+    checkedAt: '2026-10-29',
+  },
+  {
+    url: 'https://platform.minimax.io/docs/api-reference/voice-management-get',
+    checkedAt: '2026-10-29',
+  },
+];
+MINIMAX_T2A.notes = [
+  '模板依据 speech-2.8-hd；volume 为开区间 (0,10]，表单最小使用 0.01。G.711 输出不在首批支持范围。',
+];
+
+ELEVENLABS.operations.voices!.path = '/v2/voices';
+ELEVENLABS.standardPrefix = '';
+ELEVENLABS.operations.submit!.path = '/v1/text-to-speech/{voice_id}';
+ELEVENLABS.ceiling.tts = {
+  voiceSources: ['remote', 'manual'],
+  instructions: false,
+  speed: true,
+  pitch: false,
+  volume: false,
+  formats: ['mp3_44100_128', 'mp3_22050_32', 'pcm_24000', 'pcm_44100'],
+  sampleRates: [],
+  multiSpeaker: false,
+};
+ELEVENLABS.templates.tts = {
+  kind: 'tts',
+  voices: { sources: ['remote', 'manual'], presets: [] },
+  instructions: false,
+  formats: ['mp3_44100_128', 'mp3_22050_32', 'pcm_24000', 'pcm_44100'],
+  defaultFormat: 'mp3_44100_128',
+  sampleRates: [],
+};
+ELEVENLABS.reservedFields = ['text', 'model_id', 'voice_settings', 'voice_settings.speed'];
+ELEVENLABS.extensibleContainers = ['voice_settings'];
+ELEVENLABS.sources = [
+  {
+    url: 'https://elevenlabs.io/docs/api-reference/text-to-speech/convert.mdx',
+    checkedAt: '2026-10-29',
+  },
+  { url: 'https://elevenlabs.io/docs/api-reference/voices/search', checkedAt: '2026-10-29' },
+];
+ELEVENLABS.notes = [
+  '模板依据 Eleven Multilingual v2；输出格式使用官方编码名称，采样率包含于格式，不另发字段。',
+];
+
+GEMINI_GENERATE.ceiling.tts = {
+  voiceSources: ['preset', 'manual'],
+  instructions: true,
+  speed: false,
+  pitch: false,
+  volume: false,
+  formats: ['wav'],
+  sampleRates: [24000],
+  multiSpeaker: true,
+};
+GEMINI_GENERATE.templates.tts = {
+  kind: 'tts',
+  voices: {
+    sources: ['preset', 'manual'],
+    presets: [
+      'Zephyr',
+      'Puck',
+      'Charon',
+      'Kore',
+      'Fenrir',
+      'Leda',
+      'Orus',
+      'Aoede',
+      'Callirrhoe',
+      'Autonoe',
+      'Enceladus',
+      'Iapetus',
+      'Umbriel',
+      'Algieba',
+      'Despina',
+      'Erinome',
+      'Algenib',
+      'Rasalgethi',
+      'Laomedeia',
+      'Achernar',
+      'Alnilam',
+      'Schedar',
+      'Gacrux',
+      'Pulcherrima',
+      'Achird',
+      'Zubenelgenubi',
+      'Vindemiatrix',
+      'Sadachbia',
+      'Sadaltager',
+      'Sulafat',
+    ].map((id) => ({ id, name: id })),
+    default: 'Kore',
+  },
+  instructions: true,
+  formats: ['wav'],
+  defaultFormat: 'wav',
+  sampleRates: [24000],
+  defaultSampleRate: 24000,
+  multiSpeaker: { max: 2 },
+};
+GEMINI_GENERATE.sources.push(
+  { url: 'https://ai.google.dev/gemini-api/docs/speech-generation', checkedAt: '2026-10-29' },
+  { url: 'https://ai.google.dev/api/generate-content', checkedAt: '2026-10-29' },
+);
+GEMINI_GENERATE.extensibleContainers = ['generationConfig', 'generationConfig.speechConfig'];
+GEMINI_GENERATE.reservedFields.push(
+  'generationConfig.responseModalities',
+  'generationConfig.imageConfig',
+  'generationConfig.speechConfig',
+  'generationConfig.speechConfig.voiceConfig',
+);
+GEMINI_GENERATE.notes.push(
+  'TTS 使用 generateContent 的 prebuiltVoiceConfig；多说话人配置通过固定字段 generationConfig.speechConfig.multiSpeakerVoiceConfig 提供。按返回 MIME 接受 WAV 或封装 24kHz 单声道 L16，不按模型名分支。',
 );
 export const PROTOCOLS: readonly ProtocolDescriptor[] = [
   OPENAI_CHAT,

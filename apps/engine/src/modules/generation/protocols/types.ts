@@ -39,8 +39,14 @@ export type HttpCall = {
   method: 'GET' | 'POST';
   headers: Record<string, string>;
   body?: string | FormData | Uint8Array;
+  responseAudio?: { format: string; sampleRate?: number };
 };
-export type HttpResult = { status: number; headers: Headers; bytes: Uint8Array };
+export type HttpResult = {
+  status: number;
+  headers: Headers;
+  bytes: Uint8Array;
+  responseAudio?: HttpCall['responseAudio'];
+};
 export type OutputRef =
   | { kind: 'url'; url: string; mime?: string }
   | { kind: 'data'; base64: string; mime: string }

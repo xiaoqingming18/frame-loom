@@ -24,6 +24,9 @@ it('文本模型只按能力卡和统一地址调用 pi-ai，检查绑定配置�
       headers: { authorization: 'Bearer test-chat-key' },
       reply: (req) => {
         const body = JSON.parse(req.body) as Record<string, unknown>;
+        expect(getProtocol('openai-chat')!.reservedFields).toEqual(
+          expect.arrayContaining(Object.keys(body)),
+        );
         expect(body.model).toBe('arbitrary-alias');
         expect(body.stream).toBe(true);
         expect(body.temperature).toBeUndefined();

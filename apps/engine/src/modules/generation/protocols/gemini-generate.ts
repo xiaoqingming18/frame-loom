@@ -3,6 +3,7 @@ import { GEMINI_GENERATE, resolveImageSize } from '@frame-loom/contracts';
 import { GenerationFailure } from './http.js';
 import { invalidResponse, jsonCall, jsonResult } from './common.js';
 import type { ProtocolAdapter, OutputRef } from './types.js';
+import { audioResult, pcmWav } from './audio.js';
 
 const response = z.object({
   candidates: z
@@ -27,6 +28,53 @@ const response = z.object({
 export const geminiGenerate: ProtocolAdapter = {
   descriptor: GEMINI_GENERATE,
   async buildSubmit(ctx, request, cap) {
+    if (cap.kind === 'tts') {
+      const configured = ctx.snapshot.fixedFields.find(
+        (field) => field.path === 'generationConfig.speechConfig.multiSpeakerVoiceConfig',
+      );
+      const parsed = configured
+        ? z
+            .object({
+              speakerVoiceConfigs: z
+                .array(
+                  z.object({
+                    speaker: z.string().min(1),
+                    voiceConfig: z.object({
+                      prebuiltVoiceConfig: z.object({ voiceName: z.string().min(1) }),
+                    }),
+                  }),
+                )
+                .min(1)
+                .max(cap.multiSpeaker?.max ?? 0),
+            })
+            .safeParse(configured.value)
+        : undefined;
+      if (parsed && !parsed.success)
+        throw new GenerationFailure(
+          'invalid_params',
+          'INVALID_SPEAKERS',
+          '多说话人配置无效或超过能力卡人数上限',
+        );
+      const multi = parsed?.success ? parsed.data : undefined;
+      return jsonCall(ctx, GEMINI_GENERATE, request, {
+        contents: [
+          { role: 'user', parts: [{ text: ctx.resolvePrompt(request.prompt, request.inputs) }] },
+        ],
+        ...(request.params.instructions
+          ? { systemInstruction: { parts: [{ text: request.params.instructions }] } }
+          : {}),
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: multi
+            ? { multiSpeakerVoiceConfig: multi }
+            : {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: request.params.voice ?? cap.voices.default },
+                },
+              },
+        },
+      });
+    }
     if (cap.kind !== 'image')
       throw new GenerationFailure('invalid_params', 'INVALID_KIND', '当前适配器需要图像能力卡');
     const inputs = [...request.inputs].sort((a, b) => a.order - b.order);
@@ -46,7 +94,7 @@ export const geminiGenerate: ProtocolAdapter = {
       },
     });
   },
-  parseSubmit: (_ctx, result) => {
+  parseSubmit: (ctx, result) => {
     const body = jsonResult(result, response);
     if (
       body.promptFeedback?.blockReason ||
@@ -64,6 +112,16 @@ export const geminiGenerate: ProtocolAdapter = {
       (candidate.content?.parts ?? []).flatMap((part) => {
         const data = part.inlineData;
         if (!data) return [];
+        if (ctx.snapshot.kind === 'tts') {
+          if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data.data)) return invalidResponse();
+          const bytes = Buffer.from(data.data, 'base64');
+          const mime = data.mimeType.toLowerCase();
+          const pcm = /^audio\/(?:l16|pcm)(?:;|$)/.test(mime);
+          if (!pcm && mime !== 'audio/wav') return invalidResponse();
+          if (pcm && /rate=(?!24000(?:;|$))\d+/.test(mime)) return invalidResponse();
+          const audio = audioResult(pcm ? pcmWav(bytes) : bytes, 'audio/wav');
+          return audio.status === 'succeeded' ? audio.outputs : invalidResponse();
+        }
         if (!data.mimeType.startsWith('image/') || !/^[A-Za-z0-9+/]+={0,2}$/.test(data.data))
           return invalidResponse();
         return [{ kind: 'data' as const, base64: data.data, mime: data.mimeType }];

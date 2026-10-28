@@ -1,6 +1,6 @@
 # Plan: 首批协议适配器
 
-Status: active
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -84,25 +84,26 @@ Parent: plan.md
   - new-api 两套状态和 metadata 透传。
   - 附加参数只写顶层字段的限制（multipart）。
   - 测试命令同 T3。
-- [ ] T5 实现 `openai-speech`、`minimax-t2a`、`elevenlabs`、`gemini-generate` 的 TTS 部分，以及 `listVoices`（MiniMax、ElevenLabs）；音色服务按凭据指纹、协议和上游 ID 隔离 — 验证：
+- [x] T5 实现 `openai-speech`、`minimax-t2a`、`elevenlabs`、`gemini-generate` 的 TTS 部分，以及 `listVoices`（MiniMax、ElevenLabs）；音色服务按凭据指纹、协议和上游 ID 隔离 — 验证：
   - 二进制、hex、base64 PCM 三种返回都能解析。
   - 奇数长度的 hex 和截断的音频被拒绝。
   - Gemini PCM 封装成 WAV 后，ffprobe 探测出 24kHz 单声道。
   - 音色在不同账号之间不串用。
   - 远端音色列表失败时，手填仍然可用。
   - 测试命令：`pnpm --filter @frame-loom/engine test -- protocols/tts voices`
-- [ ] T6 补全四个文本协议的描述（ceiling、templates），`llm.service.ts` 改为从描述取 pi-ai api 名和 compat 默认值；四个协议都用模拟上游跑通两步检查、文本流和用量解析，`redirect` 拒绝时不带凭据，401/429/500 的分类；同时测试 Anthropic 不发送未勾选的采样参数 — 验证：`pnpm --filter @frame-loom/engine test -- llm`
-- [ ] T7 端到端集成：每个类别至少挑一个协议，从 `POST /channels`、批量添加模型、`POST /generation-jobs` 一直走到产物写回项目。流光三模型的地址示例（Responses、Gemini TTS、MiniMax 覆盖地址）要求模拟上游只接受示例中的路径 — 验证：新增 `protocols.integration.test.ts`，断言每个请求的路径和设置页 `Model.endpoints` 预览完全一致；命令 `pnpm --filter @frame-loom/engine test`
-- [ ] T8 描述自检：所有 15 个描述的 `sources` 非空且带核对日期；模板都能通过 schema；`effectiveCapability(template)` 等于模板本身；`reservedFields` 覆盖协议自己写入的所有顶层字段（用测试遍历每个协议 `buildSubmit` 生成的请求体，断言其顶层键都在 `reservedFields` 里）— 验证：`pnpm --filter @frame-loom/contracts test -- protocols` 与 `pnpm --filter @frame-loom/engine test`
+- [x] T6 补全四个文本协议的描述（ceiling、templates），`llm.service.ts` 改为从描述取 pi-ai api 名和 compat 默认值；四个协议都用模拟上游跑通两步检查、文本流和用量解析，`redirect` 拒绝时不带凭据，401/429/500 的分类；同时测试 Anthropic 不发送未勾选的采样参数 — 验证：`pnpm --filter @frame-loom/engine test -- llm`
+- [x] T7 端到端集成：每个类别至少挑一个协议，从 `POST /channels`、批量添加模型、`POST /generation-jobs` 一直走到产物写回项目。流光三模型的地址示例（Responses、Gemini TTS、MiniMax 覆盖地址）要求模拟上游只接受示例中的路径 — 验证：新增 `protocols.integration.test.ts`，断言每个请求的路径和设置页 `Model.endpoints` 预览完全一致；命令 `pnpm --filter @frame-loom/engine test`
+- [x] T8 描述自检：所有 15 个描述的 `sources` 非空且带核对日期；模板都能通过 schema；`effectiveCapability(template)` 等于模板本身；`reservedFields` 覆盖协议自己写入的所有顶层字段（用测试遍历每个协议 `buildSubmit` 生成的请求体，断言其顶层键都在 `reservedFields` 里）— 验证：`pnpm --filter @frame-loom/contracts test -- protocols` 与 `pnpm --filter @frame-loom/engine test`
 
 ## 验证
 
 - 预期：15 个协议的契约测试和集成测试全部通过；不存在访问外网的测试，用 `rg -n "https?://(?!127\.0\.0\.1)" apps/engine/src --pcre2 -g "*.test.ts"` 扫描，只允许出现在 fixtures 的 README 和文档注释里；`pnpm --filter @frame-loom/engine test`、`pnpm run typecheck` 通过。
-- 实际（2026-10-29，阶段进度）：T1–T4 完成。图像契约 21 用例，视频契约 34 用例；engine 全量 24 文件、214 用例通过，contracts 19 文件、279 用例通过。全仓 typecheck／lint／format:check 通过。T5–T8 尚未完成，03 不视为已验收。
+- 实际（2026-10-29）：T1–T8 完成。engine 全量 29 文件、255 用例通过，contracts 19 文件、279 用例通过；其中 TTS 8 例、音色隔离 1 例、四文本 20 例、顶层保留字段遍历 13 例、四类别 HTTP 集成 1 例。全仓 typecheck／lint／format:check、pnpm verify 与 git diff --check 通过。
 
 ## 进度
 
 - 2026-10-28：创建子计划草稿。
+- 2026-10-29：完成 T1–T8；语音解码、音色目录隔离、四文本运行时、流光示例与项目产物闭环使用本地严格 mock 验证。
 
 ## 发现与偏差
 
@@ -110,7 +111,12 @@ Parent: plan.md
 - MiniMax 官方字段为 content 内文本和 ratio；可灵为 contents 数组、settings、options。可灵 voice 需要音色 ID，首批不把本地 audio URL 当 voice_id，不声明音频输入；官方未确认 audio 布尔开关，不加入参考视频静音规则。
 - 协议描述增加 defaultExtras（Seedream 水印默认关闭、Wan 智能提示词改写）、videoSizes／customVideoSize、extraPathPrefix 与 extensibleContainers。最后一项让 parameters／options／metadata 顶层受保护，同时允许已声明的非保留子路径，避免保留字段测试与附加参数功能冲突。
 - 当前 OpenAI 图像文档主力为 GPT Image 2.5 Sunburst／Flare，新增 xhigh／max 质量，像素边界与计划一致。模板按现役模型补齐，能力仍由用户显式配置，运行时不按型号分支。
+- ElevenLabs 的提交为 /v1/text-to-speech，目录为 /v2/voices，描述使用空 standardPrefix 和完整操作路径，仍统一由 resolveEndpoints 解析。语速上下限未获官方确认，模板不填写；不编造范围。
+- Gemini 新版 TTS 可返回 WAV，早期版本为 raw L16；按 MIME 解析而不按型号分支。双说话人通过固定字段提供，校验人数上限。响应音频格式元数据随内存中的 HttpCall／HttpResult 传递，不修改冻结快照。
+- 文本请求由 pi-ai 生成，保留字段通过实际模拟请求遍历；媒体协议通过 buildSubmit 遍历。文本没有重复实现生成任务适配器。
+- 全 src 外网字面量扫描命中既有 CORS／配置拒绝测试、迁移旧库 URL、签名标准向量、日志脱敏、公网引用校验与对象存储配置样例；均不是外网请求。新增协议／文本测试只请求 127.0.0.1，官方 URL 仅在描述与 README。
+- 补回签名产物 401／403／404／410 后只重新查询的恢复路径；保留已下载索引，不重复提交生成。new-api 配置的数字分辨率与比例转为实际宽高，避免参数静默丢失。
 
 ## 交接
 
-T1–T4 已完成，下一步 T5 TTS 与音色目录，再执行 T6 四文本协议、T7 严格模拟集成、T8 描述自检。04–08 尚未开始。
+无。

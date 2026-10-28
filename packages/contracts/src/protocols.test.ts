@@ -13,6 +13,11 @@ describe('首批协议描述契约', () => {
     expect(protocolsForKind('image').map((p) => p.id)).toContain('gemini-generate');
   });
   it.each(PROTOCOLS)('$id 模板合法且在协议上限内', (descriptor) => {
+    expect(descriptor.sources.length).toBeGreaterThan(0);
+    for (const source of descriptor.sources) {
+      expect(source.url).toMatch(/^https:\/\//);
+      expect(source.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
     expect(Object.keys(descriptor.templates).sort()).toEqual([...descriptor.kinds].sort());
     expect(Object.keys(descriptor.ceiling).sort()).toEqual([...descriptor.kinds].sort());
     for (const template of Object.values(descriptor.templates)) {

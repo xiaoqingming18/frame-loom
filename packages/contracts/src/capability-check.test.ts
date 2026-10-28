@@ -320,17 +320,12 @@ describe('配置保存和协议变更', () => {
       transport: { image: 'url' },
     });
     const { model: changed, incompatible } = changeProtocol(current, 'anthropic-messages');
-    expect(changed.capability).toMatchObject({ contextWindow: 1234, tools: false });
+    expect(changed.capability).toMatchObject({ contextWindow: 1234, tools: true });
     expect(changed.endpointOverride).toEqual({ confirmedHosts: [] });
     expect(changed.extras).toEqual([]);
     expect(changed.transport.image).toBe('auto');
     expect(incompatible.map((issue) => issue.field)).toEqual(
-      expect.arrayContaining([
-        'capability.tools',
-        'endpointOverride',
-        'extras.messages',
-        'transport.image',
-      ]),
+      expect.arrayContaining(['endpointOverride', 'extras.messages', 'transport.image']),
     );
     expect(current.capability).toMatchObject({ tools: true });
   });
