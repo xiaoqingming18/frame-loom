@@ -1,0 +1,156 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { ModelProfile, type CanvasMediaData } from '@frame-loom/contracts';
+import { CanvasContext } from '../context';
+import { createCanvasStore } from '../store/store';
+import { doc, generationJob, media, sha } from '../test-utils';
+import { createBuiltinRegistry } from './builtin';
+import { ImageEditTools } from './image-edit-tools';
+import { detectFaces } from './face-detection';
+
+vi.mock('./face-detection', () => ({ detectFaces: vi.fn() }));
+vi.mock('./emotion-head-preview', () => ({ EmotionHeadPreview: () => <div>头部预览替身</div> }));
+vi.mock('./image-edit-previews', () => ({ AnglePreview: () => null, LightingPreview: () => null }));
+afterEach(() => {
+  cleanup();
+  vi.resetAllMocks();
+});
+
+function setup() {
+  const job = generationJob();
+  const data: CanvasMediaData = {
+    versions: job.outputs,
+    activeVersion: 0,
+    prompt: '',
+    inputOrder: [],
+  };
+  const store = createCanvasStore(doc([media('source', 'image', { data })]));
+  const profile = ModelProfile.parse({
+    id: 'image-edit',
+    name: '图片编辑',
+    kind: 'image',
+    protocol: 'openai-images',
+    matchIds: [],
+    generic: false,
+    modes: [{ id: 'reference', name: '参考图' }],
+    params: [],
+    constraints: [],
+    inputs: [],
+    runtime: {
+      concurrency: 1,
+      pollInitialMs: 1000,
+      pollMaxMs: 5000,
+      timeoutMs: 10000,
+      submitTimeoutMs: 1000,
+      supportsCancel: false,
+    },
+    imageEditCapabilities: {
+      operations: ['angle', 'lighting', 'emotion'],
+      maxReferenceImages: 3,
+      openAiImageEdit: true,
+      mask: true,
+    },
+  });
+  store.getState().setGenerationConfig({
+    storageReady: true,
+    models: [{ id: job.channelModelId, label: '兼容模型', kind: 'image', profile }],
+  });
+  const create = vi.fn().mockResolvedValue(job);
+  const host = {
+    media: { upload: vi.fn(), url: (hash: string) => hash },
+    generation: {
+      load: vi.fn(),
+      create,
+      get: vi.fn(),
+      cancel: vi.fn(),
+      resubmit: vi.fn(),
+      subscribe: vi.fn(),
+    },
+  };
+  const view = render(
+    <CanvasContext.Provider value={{ store, registry: createBuiltinRegistry(), host }}>
+      <ImageEditTools nodeId="source" data={data} />
+    </CanvasContext.Provider>,
+  );
+  return { ...view, store, create, job };
+}
+
+it('单一模型仍要求显式选择，角度只提交一次并保留源图', async () => {
+  const { store, create, job } = setup();
+  fireEvent.click(screen.getByRole('button', { name: '多角度编辑' }));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '确认' }).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.channelModelId } });
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create.mock.calls[0][0]).toMatchObject({
+    imageEdit: { operation: 'angle', source: { sha256: sha('a') } },
+  });
+  expect(store.getState().document.nodes).toHaveLength(2);
+  expect((store.getState().document.nodes[0].data as CanvasMediaData).versions).toEqual(
+    job.outputs,
+  );
+});
+
+it('打光模板关闭编辑仍即时生效，关闭面板后重开恢复默认且不提交任务', () => {
+  const { create, store, job } = setup();
+  fireEvent.click(screen.getByRole('button', { name: '重打光编辑' }));
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.channelModelId } });
+  fireEvent.click(screen.getByRole('button', { name: '设置提示词模板' }));
+  fireEvent.change(screen.getByLabelText('打光提示词模板'), {
+    target: { value: '会话专用，{{brightnessPrompt}}' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '设置提示词模板' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  expect((store.getState().document.nodes[1].data as CanvasMediaData).prompt).toContain('会话专用');
+  expect(create).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '重打光编辑' }));
+  fireEvent.click(screen.getByRole('button', { name: '设置提示词模板' }));
+  expect(screen.getByLabelText<HTMLTextAreaElement>('打光提示词模板').value).not.toContain(
+    '会话专用',
+  );
+});
+
+it('关闭检测与重复检测均中止旧请求，过期结果不回写工作区', async () => {
+  const signals: AbortSignal[] = [];
+  vi.mocked(detectFaces).mockImplementation((_url, signal) => {
+    signals.push(signal);
+    return new Promise(() => {});
+  });
+  setup();
+  fireEvent.click(screen.getByRole('button', { name: '表情编辑' }));
+  await waitFor(() => expect(signals).toHaveLength(1));
+  fireEvent.click(screen.getByRole('button', { name: '重新检测' }));
+  await waitFor(() => expect(signals).toHaveLength(2));
+  expect(signals[0].aborted).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '关闭表情编辑' }));
+  expect(signals[1].aborted).toBe(true);
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('表情选中角色后源版本改变会阻止提交，边缘情绪坐标可以选择', async () => {
+  vi.mocked(detectFaces).mockResolvedValue({
+    imageWidth: 256,
+    imageHeight: 256,
+    faces: [{ id: 'face', x: 50, y: 40, width: 60, height: 70, source: 'detected' }],
+  });
+  const { store, create, job } = setup();
+  fireEvent.click(screen.getByRole('button', { name: '表情编辑' }));
+  fireEvent.change(screen.getByLabelText('表情模型'), { target: { value: job.channelModelId } });
+  fireEvent.click(await screen.findByRole('radio', { name: '角色1' }));
+  fireEvent.click(screen.getAllByRole('gridcell')[0]);
+  act(() => {
+    store.getState().apply((document) => ({
+      ...document,
+      nodes: document.nodes.map((node) => ({
+        ...node,
+        data: {
+          ...(node.data as CanvasMediaData),
+          versions: [{ ...job.outputs[0], sha256: sha('b') }],
+        },
+      })),
+    }));
+  });
+  fireEvent.click(screen.getByRole('button', { name: '生成表情' }));
+  expect(await screen.findByText('源图片版本已变化，请重新选择')).toBeDefined();
+  expect(create).not.toHaveBeenCalled();
+});

@@ -35,3 +35,4 @@ docs/
 pnpm-lock.yaml
 **/routeTree.gen.ts
 apps/engine/drizzle/meta/
+apps/desktop/public/mediapipe/wasm/*.js

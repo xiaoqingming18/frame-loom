@@ -36,6 +36,7 @@ import { GenerationStatus } from './generation-status';
 import { checkConnection } from '../registry/connections';
 import { GenerationPanel } from './generation-panel';
 import { generationInputs, generationModel } from './generation-inputs';
+import { ImageEditTools } from './image-edit-tools';
 
 const portClass: Record<string, string> = {
   image: 'canvas-port-image',
@@ -413,76 +414,87 @@ export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
       {...props}
       kind="image"
       toolbar={
-        props.selected &&
-        !version && (
-          <div className="nodrag nopan absolute -top-12 left-1/2 -translate-x-1/2">
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              aria-label="选择上传图片"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (!file || uploading || locked) return;
-                setUploading(true);
-                void importMedia(host, file)
-                  .then(({ version }) => {
-                    const current = store.getState();
-                    if (!current.document.nodes.some((node) => node.id === props.node.id)) return;
-                    current.apply((document) =>
-                      updateData<CanvasMediaData>(document, props.node.id, (data) =>
-                        appendVersion(data, version),
-                      ),
-                    );
-                  })
-                  .catch((error: unknown) =>
-                    store.getState().notify(error instanceof Error ? error.message : '上传失败'),
-                  )
-                  .finally(() => setUploading(false));
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={locked || uploading}
-              onClick={() => fileInput.current?.click()}
-              className="rounded-full bg-card"
-            >
-              <Upload aria-hidden="true" className="size-3.5" />
-              {uploading ? '正在上传…' : '上传图片'}
-            </Button>
-            {host.assets && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={locked || uploading}
-                onClick={() => {
-                  setUploading(true);
-                  void host
-                    .assets!.pick('image')
-                    .then((picked) => {
-                      if (!picked) return;
-                      const current = store.getState();
-                      const node = current.document.nodes.find((node) => node.id === props.node.id);
-                      if (!node || isNodeLocked(current.document, node)) return;
-                      current.apply((document) =>
-                        updateData<CanvasMediaData>(document, node.id, (data) =>
-                          appendVersion(data, picked.version),
-                        ),
-                      );
-                    })
-                    .catch((error: unknown) =>
-                      store
-                        .getState()
-                        .notify(error instanceof Error ? error.message : '添加资产失败'),
-                    )
-                    .finally(() => setUploading(false));
-                }}
-              >
-                从项目资产添加
-              </Button>
+        props.selected && (
+          <div className="nodrag nopan absolute -top-16 left-1/2 flex -translate-x-1/2 items-center gap-1">
+            {version && (
+              <ImageEditTools key={version.sha256} nodeId={props.node.id} data={props.node.data} />
+            )}
+            {!version && (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  aria-label="选择上传图片"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (!file || uploading || locked) return;
+                    setUploading(true);
+                    void importMedia(host, file)
+                      .then(({ version }) => {
+                        const current = store.getState();
+                        if (!current.document.nodes.some((node) => node.id === props.node.id))
+                          return;
+                        current.apply((document) =>
+                          updateData<CanvasMediaData>(document, props.node.id, (data) =>
+                            appendVersion(data, version),
+                          ),
+                        );
+                      })
+                      .catch((error: unknown) =>
+                        store
+                          .getState()
+                          .notify(error instanceof Error ? error.message : '上传失败'),
+                      )
+                      .finally(() => setUploading(false));
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={locked || uploading}
+                  onClick={() => fileInput.current?.click()}
+                  className="rounded-full bg-card"
+                >
+                  <Upload aria-hidden="true" className="size-3.5" />
+                  {uploading ? '正在上传…' : '上传图片'}
+                </Button>
+                {host.assets && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={locked || uploading}
+                    onClick={() => {
+                      setUploading(true);
+                      void host
+                        .assets!.pick('image')
+                        .then((picked) => {
+                          if (!picked) return;
+                          const current = store.getState();
+                          const node = current.document.nodes.find(
+                            (node) => node.id === props.node.id,
+                          );
+                          if (!node || isNodeLocked(current.document, node)) return;
+                          current.apply((document) =>
+                            updateData<CanvasMediaData>(document, node.id, (data) =>
+                              appendVersion(data, picked.version),
+                            ),
+                          );
+                        })
+                        .catch((error: unknown) =>
+                          store
+                            .getState()
+                            .notify(error instanceof Error ? error.message : '添加资产失败'),
+                        )
+                        .finally(() => setUploading(false));
+                    }}
+                  >
+                    从项目资产添加
+                  </Button>
+                )}
+              </>
             )}
           </div>
         )

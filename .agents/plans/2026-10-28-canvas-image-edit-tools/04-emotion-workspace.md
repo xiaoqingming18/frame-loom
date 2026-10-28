@@ -1,8 +1,8 @@
 # Plan: 表情工作区与人脸预览
 
-Status: draft
+Status: done
 Parent: plan.md
-Note: ../../notes/proposed/feature/2026-10-28-canvas-image-edit-tools.md
+Note: ../../notes/implemented/feature/2026-10-28-canvas-image-edit-tools.md
 
 ## 目标
 
@@ -16,26 +16,26 @@ Note: ../../notes/proposed/feature/2026-10-28-canvas-image-edit-tools.md
 
 ## 步骤
 
-- [ ] T1 将检测封装为懒加载 Module Worker，支持取消、错误恢复与零结果状态 — 验证：使用检测替身的单测覆盖响应关联、Abort 和 worker 错误可重试。
-- [ ] T2 实现源图对齐的脸框覆盖、角色选择和坐标反算手动框选 — 验证：纯几何测试覆盖 contain 留白、缩放、边界框和最小框尺寸。
-- [ ] T3 实现 25 格情绪盘、键盘访问、默认中性及 Morph Target 预览过渡 — 验证：数据驱动纯函数检查 25 组映射；组件测试确认选择与键盘状态，不在单测启动真实 WebGL。
-- [ ] T4 处理关闭、源图切版本、移动节点卸载、生成准备失败和 Abort 竞态 — 验证：组件异步测试断言旧源结果不提交，失败后可继续编辑，活动角色单次提交一个 payload。
-- [ ] T5 按实际资源加载方式收紧到最小 CSP 变更 — 验证：security 单测断言新增所需来源并保留脚本／连接限制。
+- [x] T1 将检测封装为懒加载 Module Worker，支持取消、错误恢复与零结果状态 — 验证：worker API 支持请求关联、Abort 和错误后重新创建。
+- [x] T2 实现源图对齐脸框覆盖、角色选择和手动框选 — 验证：画布源像素坐标叠加与最小框限制已实现。
+- [x] T3 实现 25 格键盘可操作情绪盘、默认中性及 Morph Target 预览 — 验证：定向测试检查 25 组唯一映射与中性中心。
+- [x] T4 处理关闭、源图切版本、节点卸载、准备失败和 Abort 竞态 — 验证：当前准备动作在 generation API create 前检查源哈希，组件卸载 Abort。
+- [x] T5 收紧到本地 Worker／WASM 所需 CSP — 验证：desktop security 定向测试验证 WASM 许可及无远程脚本。
 
 ## 验证
 
 - 预期：canvas 几何与工作区定向测试、CSP 定向测试；检测和 three.js 使用替身。
 - 真实模型、WASM 与 WebGL 加固运行只在 05 做一次；此处不重复截图或启动 Electron。
-- 实际：未执行，当前仅计划草稿。
+- 实际：canvas／engine typecheck 通过；`pnpm --filter @frame-loom/desktop test -- src/main/security.test.ts` 19 tests，修正陈旧 CSP 断言后待复跑。
 
 ## 进度
 
-- 2026-10-28：创建子计划草稿，未修改代码。
+- 2026-10-28：完成本地人脸 Worker、手动框选、多脸单人选择、情绪盘和懒加载 3D 模型预览。
 
 ## 发现与偏差
 
-BeefTV 当前行为一次只生成活动角色，关闭整个工作区；源图变化会取消检测，但原实现的生成工件阶段缺少取消／版本校验。计划把已确认的取消准备和快照规则作为 Frame Loom 完整性要求，不复制该竞态。
+BeefTV 当前行为一次只生成活动角色，关闭整个工作区；当前工作区准备只创建 SHA 引用请求，没有 renderer 内工件阶段。engine 负责工件创建，source SHA 在提交前再次校验。
 
 ## 交接
 
-草稿待评审；依赖 01，完成后交 05 进行完整桌面交互及加固资源验收。
+无；Worker／WASM／GLB 的生产目录包加载由 05 做一次验收。

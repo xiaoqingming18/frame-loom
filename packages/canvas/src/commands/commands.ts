@@ -5,6 +5,7 @@ import type {
   CanvasNode,
   CanvasMediaData,
 } from '@frame-loom/contracts';
+import type { ImageEditRecipe } from '@frame-loom/contracts';
 import { CANVAS_LIMITS, TAGGABLE_NODE_TYPES } from '@frame-loom/contracts';
 import { checkConnection, invalidEdges, type ConnectionAttempt } from '../registry/connections';
 import type { NodeRegistry } from '../registry/registry';
@@ -116,6 +117,48 @@ export function addNodes(document: CanvasDocument, nodes: CanvasNode[], edges: C
     ...document,
     nodes: orderParents([...document.nodes, ...nodes]),
     edges: [...document.edges, ...edges],
+  });
+}
+
+export function createImageEditChild(
+  registry: NodeRegistry,
+  document: CanvasDocument,
+  sourceId: string,
+  recipe: ImageEditRecipe,
+  prompt: string,
+  modelId?: string,
+): CanvasDocument {
+  const source = document.nodes.find((node) => node.id === sourceId);
+  const media = source?.type === 'image' ? (source.data as CanvasMediaData) : undefined;
+  const version = media?.versions[media.activeVersion];
+  if (
+    !source ||
+    !version ||
+    recipe.source.nodeId !== sourceId ||
+    recipe.source.sha256 !== version.sha256
+  )
+    throw new CanvasCommandError('源图片版本已变化，请重新确认编辑');
+  const child = createNode(
+    registry,
+    'image',
+    {
+      x: source.position.x + source.size.width + 200,
+      y: source.position.y + source.size.height / 2,
+    },
+    {
+      versions: [],
+      activeVersion: 0,
+      prompt,
+      inputOrder: [],
+      ...(modelId ? { modelId } : {}),
+      imageEdit: recipe,
+    },
+  );
+  return connect(registry, addNodes(document, [child]), {
+    source: sourceId,
+    sourceHandle: 'out',
+    target: child.id,
+    targetHandle: 'reference',
   });
 }
 

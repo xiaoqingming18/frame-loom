@@ -79,6 +79,16 @@ function profile(
     id: `${protocol}-${suffix}`,
     name,
     kind: 'image',
+    imageEditCapabilities:
+      protocol === 'openai-images'
+        ? {
+            operations:
+              suffix === 'generic' ? ['angle', 'lighting'] : ['angle', 'lighting', 'emotion'],
+            maxReferenceImages: suffix === 'generic' ? 1 : 3,
+            openAiImageEdit: true,
+            mask: suffix !== 'gpt-image-2.5',
+          }
+        : undefined,
     protocol,
     matchIds,
     generic: suffix === 'generic',

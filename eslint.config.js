@@ -40,6 +40,7 @@ export default defineConfig(
     '.cache/**',
     '.husky/**',
     'docs/design/**',
+    'apps/desktop/public/mediapipe/wasm/*.js',
   ]),
   {
     files: ['**/*.{js,mjs,cjs}'],

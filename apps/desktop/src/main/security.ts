@@ -2,7 +2,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 
 export const APP_ORIGIN = 'app://frame-loom';
 export const PRODUCTION_CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' frame-media: frame-project:; media-src 'self' frame-media: frame-project:; connect-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'";
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' frame-media: frame-project:; media-src 'self' frame-media: frame-project:; connect-src 'self' frame-media: frame-project: http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'";
 
 export function isTrustedUrl(value: string, origin: string): boolean {
   try {

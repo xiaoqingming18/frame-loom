@@ -32,6 +32,7 @@ export const generationJobs = sqliteTable(
       configVersion?: string;
       preparedRequest?: GenerationRequest;
       completedDownloads?: number[];
+      imageEditPostProcess?: { intermediateSha256?: string; finalSha256?: string };
       cancellation?: 'requested' | 'confirmed' | 'unknown';
       channelId: string;
       credentialFingerprint: string;

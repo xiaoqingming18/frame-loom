@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, expect, it, vi } from 'vitest';
+import sharp from 'sharp';
 import { GenerationJob, GenerationRequest, type ImageProtocol } from '@frame-loom/contracts';
 import { createEngine } from '../../application.js';
 import { EngineConfig } from '../../core/config/config.js';
@@ -18,6 +19,7 @@ import { MediaService } from './media.service.js';
 import { GenerationFailure, type AdapterResult } from './adapters/types.js';
 import { SecretCipher } from '../../core/crypto/secret-cipher.js';
 import { channels } from '../channels/channels.schema.js';
+import * as imageEmotion from './image-emotion.js';
 
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1cAAAAASUVORK5CYII=';
@@ -28,6 +30,7 @@ const arkFixture = JSON.parse(
 ) as { jpegBase64: string; data: { url: string }[] };
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
@@ -195,6 +198,66 @@ async function setup(
     },
   };
 }
+
+it('表情后处理失败后只重试本地合成，最终仅写回源尺寸整图', async () => {
+  const context = await setup();
+  const sourceBytes = await sharp({
+    create: { width: 16, height: 12, channels: 3, background: '#405060' },
+  })
+    .png()
+    .toBuffer();
+  const source = await context.app.get(MediaService).saveStream([sourceBytes]);
+  const composite = vi
+    .spyOn(imageEmotion, 'compositeEmotion')
+    .mockRejectedValueOnce(new Error('injected composite failure'));
+  const job = await context.create({
+    mode: 'reference',
+    inputs: [{ kind: 'image', role: 'reference', sha256: source.sha256 }],
+    imageEdit: {
+      version: 1,
+      operation: 'emotion',
+      source: { nodeId: 'source-node', sha256: source.sha256 },
+      targetFace: { x: 5, y: 3, width: 5, height: 6 },
+      editRegion: { x: 0, y: 0, width: 16, height: 12 },
+      imageWidth: 16,
+      imageHeight: 12,
+      presetId: 'neutral',
+      intimacy: 0,
+      arousal: 0,
+      characterName: '角色1',
+      maskMode: 'provider',
+      postProcess: 'pending',
+    },
+  });
+  await expect
+    .poll(() => context.job(job.id).errorCode, { timeout: 8000, interval: 30 })
+    .toBe('LOCAL_ERROR');
+  const completed = await context.waitStatus(job.id, 'succeeded');
+  expect(composite).toHaveBeenCalledTimes(2);
+  expect(context.submissions).toBe(1);
+  expect(completed.outputs).toHaveLength(1);
+  expect(completed.outputs[0]).toMatchObject({ width: 16, height: 12, mime: 'image/png' });
+  const saved = context.app
+    .get(DatabaseService)
+    .db.select()
+    .from(generationJobs)
+    .where(eq(generationJobs.id, job.id))
+    .get()!;
+  expect(saved.snapshot?.imageEditPostProcess?.intermediateSha256).toMatch(/^[a-f0-9]{64}$/);
+  expect(saved.snapshot?.imageEditPostProcess?.finalSha256).toBe(completed.outputs[0]?.sha256);
+  expect(saved.stagedOutputs).toEqual([]);
+  context.app
+    .get(DatabaseService)
+    .db.update(generationJobs)
+    .set({ status: 'downloading', rawResponse: [{ data: png, mime: 'image/png' }] })
+    .where(eq(generationJobs.id, job.id))
+    .run();
+  await context.restart();
+  const restored = await context.waitStatus(job.id, 'succeeded');
+  expect(restored.outputs.map((item) => item.sha256)).toEqual([completed.outputs[0]?.sha256]);
+  expect(composite).toHaveBeenCalledTimes(2);
+  expect(context.submissions).toBe(1);
+}, 20_000);
 
 it('真实 HTTP 创建图片任务、发布事件、哈希落盘并去重，接口与数据库不含凭据或内联请求', async () => {
   const context = await setup();

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ImageEditRecipe } from './image-edit.js';
 import { Sha256, GenerationInput, MediaFile } from './generation.js';
 
 export const CANVAS_LIMITS = { nodes: 2000, edges: 4000, bytes: 8 * 1024 * 1024 } as const;
@@ -66,6 +67,7 @@ export const CanvasMediaData = z
     pendingJobId: z.string().uuid().optional(),
     pendingJobIds: z.array(z.string().uuid()).max(4).optional(),
     count: z.number().int().min(1).max(4).optional(),
+    imageEdit: ImageEditRecipe.optional(),
   })
   .refine(
     (data) => data.versions.length === 0 || data.activeVersion < data.versions.length,

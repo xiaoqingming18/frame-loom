@@ -17,6 +17,7 @@ import {
   isTaggable,
   ungroup,
   insertImageReference,
+  createImageEditChild,
 } from './commands';
 
 const registry = createBuiltinRegistry();
@@ -74,6 +75,43 @@ it('参考连线与标签一步撤销；参考上限、成环、锁定错误不�
     ),
   ).toThrow('锁定');
   expect(store.getState().document).toBe(original);
+});
+
+it('创建图片编辑子节点和来源连线是一个撤销事务并固定活动源哈希', () => {
+  const source = media('source');
+  source.data = {
+    ...(source.data as CanvasMediaData),
+    versions: [
+      {
+        sha256: 'a'.repeat(64),
+        mime: 'image/png',
+        width: 10,
+        height: 10,
+        createdAt: '2026-10-26T00:00:00.000Z',
+      },
+    ],
+  };
+  const store = createCanvasStore(doc([source]));
+  const recipe = {
+    version: 1 as const,
+    operation: 'angle' as const,
+    source: { nodeId: 'source', sha256: 'a'.repeat(64) },
+    horizontalAngle: 45,
+    pitchAngle: 0,
+    cameraDistance: 4.8,
+    lens: 'standard' as const,
+  };
+  expect(
+    store
+      .getState()
+      .apply((document) => createImageEditChild(registry, document, 'source', recipe, '提示')),
+  ).toBe(true);
+  expect(store.getState().document.nodes).toHaveLength(2);
+  expect(store.getState().document.edges).toHaveLength(1);
+  expect(store.getState().past).toHaveLength(1);
+  store.getState().undo();
+  expect(store.getState().document.nodes).toHaveLength(1);
+  expect(store.getState().document.edges).toHaveLength(0);
 });
 
 describe('分组', () => {

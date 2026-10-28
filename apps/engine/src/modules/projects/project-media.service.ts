@@ -22,6 +22,11 @@ export function documentReferences(document: CanvasDocument) {
       if (version.posterSha256) hashes.add(version.posterSha256);
     }
     for (const reference of data.mediaReferences ?? []) hashes.add(reference.media.sha256);
+    if (data.imageEdit) {
+      hashes.add(data.imageEdit.source.sha256);
+      if (data.imageEdit.operation === 'emotion' && data.imageEdit.artifacts)
+        for (const hash of Object.values(data.imageEdit.artifacts)) if (hash) hashes.add(hash);
+    }
     for (const id of data.pendingJobIds ?? []) jobs.add(id);
     if (data.pendingJobId) jobs.add(data.pendingJobId);
   }
@@ -34,6 +39,16 @@ export function unfinished(job: JobRow) {
 function jobHashes(job: JobRow) {
   return [
     ...job.request.inputs.flatMap((input) => (input.sha256 ? [input.sha256] : [])),
+    ...(job.request.imageEdit ? [job.request.imageEdit.source.sha256] : []),
+    ...(job.request.imageEdit?.operation === 'emotion' && job.request.imageEdit.artifacts
+      ? Object.values(job.request.imageEdit.artifacts).filter((hash): hash is string => !!hash)
+      : []),
+    ...(job.snapshot?.imageEditPostProcess
+      ? [
+          job.snapshot.imageEditPostProcess.intermediateSha256,
+          job.snapshot.imageEditPostProcess.finalSha256,
+        ].filter((hash): hash is string => !!hash)
+      : []),
     ...job.outputs,
   ];
 }

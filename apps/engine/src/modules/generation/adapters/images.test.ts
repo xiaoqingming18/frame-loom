@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { checkGenerationRequest, GenerationRequest } from '@frame-loom/contracts';
+import { checkGenerationRequest, GenerationRequest, ImageEditRecipe } from '@frame-loom/contracts';
 import { openaiImages } from './openai-images.js';
 import { arkImages } from './ark-images.js';
 import { geminiImage } from './gemini-image.js';
@@ -295,4 +295,83 @@ it('提交使用任务的档案快照，显式通用档案不会按模型 ID 升
     quality: 'high',
     background: 'auto',
   });
+});
+
+it('OpenAI 表情编辑按裁切、身份、蒙版顺序提交，且无蒙版时省略 mask 字段', async () => {
+  status = 200;
+  responseBody = JSON.parse(
+    readFileSync(new URL('./fixtures/openai-images.json', import.meta.url), 'utf8'),
+  );
+  const data =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1cAAAAASUVORK5CYII=';
+  const hashes = ['a', 'b', 'c'].map((letter) => letter.repeat(64));
+  const base = {
+    modelId: '11111111-1111-4111-8111-111111111111',
+    mode: 'reference',
+    prompt: '保持角色身份并调整表情',
+    params: {},
+    imageEdit: ImageEditRecipe.parse({
+      version: 1,
+      operation: 'emotion',
+      source: { nodeId: 'source-1', sha256: 'd'.repeat(64) },
+      targetFace: { x: 0, y: 0, width: 1, height: 1 },
+      editRegion: { x: 0, y: 0, width: 1, height: 1 },
+      imageWidth: 1,
+      imageHeight: 1,
+      presetId: 'neutral',
+      intimacy: 0,
+      arousal: 0,
+      characterName: '角色1',
+      maskMode: 'provider',
+      artifacts: { crop: hashes[0], identity: hashes[1], mask: hashes[2] },
+    }),
+  };
+  const context = {
+    baseUrl,
+    apiKey: 'sk-private',
+    headers: {},
+    model: 'gpt-image-1',
+    signal: AbortSignal.timeout(10_000),
+  };
+  const submit = async (
+    inputs: string[],
+    recipe: import('@frame-loom/contracts').ImageEditRecipe = base.imageEdit,
+  ) => {
+    const request = {
+      ...base,
+      imageEdit: recipe,
+      inputs: inputs.map((sha256) => ({
+        kind: 'image' as const,
+        role: 'reference' as const,
+        sha256,
+        dataUrl: `data:image/png;base64,${data}`,
+      })),
+    } as GenerationRequest;
+    await openaiImages.submit(
+      {
+        ...context,
+        profile: imageProfile({
+          kind: 'image',
+          protocol: 'openai-images',
+          upstreamModelId: context.model,
+          profileId: null,
+        }),
+      },
+      request,
+    );
+    return await new Response(requests.at(-1)!.body, {
+      headers: { 'Content-Type': requests.at(-1)!.contentType! },
+    }).formData();
+  };
+  const withMask = await submit(hashes);
+  expect(withMask.getAll('image[]')).toHaveLength(2);
+  expect(withMask.get('mask')).toBeInstanceOf(File);
+  const localRecipe = ImageEditRecipe.parse({
+    ...base.imageEdit,
+    maskMode: 'local',
+    artifacts: { crop: hashes[0], identity: hashes[1] },
+  });
+  const withoutMask = await submit(hashes.slice(0, 2), localRecipe);
+  expect(withoutMask.getAll('image[]')).toHaveLength(2);
+  expect(withoutMask.has('mask')).toBe(false);
 });

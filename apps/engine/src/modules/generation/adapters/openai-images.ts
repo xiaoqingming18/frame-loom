@@ -29,13 +29,16 @@ export const openaiImages: GenerationAdapter = {
       const form = new FormData();
       for (const [key, value] of Object.entries(payload)) form.append(key, String(value));
       for (const [index, input] of request.inputs.entries()) {
-        const [prefix = '', base64 = ''] = input.dataUrl!.split(',');
+        if (!input.dataUrl) throw new Error('图片输入必须在适配器提交前解析为内联数据');
+        const [prefix = '', base64 = ''] = input.dataUrl.split(',');
         const mime = prefix.slice(5, -7);
-        form.append(
-          'image[]',
-          new Blob([Buffer.from(base64, 'base64')], { type: mime }),
-          `reference-${index}.${mime.split('/')[1]}`,
-        );
+        const file = new Blob([Buffer.from(base64, 'base64')], { type: mime });
+        if (
+          request.imageEdit?.operation === 'emotion' &&
+          input.sha256 === request.imageEdit.artifacts?.mask
+        )
+          form.append('mask', file, `mask.${mime.split('/')[1]}`);
+        else form.append('image[]', file, `reference-${index}.${mime.split('/')[1]}`);
       }
       body = form;
     } else {

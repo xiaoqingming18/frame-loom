@@ -3,6 +3,7 @@ import { GenerationComposer } from './generation-composer';
 import {
   checkGenerationRequest,
   checkGenerationMedia,
+  imageEditCapabilityIssue,
   generationParamReason,
   resolveImageParams,
   resolveImagePrompt,
@@ -68,8 +69,13 @@ export function GenerationPanel({
                   ...data.params,
                 },
           inputs,
+          ...(data.imageEdit ? { imageEdit: data.imageEdit } : {}),
           source: 'canvas',
         }
+      : undefined;
+  const imageEditIssue =
+    request?.imageEdit && profile
+      ? imageEditCapabilityIssue(request.imageEdit, profile.imageEditCapabilities)
       : undefined;
   const issues =
     request && profile
@@ -143,6 +149,7 @@ export function GenerationPanel({
     storageMissing && '当前参考素材需要先配置对象存储',
     missingInputs && '连线来源尚无可用媒体，请先生成或上传素材',
     issues[0]?.message,
+    imageEditIssue,
     Object.keys(pendingParams).length > 0 && '模型切换后有参数需要确认或清除',
   ].find((reason) => typeof reason === 'string');
   return (

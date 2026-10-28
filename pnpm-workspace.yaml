@@ -11,4 +11,5 @@ allowBuilds:
   esbuild@0.25.12: true
   esbuild@0.28.2: true
   protobufjs@7.6.6: false
+  sharp@0.34.5: false
   unrs-resolver@1.12.2: false

@@ -248,3 +248,174 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     await rm(userData, { recursive: true, force: true });
   }
 });
+
+test('图片编辑验收：角度立即提交、打光二阶段提交与表情整图写回', async () => {
+  test.setTimeout(150_000);
+  const png = await readFile(new URL('./fixtures/reference-256.png', import.meta.url));
+  const submissions: { body: string; url?: string }[] = [];
+  const upstream = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      submissions.push({ body: Buffer.concat(chunks).toString('latin1'), url: request.url });
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ data: [{ b64_json: png.toString('base64') }] }));
+    });
+  });
+  await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const userData = await mkdtemp(join(tmpdir(), 'frame-loom-image-edit-'));
+  let app: ElectronApplication | undefined;
+  try {
+    app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
+    let page = await app.firstWindow();
+    const channel = Channel.parse(
+      await api(page, '/channels', 'POST', {
+        name: '图片编辑模拟渠道',
+        apiFormat: 'openai-completions',
+        apiKey: 'sk-image-edit-local',
+        baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`,
+        enabled: true,
+        models: [
+          {
+            upstreamModelId: 'gpt-image-1',
+            displayName: 'GPT Image 1',
+            kind: 'image',
+            protocol: 'openai-images',
+            profileId: null,
+            overrides: {},
+            enabled: true,
+          },
+        ],
+      }),
+    );
+    const model = ChannelModelList.parse(await api(page, `/channels/${channel.id}/models`))[0];
+    await api(page, '/model-defaults', 'PUT', { image: model.id });
+    await openProjectCanvas(page, app);
+    await page
+      .getByLabel('上传图片或视频', { exact: true })
+      .setInputFiles(fileURLToPath(new URL('./fixtures/reference-256.png', import.meta.url)));
+    const sourceNode = page.locator('.react-flow__node-image').first();
+    await expect(sourceNode.locator('img')).toBeVisible();
+    await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
+    const editor = page.getByRole('region', { name: '画布编辑区' });
+    await editor.focus();
+    await page.keyboard.press('Escape');
+    await sourceNode.click({ position: { x: 5, y: 5 } });
+    await page.getByRole('button', { name: '多角度编辑' }).waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: '多角度编辑' }).click();
+    await page.getByLabel('编辑模型').selectOption(model.id);
+    await page
+      .getByRole('dialog', { name: '多角度编辑' })
+      .getByRole('button', { name: '确认', exact: true })
+      .click();
+    await expect.poll(() => submissions.length).toBe(1);
+    await expect
+      .poll(async () => {
+        const jobs = (await api(page, '/generation-jobs')) as GenerationJob[];
+        return jobs.some(
+          (job) => job.request.imageEdit?.operation === 'angle' && job.status === 'succeeded',
+        );
+      })
+      .toBe(true);
+    expect(submissions[0]?.url).toBe('/v1/images/edits');
+    await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
+
+    const saved = ProjectPageRecord.parse(await api(page, (await canvasFixture(page)).pagePath));
+    const angleChild = saved.document.nodes.find(
+      (node) =>
+        (node.data as { imageEdit?: { operation?: string } }).imageEdit?.operation === 'angle',
+    )!;
+    const angleNode = page.locator(`.react-flow__node-image[data-id="${angleChild.id}"]`);
+    await editor.focus();
+    await page.keyboard.press('Shift+Digit1');
+    await angleNode.click();
+    await page.getByRole('button', { name: '重打光编辑' }).click();
+    await page.getByLabel('编辑模型').selectOption(model.id);
+    await page
+      .getByRole('dialog', { name: '重打光编辑' })
+      .getByRole('button', { name: '确认', exact: true })
+      .click();
+    await expect(page.getByRole('button', { name: '生成图片', exact: true })).toBeVisible();
+    expect(submissions).toHaveLength(1);
+    await page.getByRole('button', { name: '生成图片', exact: true }).click();
+    await expect.poll(() => submissions.length).toBe(2);
+    await expect
+      .poll(async () => {
+        const jobs = (await api(page, '/generation-jobs')) as GenerationJob[];
+        return jobs.some(
+          (job) => job.request.imageEdit?.operation === 'lighting' && job.status === 'succeeded',
+        );
+      })
+      .toBe(true);
+
+    await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
+    const afterLighting = ProjectPageRecord.parse(
+      await api(page, (await canvasFixture(page)).pagePath),
+    );
+    const lightingChild = afterLighting.document.nodes.find(
+      (node) =>
+        (node.data as { imageEdit?: { operation?: string } }).imageEdit?.operation === 'lighting',
+    )!;
+    await editor.focus();
+    await page.keyboard.press('Shift+Digit1');
+    await page.locator(`.react-flow__node-image[data-id="${lightingChild.id}"]`).click();
+    await page.getByRole('button', { name: '表情编辑' }).click();
+    await expect(page.getByRole('dialog', { name: '表情编辑工作区' })).toBeVisible();
+    await page.getByRole('button', { name: '手动框选' }).click();
+    const image = page.getByAltText('选择要编辑表情的角色');
+    const box = (await image.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.75, { steps: 5 });
+    await page.mouse.up();
+    await page.getByRole('button', { name: '生成表情' }).click();
+    await expect.poll(() => submissions.length).toBe(3);
+    await expect
+      .poll(
+        async () => {
+          const jobs = (await api(page, '/generation-jobs')) as GenerationJob[];
+          return jobs.some(
+            (job) => job.request.imageEdit?.operation === 'emotion' && job.status === 'succeeded',
+          );
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    const finished = (await api(page, '/generation-jobs')) as GenerationJob[];
+    const emotionJob = finished.find((job) => job.request.imageEdit?.operation === 'emotion')!;
+    expect(emotionJob.outputs).toHaveLength(1);
+    expect(emotionJob.outputs[0]).toMatchObject({ width: 256, height: 256, mime: 'image/png' });
+    const pagePath = (await canvasFixture(page)).pagePath;
+    await expect
+      .poll(async () => {
+        const saved = ProjectPageRecord.parse(await api(page, pagePath));
+        return saved.document.nodes
+          .filter(
+            (node) =>
+              (node.data as { imageEdit?: { operation?: string }; versions?: unknown[] }).imageEdit
+                ?.operation === 'emotion',
+          )
+          .map((node) => (node.data as { versions: unknown[] }).versions.length);
+      })
+      .toEqual([1]);
+    await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
+    await app.close();
+    app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
+    page = await app.firstWindow();
+    await openProjectCanvas(page, app);
+    const restored = ProjectPageRecord.parse(await api(page, pagePath));
+    const emotionChild = restored.document.nodes.find(
+      (node) =>
+        (node.data as { imageEdit?: { operation?: string } }).imageEdit?.operation === 'emotion',
+    );
+    expect(emotionChild?.data).toMatchObject({
+      versions: [{ sha256: emotionJob.outputs[0].sha256, width: 256, height: 256 }],
+    });
+    expect(submissions).toHaveLength(3);
+  } finally {
+    await app?.close();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    await rm(userData, { recursive: true, force: true });
+  }
+});

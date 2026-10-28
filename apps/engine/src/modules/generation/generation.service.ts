@@ -40,6 +40,7 @@ import {
 import { openaiImages } from './adapters/openai-images.js';
 import { arkImages } from './adapters/ark-images.js';
 import { geminiImage } from './adapters/gemini-image.js';
+import { compositeEmotion, emotionArtifacts } from './image-emotion.js';
 import { minimaxT2a, openaiSpeech } from './adapters/tts.js';
 import {
   GenerationFailure,
@@ -179,6 +180,55 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     const definition = this.catalog
       .get()
       .definitions.find((item) => item.id === model.definitionId);
+    if (request.imageEdit?.operation === 'emotion') {
+      const recipe = request.imageEdit;
+      const issue = checkGenerationRequest(profile, {
+        ...request,
+        imageEdit: { ...recipe, maskMode: 'local' },
+        inputs: [{ kind: 'image', role: 'reference', sha256: recipe.source.sha256 }],
+      }).find((item) => item.field === 'imageEdit');
+      if (issue) throw new DomainError('INVALID_GENERATION_REQUEST', 422, issue.message);
+      const source = await this.media.resolveAt(recipe.source.sha256, root);
+      const prepared = await emotionArtifacts(await readFile(source.path), recipe.targetFace);
+      if (source.media.width !== recipe.imageWidth || source.media.height !== recipe.imageHeight)
+        throw new DomainError('INVALID_REFERENCE', 422, '源图片尺寸已变化，请重新选择人脸');
+      const crop = await this.media.saveStream(
+        [prepared.crop],
+        undefined,
+        'image',
+        undefined,
+        root,
+      );
+      const identity = await this.media.saveStream(
+        [prepared.identity],
+        undefined,
+        'image',
+        undefined,
+        root,
+      );
+      const mask = profile.imageEditCapabilities?.mask
+        ? await this.media.saveStream([prepared.mask], undefined, 'image', undefined, root)
+        : undefined;
+      request.imageEdit = {
+        ...recipe,
+        targetFace: prepared.face,
+        editRegion: prepared.region,
+        artifacts: {
+          crop: crop.sha256,
+          identity: identity.sha256,
+          ...(mask ? { mask: mask.sha256 } : {}),
+        },
+        maskMode: mask ? 'provider' : 'local',
+        postProcess: 'pending',
+      };
+      request.inputs = [
+        { kind: 'image', role: 'reference', sha256: crop.sha256 },
+        { kind: 'image', role: 'reference', sha256: identity.sha256 },
+        ...(mask
+          ? [{ kind: 'image' as const, role: 'reference' as const, sha256: mask.sha256 }]
+          : []),
+      ];
+    }
     const issues = checkGenerationRequest(profile, request);
     if (issues.length)
       throw new DomainError(
@@ -219,6 +269,16 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       if (root) await this.media.adoptAt(root, [stored.sha256]);
       item.sha256 = stored.sha256;
       delete item.dataUrl;
+    }
+    if (request.imageEdit) {
+      const source = await this.media.resolveAt(request.imageEdit.source.sha256, root);
+      if (
+        request.imageEdit.operation === 'emotion' &&
+        (source.media.width !== request.imageEdit.imageWidth ||
+          source.media.height !== request.imageEdit.imageHeight)
+      )
+        throw new DomainError('INVALID_REFERENCE', 422, '编辑配方的源图片尺寸已变化');
+      if (root) await this.media.adoptAt(root, [source.media.sha256]);
     }
     const mediaIssues = checkGenerationMedia(
       profile,
@@ -719,16 +779,33 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         const outputs: string[] = [...row.outputs];
         const completed = new Set(row.snapshot?.completedDownloads ?? []);
         const stagedOutputs = new Set(row.stagedOutputs);
+        const emotionEdit =
+          row.request.imageEdit?.operation === 'emotion' ? row.request.imageEdit : undefined;
+        const persistedIntermediate = row.snapshot?.imageEditPostProcess?.intermediateSha256;
+        if (emotionEdit && persistedIntermediate) completed.add(0);
         const record = (media: { sha256: string }, staged: boolean, index: number) => {
-          outputs.push(media.sha256);
+          if (!emotionEdit) outputs.push(media.sha256);
           completed.add(index);
-          if (staged) stagedOutputs.add(media.sha256);
+          if (staged && !emotionEdit) stagedOutputs.add(media.sha256);
           else stagedOutputs.delete(media.sha256);
           this.update(row.id, {
-            outputs: [...new Set([...row.outputs, ...outputs])],
+            outputs: emotionEdit ? row.outputs : [...new Set([...row.outputs, ...outputs])],
             stagedOutputs: [...stagedOutputs],
             ...(row.snapshot
-              ? { snapshot: { ...row.snapshot, completedDownloads: [...completed] } }
+              ? {
+                  snapshot: {
+                    ...row.snapshot,
+                    completedDownloads: [...completed],
+                    ...(emotionEdit
+                      ? {
+                          imageEditPostProcess: {
+                            ...row.snapshot.imageEditPostProcess,
+                            intermediateSha256: media.sha256,
+                          },
+                        }
+                      : {}),
+                  },
+                }
               : {}),
           });
         };
@@ -771,10 +848,73 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
             );
         }
         if (signal.aborted || this.row(row.id).status === 'cancelled') return;
+        if (emotionEdit) {
+          const intermediate = this.row(row.id).snapshot?.imageEditPostProcess?.intermediateSha256;
+          if (!intermediate)
+            throw new GenerationFailure('upstream', 'MISSING_EDIT_OUTPUT', '缺少表情编辑中间图');
+          const alreadyFinal = this.row(row.id).snapshot?.imageEditPostProcess?.finalSha256;
+          if (alreadyFinal) {
+            this.update(row.id, {
+              status: 'succeeded',
+              outputs: [alreadyFinal],
+              stagedOutputs: [],
+              rawResponse: null,
+              nextPollAt: null,
+              errorCategory: null,
+              errorCode: null,
+              errorMessage: null,
+              finishedAt: new Date().toISOString(),
+            });
+            return;
+          }
+          const source = await this.media.resolveAt(
+            emotionEdit.source.sha256,
+            row.projectId ? await this.files.root(row.projectId).catch(() => undefined) : undefined,
+          );
+          const generated = await this.media.resolveAt(
+            intermediate,
+            row.projectId ? await this.files.root(row.projectId).catch(() => undefined) : undefined,
+          );
+          const final = await compositeEmotion(
+            await readFile(source.path),
+            await readFile(generated.path),
+            emotionEdit.editRegion,
+            emotionEdit.targetFace,
+          );
+          {
+            const finalMedia = await this.media.saveStream(
+              [final],
+              signal,
+              'image',
+              'image/png',
+              row.projectId
+                ? await this.files.root(row.projectId).catch(() => undefined)
+                : undefined,
+            );
+            outputs.push(finalMedia.sha256);
+            const latest = this.row(row.id);
+            this.update(row.id, {
+              outputs: [finalMedia.sha256],
+              snapshot: latest.snapshot
+                ? {
+                    ...latest.snapshot,
+                    imageEditPostProcess: {
+                      intermediateSha256: intermediate,
+                      finalSha256: finalMedia.sha256,
+                    },
+                  }
+                : null,
+            });
+          }
+        }
         this.update(row.id, {
           status: 'succeeded',
-          outputs: [...new Set(outputs)],
-          stagedOutputs: [...stagedOutputs].filter((hash) => outputs.includes(hash)),
+          outputs: emotionEdit
+            ? [this.row(row.id).snapshot?.imageEditPostProcess?.finalSha256 ?? outputs.at(-1)!]
+            : [...new Set(outputs)],
+          stagedOutputs: emotionEdit
+            ? []
+            : [...stagedOutputs].filter((hash) => outputs.includes(hash)),
           rawResponse: null,
           nextPollAt: null,
           errorCategory: null,

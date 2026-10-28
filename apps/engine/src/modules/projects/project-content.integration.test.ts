@@ -23,6 +23,7 @@ import { GenerationAdapters, GenerationService } from '../generation/generation.
 import { generationJobs, mediaFiles } from '../generation/generation.schema.js';
 import { ChannelsRepository } from '../channels/channels.repository.js';
 import { ProjectMediaService } from './project-media.service.js';
+import { documentReferences } from './project-media.service.js';
 import { ProjectAssetsService } from './project-assets.service.js';
 import { assetPath } from './project-files.service.js';
 import { ObjectStorageService } from '../object-storage/object-storage.service.js';
@@ -119,6 +120,32 @@ function document(hashes: string[], pendingJobIds: string[] = []) {
     ],
   });
 }
+
+it('媒体引用扫描保护编辑源与表情中间工件哈希', () => {
+  const source = 'a'.repeat(64),
+    crop = 'b'.repeat(64),
+    identity = 'c'.repeat(64),
+    mask = 'd'.repeat(64);
+  const doc = document([]);
+  Object.assign(doc.nodes[0].data as Record<string, unknown>, {
+    imageEdit: {
+      version: 1,
+      operation: 'emotion',
+      source: { nodeId: 'source-node', sha256: source },
+      targetFace: { x: 10, y: 10, width: 40, height: 50 },
+      editRegion: { x: 0, y: 0, width: 80, height: 90 },
+      imageWidth: 200,
+      imageHeight: 150,
+      presetId: 'neutral',
+      intimacy: 0,
+      arousal: 0,
+      characterName: '角色1',
+      maskMode: 'provider',
+      artifacts: { crop, identity, mask },
+    },
+  });
+  expect(documentReferences(doc).hashes).toEqual(new Set([source, crop, identity, mask]));
+});
 function model(app: INestApplication<Server>) {
   const channels = app.get(ChannelsRepository);
   const channel = channels.saveChannel({
@@ -445,17 +472,26 @@ it('全局启动清理保留未结束任务输入和产物、移除项目暂存�
     mode: 'text',
   });
   const hashes: string[] = [];
-  for (let i = 0; i < 4; i++)
+  for (let i = 0; i < 5; i++)
     hashes.push((await media.saveStream([Buffer.concat([png, Buffer.from([i])])])).sha256);
   const unfinished = await generation.create(request),
     old = await generation.create(request),
     removed = await generation.create(request);
   const db = s.app.get(DatabaseService).db;
+  const unfinishedRow = db
+    .select()
+    .from(generationJobs)
+    .where(eq(generationJobs.id, unfinished.id))
+    .get()!;
   db.update(generationJobs)
     .set({
       status: 'submit_unknown',
       outputs: [hashes[0]],
       request: { ...request, inputs: [{ kind: 'image', role: 'reference', sha256: hashes[1] }] },
+      snapshot: {
+        ...unfinishedRow.snapshot!,
+        imageEditPostProcess: { intermediateSha256: hashes[4] },
+      },
     })
     .where(eq(generationJobs.id, unfinished.id))
     .run();
@@ -473,7 +509,7 @@ it('全局启动清理保留未结束任务输入和产物、移除项目暂存�
     .where(eq(generationJobs.id, removed.id))
     .run();
   await s.restart();
-  for (const i of [0, 1, 3])
+  for (const i of [0, 1, 3, 4])
     expect((await s.app.get(MediaService).resolve(hashes[i])).path).toContain(s.config.dataDir);
   await expect(s.app.get(MediaService).resolve(hashes[2])).rejects.toMatchObject({
     code: 'MEDIA_NOT_FOUND',

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ImageEditCapabilities, ImageEditRecipe, imageEditCapabilityIssue } from './image-edit.js';
 
 export const ImageProtocol = z.enum(['openai-images', 'gemini-image', 'ark-images']);
 export type ImageProtocol = z.infer<typeof ImageProtocol>;
@@ -41,6 +42,7 @@ export const GenerationRequest = z.strictObject({
   prompt: z.string().trim().min(1).max(32_000),
   params: z.record(z.string().max(100), Value).default({}),
   inputs: z.array(GenerationInput).max(50).default([]),
+  imageEdit: ImageEditRecipe.optional(),
   source: z.enum(['manual', 'agent', 'canvas', 'test']).default('manual'),
 });
 export type GenerationRequest = z.infer<typeof GenerationRequest>;
@@ -48,6 +50,7 @@ export const ModelProfile = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   kind: z.enum(['image', 'video', 'tts']),
+  imageEditCapabilities: ImageEditCapabilities.optional(),
   protocol: MediaProtocol,
   matchIds: z.array(z.string()),
   generic: z.boolean(),
@@ -141,6 +144,19 @@ export function checkGenerationRequest(
   )
     add('prompt', `提示词最多 ${profile.promptMaxBytes} UTF-8 字节`);
   if (!profile.modes.some((mode) => mode.id === request.mode)) add('mode', '当前档案不支持此模式');
+  if (request.imageEdit) {
+    const issue = imageEditCapabilityIssue(request.imageEdit, profile.imageEditCapabilities);
+    if (issue) add('imageEdit', issue);
+    const required =
+      request.imageEdit.operation === 'emotion'
+        ? request.imageEdit.artifacts
+          ? [request.imageEdit.artifacts.crop, request.imageEdit.artifacts.identity]
+          : [request.imageEdit.source.sha256]
+        : [request.imageEdit.source.sha256];
+    for (const hash of required)
+      if (!request.inputs.some((input) => input.kind === 'image' && input.sha256 === hash))
+        add('inputs', '图片编辑所需的源图或工件引用缺失');
+  }
   if (profile.kind === 'video' && !['text', 'frames', 'reference'].includes(request.mode))
     add('mode', '当前版本尚未实现此创作操作');
   if (
