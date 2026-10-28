@@ -16,6 +16,7 @@ import {
   Lock,
   Plus,
   Upload,
+  AudioLines,
 } from 'lucide-react';
 import {
   VIDEO_MODE_LABELS,
@@ -246,14 +247,14 @@ export function NodeHeader({ node, icon }: { node: CanvasNode; icon: ReactNode }
   );
 }
 
-function MediaFrame({
+export function MediaFrame({
   node,
   selected,
   kind,
   children,
   toolbar,
 }: NodeViewProps<CanvasMediaData> & {
-  kind: 'image' | 'video';
+  kind: 'image' | 'video' | 'audio';
   children: ReactNode;
   toolbar?: ReactNode;
 }) {
@@ -265,7 +266,7 @@ function MediaFrame({
   const single = useCanvasState((state) => state.selectedNodes.size <= 1);
   const nodeActions = useContext(NodeActionsContext);
   const model = useCanvasState((state) =>
-    generationModel(state.generationConfig, kind, node.data.modelId),
+    generationModel(state.generationConfig, kind === 'audio' ? 'tts' : kind, node.data.modelId),
   );
   const document = useCanvasState((state) => state.document);
   const baseInputs =
@@ -285,7 +286,10 @@ function MediaFrame({
 
   return (
     <div className="group/media flex size-full flex-col">
-      <NodeHeader node={node} icon={kind === 'image' ? <ImageIcon /> : <Film />} />
+      <NodeHeader
+        node={node}
+        icon={kind === 'image' ? <ImageIcon /> : kind === 'audio' ? <AudioLines /> : <Film />}
+      />
       <NodeResizer
         isVisible={selected && !locked}
         minWidth={definition.minSize.width}

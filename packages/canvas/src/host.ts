@@ -15,6 +15,8 @@ import type {
   ProtocolDescriptor,
   MediaKind,
   ExtraParam,
+  VoiceDirectory,
+  VoiceWrite,
 } from '@frame-loom/contracts';
 
 export interface CanvasGenerationModel {
@@ -34,7 +36,14 @@ export interface CanvasGenerationConfig {
 
 /** 宿主负责模型配置与任务通信，画布负责输入映射、编辑与结果写回。 */
 export interface CanvasGenerationHost {
-  Panel?: ComponentType<{ nodeId: string; kind: 'image' | 'video'; data: CanvasMediaData }>;
+  Panel?: ComponentType<{
+    nodeId: string;
+    kind: 'image' | 'video' | 'audio';
+    data: CanvasMediaData;
+  }>;
+  voices?(modelId: string): Promise<VoiceDirectory>;
+  fetchVoices?(modelId: string): Promise<VoiceDirectory>;
+  saveVoice?(modelId: string, voice: VoiceWrite): Promise<VoiceDirectory>;
   load(signal: AbortSignal): Promise<CanvasGenerationConfig>;
   create(request: SemanticRequest): Promise<GenerationJob>;
   get(id: string, signal: AbortSignal): Promise<GenerationJob>;

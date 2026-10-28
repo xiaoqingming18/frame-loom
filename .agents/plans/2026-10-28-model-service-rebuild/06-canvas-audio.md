@@ -1,6 +1,6 @@
 # Plan: 画布音频节点
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -56,15 +56,15 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 修改 contracts 画布契约，登记 `audio`；engine `project-media.service.ts` 补充音频节点引用的测试 — 验证：`pnpm --filter @frame-loom/contracts test`、`pnpm --filter @frame-loom/engine test -- project`
-- [ ] T2 实现节点定义、视图、播放与版本切换，并注册到 `createBuiltinRegistry` — 验证：组件测试覆盖创建节点、无版本时的空状态、播放控件、版本切换、标签可用
-- [ ] T3 实现 TTS 输入框与音色选择，扩展宿主接口，在 `project-canvas.tsx` 中实现音色相关的三个方法 — 验证：组件测试覆盖：
+- [x] T1 修改 contracts 画布契约，登记 `audio`；engine `project-media.service.ts` 补充音频节点引用的测试 — 验证：`pnpm --filter @frame-loom/contracts test`、`pnpm --filter @frame-loom/engine test -- project`
+- [x] T2 实现节点定义、视图、播放与版本切换，并注册到 `createBuiltinRegistry` — 验证：组件测试覆盖创建节点、无版本时的空状态、播放控件、版本切换、标签可用
+- [x] T3 实现 TTS 输入框与音色选择，扩展宿主接口，在 `project-canvas.tsx` 中实现音色相关的三个方法 — 验证：组件测试覆盖：
   - 能力卡驱动显隐：指令文本、三个滑块、拉取与手填入口。
   - 字数上限阻止提交。
   - 远端拉取失败时保留手填。
   - 提交的请求体。
-- [ ] T4 实现写回与音频到视频参考的连接 — 验证：单测覆盖写回后的版本元数据；连接只在视频参考接受音频时被允许；参考音频总时长超限时视频节点阻止提交
-- [ ] T5 编写 E2E `apps/desktop/e2e/canvas-audio.test.ts`，替代 `tts-audio.test.ts`，后者删除。模拟上游提供 `gemini-generate` TTS（返回 base64 PCM）与 `ark-seedance` — 验证：
+- [x] T4 实现写回与音频到视频参考的连接 — 验证：单测覆盖写回后的版本元数据；连接只在视频参考接受音频时被允许；参考音频总时长超限时视频节点阻止提交
+- [x] T5 编写 E2E `apps/desktop/e2e/canvas-audio.test.ts`，替代 `tts-audio.test.ts`，后者删除。模拟上游提供 `gemini-generate` TTS（返回 base64 PCM）与 `ark-seedance` — 验证：
   - E2E 覆盖：添加音频节点、选模型与音色、生成、写回、播放（检查 `<audio>` 的 `duration` 大于 0）、连到视频节点参考端口、视频提交的请求体中出现 `reference_audio`、重启后版本仍在。
   - 截取明暗两种主题下的音频节点截图并人工查看。
   - 命令：`pnpm --filter @frame-loom/desktop test:e2e -- canvas-audio`
@@ -72,7 +72,7 @@ Parent: plan.md
 ## 验证
 
 - 预期：contracts、engine、canvas、desktop 中受影响的单测通过；`canvas-audio` E2E 通过；截图经人工查看；`rg -n "tts-audio" apps/desktop/e2e` 结果为空。
-- 实际：未执行。
+- 实际（2026-10-29）：contracts 16 文件 236 用例、engine project 4 文件 31 用例、canvas 26 文件 145 用例、desktop 21 文件 214 用例通过；全仓 typecheck、lint 通过。canvas-audio E2E 1/1 通过，断言 Gemini Kore 音色、3 秒 PCM 包装 WAV 后播放、S3 mock 上传一次、Seedance reference_audio 请求、视频写回与重启音频保留。audio-light/dark、audio-params-light/dark、audio-params-light/dark-800 共 6 张截图已人工查看，参数区滚动、焦点环和明暗文字正常，800 宽参数弹层未出视口。tts-audio 文件已删除。
 
 ## 进度
 
@@ -80,8 +80,10 @@ Parent: plan.md
 
 ## 发现与偏差
 
-无。
+- URL 参考素材的生产公网校验拒绝回环地址，因此增加仅 E2E 使用的启动器 local-storage-main.cjs／local-storage-engine.mjs：示例公网 S3 地址只用于签名和地址校验，fetch 在测试进程边界重定向至 127.0.0.1 严格 mock，并拒绝其他非回环请求。生产代码无测试开关、无私网放行。
+- 音色宿主方法可选，未接入宿主保留内置能力预览；正式桌面实现全部三个方法。预览复用同一 TTS 参数控件，不依赖画布上下文。
+- 音频纳入节点删除的任务取消、剪贴板素材认领与运行时任务写回，避免只有视图能显示却丢失媒体生命周期。
 
 ## 交接
 
-尚未开始。
+T1–T5 已完成；07 可复用 URL 素材 E2E 启动器。全部实际网络连接只到本地严格 mock，无真实凭据或模型调用。

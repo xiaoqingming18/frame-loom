@@ -71,7 +71,7 @@ export function generationReferences(document: CanvasDocument, nodeId: string) {
     })
     .flatMap((edge) => {
       const source = document.nodes.find((node) => node.id === edge.source);
-      if (!source || (source.type !== 'image' && source.type !== 'video')) return [];
+      if (!source || !['image', 'video', 'audio'].includes(source.type)) return [];
       const data = source.data as CanvasMediaData;
       const media = data.versions?.[data.activeVersion ?? -1];
       return media
@@ -81,7 +81,7 @@ export function generationReferences(document: CanvasDocument, nodeId: string) {
               node: source,
               media,
               input: {
-                kind: source.type === 'video' ? ('video' as const) : ('image' as const),
+                kind: source.type as 'image' | 'video' | 'audio',
                 role: InputRole.safeParse(edge.targetHandle).success
                   ? InputRole.parse(edge.targetHandle)
                   : ('reference' as const),

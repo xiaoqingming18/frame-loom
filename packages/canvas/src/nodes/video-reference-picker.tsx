@@ -57,11 +57,11 @@ function videoReferenceCandidates(
   const base = removeVideoReferences(document, nodeId, replaced);
   const refs = generationSources(base, nodeId);
   return document.nodes.flatMap((node) => {
-    if (!['image', 'video'].includes(node.type) || !registry.supports(node)) return [];
+    if (!['image', 'video', 'audio'].includes(node.type) || !registry.supports(node)) return [];
     const media = activeVersion(node.data as CanvasMediaData);
     if (!media) return [];
     const input: SemanticInput = {
-      kind: node.type as 'image' | 'video',
+      kind: node.type as 'image' | 'video' | 'audio',
       role,
       sha256: media.sha256,
       order: refs.length,
@@ -172,7 +172,7 @@ export function VideoReferencePicker({
                   />
                 ) : (
                   <span className="flex h-14 w-full items-center justify-center rounded-md bg-muted">
-                    视频
+                    {media.mime.startsWith('audio/') ? '音频' : '视频'}
                   </span>
                 )}
                 <span className="w-full truncate text-xs">{node.title ?? node.id}</span>

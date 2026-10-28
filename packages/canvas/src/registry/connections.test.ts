@@ -7,7 +7,7 @@ import { doc, edge, group, media } from '../test-utils';
 import { checkConnection } from './connections';
 
 const registry = createBuiltinRegistry().register({
-  type: 'audio',
+  type: 'audio-sink',
   version: 1,
   label: '音频',
   icon: null,
@@ -37,7 +37,7 @@ describe('checkConnection', () => {
     video('first_last', 'first_last'),
     video('text', 't2v'),
     video('ref', 'reference'),
-    { ...media('aud'), type: 'audio', typeVersion: 1, data: {} },
+    { ...media('aud'), type: 'audio-sink', typeVersion: 1, data: {} },
     group('g'),
   ];
 

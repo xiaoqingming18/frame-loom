@@ -18,5 +18,14 @@ export function defaultMediaParams(cap: Capability): SemanticParams {
         : {}),
       ...(cap.watermark ? { watermark: cap.watermark.default } : {}),
     };
+  if (cap.kind === 'tts')
+    return {
+      ...(cap.voices.default ? { voice: cap.voices.default } : {}),
+      ...(cap.speed ? { speed: cap.speed.default } : {}),
+      ...(cap.pitch ? { pitch: cap.pitch.default } : {}),
+      ...(cap.volume ? { volume: cap.volume.default } : {}),
+      ...(cap.defaultFormat ? { format: cap.defaultFormat } : {}),
+      ...(cap.defaultSampleRate ? { sampleRate: cap.defaultSampleRate } : {}),
+    };
   return {};
 }

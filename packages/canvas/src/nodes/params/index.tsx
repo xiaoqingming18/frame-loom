@@ -10,6 +10,7 @@ import { Button } from '@frame-loom/ui/components/button';
 import { TooltipProvider } from '@frame-loom/ui/components/tooltip';
 import { ImageParams } from './image-params';
 import { VideoParams } from './video-params';
+import { TtsParams } from './tts-params';
 import type { CapabilityParamsProps } from './types';
 
 export function CapabilityParams(props: CapabilityParamsProps) {
@@ -17,6 +18,8 @@ export function CapabilityParams(props: CapabilityParamsProps) {
     <ImageParams {...props} />
   ) : props.capability.kind === 'video' ? (
     <VideoParams {...props} />
+  ) : props.capability.kind === 'tts' ? (
+    <TtsParams key={props.modelId} {...props} />
   ) : null;
 }
 

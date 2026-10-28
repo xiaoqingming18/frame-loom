@@ -59,7 +59,7 @@ export function GenerationComposer({
   onModel,
 }: {
   nodeId: string;
-  kind: 'image' | 'video';
+  kind: 'image' | 'video' | 'audio';
   data: CanvasMediaData;
   model: Model | undefined;
   options: Model[];
@@ -112,9 +112,12 @@ export function GenerationComposer({
         ]
           .filter(Boolean)
           .join(' · ')
-      : '比例 · 时长';
+      : kind === 'audio'
+        ? '音色 · 输出'
+        : '比例 · 时长';
   const videoMode = data.mode ?? (capability?.kind === 'video' ? capability.defaultMode : 't2v');
-  const hasMaterialBar = kind === 'image' || videoMode !== 't2v' || inputs.length > 0;
+  const hasMaterialBar =
+    kind !== 'audio' && (kind === 'image' || videoMode !== 't2v' || inputs.length > 0);
   const preview = resolvePromptReferences(
     data.prompt,
     references.map((ref) => ({ id: ref.sourceId, kind: ref.input.kind })),
@@ -246,9 +249,11 @@ export function GenerationComposer({
             disabled={locked}
             defaultValue={data.prompt}
             maxLength={
-              capability && 'promptMaxChars' in capability
-                ? (capability.promptMaxChars ?? 32000)
-                : 32000
+              capability?.kind === 'tts'
+                ? (capability.maxChars ?? 32000)
+                : capability && 'promptMaxChars' in capability
+                  ? (capability.promptMaxChars ?? 32000)
+                  : 32000
             }
             placeholder="描述你想要生成的内容…"
             className={`min-h-0 resize-none rounded-none border-0 bg-transparent px-3.5 py-3 pr-11 text-sm shadow-none transition-[height] duration-200 ease-in-out focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[292px]' : 'h-32'}`}
@@ -281,9 +286,11 @@ export function GenerationComposer({
           </Button>
           <span aria-label="提示词字数">
             {preview.prompt.length} /{' '}
-            {capability && 'promptMaxChars' in capability
-              ? (capability.promptMaxChars ?? 32000)
-              : 32000}
+            {capability?.kind === 'tts'
+              ? (capability.maxChars ?? 32000)
+              : capability && 'promptMaxChars' in capability
+                ? (capability.promptMaxChars ?? 32000)
+                : 32000}
           </span>
         </div>
         <div className="flex items-center gap-1 px-3 pb-3">
@@ -363,6 +370,7 @@ export function GenerationComposer({
               {model && (
                 <>
                   <CapabilityParams
+                    modelId={model.id}
                     capability={model.capability}
                     protocol={model.protocol}
                     mode={data.mode}
@@ -458,7 +466,7 @@ export function GenerationComposer({
               >
                 <Button
                   size="icon"
-                  aria-label={`生成${kind === 'image' ? '图片' : '视频'}`}
+                  aria-label={`生成${kind === 'image' ? '图片' : kind === 'audio' ? '音频' : '视频'}`}
                   aria-describedby={disabledReason ? `generation-reason-${nodeId}` : undefined}
                   disabled={!!disabledReason}
                   onClick={onGenerate}

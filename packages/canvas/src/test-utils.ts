@@ -69,13 +69,13 @@ export function generationJob(overrides: Partial<GenerationJob> = {}): Generatio
 
 export function media(
   id: string,
-  type: 'image' | 'video' = 'image',
+  type: 'image' | 'video' | 'audio' = 'image',
   extra: Partial<CanvasNode> = {},
 ): CanvasNode {
   return {
     id,
     type,
-    typeVersion: 3,
+    typeVersion: type === 'audio' ? 1 : 3,
     position: { x: 0, y: 0 },
     size: { width: 100, height: 100 },
     title: id,

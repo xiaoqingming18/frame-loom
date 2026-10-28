@@ -24,7 +24,7 @@ export function GenerationRuntime() {
         const ids = new Set(
           documents.flatMap((document) =>
             document.nodes.flatMap((node) => {
-              if (node.type !== 'image' && node.type !== 'video') return [];
+              if (!['image', 'video', 'audio'].includes(node.type)) return [];
               const ids = (node.data as CanvasMediaData | null)?.pendingJobIds ?? [];
               return ids.filter((id) => !changedId || id === changedId);
             }),
@@ -39,7 +39,7 @@ export function GenerationRuntime() {
               store.getState().applySystem((document) => ({
                 ...document,
                 nodes: document.nodes.map((node) => {
-                  if (node.type !== 'image' && node.type !== 'video') return node;
+                  if (!['image', 'video', 'audio'].includes(node.type)) return node;
                   const data = node.data as CanvasMediaData;
                   return data.pendingJobIds?.includes(id)
                     ? {

@@ -7,6 +7,7 @@ import type {
 } from '@frame-loom/contracts';
 
 export interface CapabilityParamsProps {
+  modelId?: string;
   capability: Capability;
   protocol: ProtocolDescriptor;
   mode?: VideoModeId;

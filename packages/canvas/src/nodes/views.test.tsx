@@ -7,6 +7,7 @@ import { createCanvasStore } from '../store/store';
 import { doc, edge, media, sha, generationJob, generationModelFixture } from '../test-utils';
 import { createBuiltinRegistry } from './builtin';
 import { ImageNodeView, VideoNodeView, NodeHeader } from './views';
+import { AudioNodeView } from './audio-view';
 
 const zoom = vi.hoisted(() => ({ value: 1 }));
 
@@ -26,6 +27,56 @@ vi.mock('@xyflow/react', () => ({
 afterEach(() => {
   cleanup();
   zoom.value = 1;
+});
+it('音频空状态、播放控件、标签与版本切换复用媒体视图', async () => {
+  const node = media('audio', 'audio', { tagId: 'tag' });
+  const store = createCanvasStore(doc([node]));
+  const registry = createBuiltinRegistry();
+  expect(registry.inputs(node)).toEqual([]);
+  expect(registry.outputs(node)).toEqual([{ id: 'out', label: '音频', dataType: 'audio' }]);
+  store.getState().setTags([{ id: 'tag', name: '配音', color: 'orange', builtin: false }]);
+  function View() {
+    const current = useCanvasState((state) => state.document.nodes[0]);
+    return (
+      <AudioNodeView
+        node={{ ...current, data: current.data as CanvasMediaData }}
+        selected={false}
+      />
+    );
+  }
+  const host = {
+    media: { upload: vi.fn(), url: (hash: string) => hash },
+    tags: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+  };
+  render(
+    <CanvasContext.Provider value={{ store, registry, host }}>
+      <View />
+    </CanvasContext.Provider>,
+  );
+  expect(screen.getByText('填写文本，生成语音')).toBeDefined();
+  expect(screen.getByText('配音')).toBeDefined();
+  const version = { ...generationJob().outputs[0], mime: 'audio/wav', durationMs: 1000 };
+  await act(() =>
+    store.getState().apply((document) => ({
+      ...document,
+      nodes: [
+        {
+          ...document.nodes[0],
+          data: {
+            versions: [version, { ...version, sha256: sha('b'), durationMs: 2000 }],
+            activeVersion: 1,
+            prompt: '',
+            inputOrder: [],
+          },
+        },
+      ],
+    })),
+  );
+  expect(screen.getByText('2.0 秒')).toBeDefined();
+  expect(document.querySelector('audio')?.controls).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '上一版本' }));
+  expect(screen.getByText('1.0 秒')).toBeDefined();
+  expect(document.querySelector('audio')?.getAttribute('src')).toBe(sha('a'));
 });
 it('媒体加载失败显示缺失占位且保留原始版本', () => {
   const node = media('missing', 'image', {

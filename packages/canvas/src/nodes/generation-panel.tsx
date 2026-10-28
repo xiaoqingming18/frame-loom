@@ -22,7 +22,7 @@ export function GenerationPanel({
   data,
 }: {
   nodeId: string;
-  kind: 'image' | 'video';
+  kind: 'image' | 'video' | 'audio';
   data: CanvasMediaData;
 }) {
   const { host, store } = useCanvas();
@@ -50,8 +50,9 @@ export function GenerationPanel({
   const api = host.generation;
   if (!api) return null;
 
-  const options = config?.models.filter((model) => model.kind === kind) ?? [];
-  const model = generationModel(config, kind, data.modelId);
+  const modelKind = kind === 'audio' ? 'tts' : kind;
+  const options = config?.models.filter((model) => model.kind === modelKind) ?? [];
+  const model = generationModel(config, modelKind, data.modelId);
   const cap = model?.capability;
   const mode = cap?.kind === 'video' ? (data.mode ?? cap.defaultMode) : undefined;
   const pendingParams = data.pendingParams ?? {};

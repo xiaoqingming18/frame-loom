@@ -11,7 +11,7 @@ export function writeGenerationJob(document: CanvasDocument, job: GenerationJob)
   if (!job.outputs.length && !['succeeded', 'cancelled'].includes(job.status)) return document;
   let changed = false;
   const nodes = document.nodes.map((node) => {
-    if (node.type !== 'image' && node.type !== 'video') return node;
+    if (!['image', 'video', 'audio'].includes(node.type)) return node;
     const data = node.data as CanvasMediaData;
     if (!data.pendingJobIds?.includes(job.id)) return node;
     let next = data;

@@ -1,4 +1,4 @@
-import { Film, Group, ImageIcon } from 'lucide-react';
+import { AudioLines, Film, Group, ImageIcon } from 'lucide-react';
 import { CanvasGroupData, CanvasMediaData, migrateCanvasMediaData } from '@frame-loom/contracts';
 import { defineNodeType, NodeRegistry } from '../registry/registry';
 import {
@@ -10,6 +10,26 @@ import {
   videoOutputs,
 } from './media';
 import { GroupNodeView, ImageNodeView, VideoNodeView } from './views';
+import { AudioNodeView } from './audio-view';
+
+export const audioNode = defineNodeType({
+  type: 'audio',
+  version: 1,
+  label: '音频',
+  icon: <AudioLines />,
+  category: 'media',
+  defaultSize: { width: 320, height: 160 },
+  minSize: { width: 240, height: 120 },
+  dataSchema: CanvasMediaData,
+  createData: () => emptyMedia(),
+  inputs: () => [],
+  outputs: () => [{ id: 'out', label: '音频', dataType: 'audio' }],
+  output(data) {
+    const version = activeVersion(data);
+    return version ? { kind: 'audio', sha256: version.sha256 } : null;
+  },
+  View: AudioNodeView,
+});
 
 function migrateMedia(data: unknown): CanvasMediaData {
   return CanvasMediaData.parse(migrateCanvasMediaData(data));
@@ -73,5 +93,9 @@ export const groupNode = defineNodeType<CanvasGroupData>({
 });
 
 export function createBuiltinRegistry(): NodeRegistry {
-  return new NodeRegistry().register(imageNode).register(videoNode).register(groupNode);
+  return new NodeRegistry()
+    .register(imageNode)
+    .register(videoNode)
+    .register(audioNode)
+    .register(groupNode);
 }

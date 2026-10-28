@@ -16,6 +16,7 @@ import {
   MediaFile,
   ModelDefaults,
   ObjectStorageState,
+  VoiceDirectory,
 } from '@frame-loom/contracts';
 import { CanvasEditor, downloadCanvasDocument, type CanvasHost } from '@frame-loom/canvas';
 import { Button } from '@frame-loom/ui/components/button';
@@ -147,6 +148,14 @@ export function ProjectCanvas({
             ),
         },
         generation: {
+          voices: (id) => engineClient.request(`/models/${id}/voices`, VoiceDirectory),
+          fetchVoices: (id) =>
+            engineClient.request(`/models/${id}/voices/remote`, VoiceDirectory, { method: 'POST' }),
+          saveVoice: (id, voice) =>
+            engineClient.request(`/models/${id}/voices`, VoiceDirectory, {
+              method: 'POST',
+              body: voice,
+            }),
           load: async (signal) => {
             const [channels, models, defaults, storage] = await Promise.all([
               engineClient.request('/channels', Channel.array(), { signal }),

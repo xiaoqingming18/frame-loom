@@ -6,7 +6,7 @@ export async function adoptMedia(host: CanvasHost, nodes: CanvasNode[]) {
   if (!host.media.adopt) return [];
   const hashes = new Set<string>();
   for (const node of nodes) {
-    if (node.type !== 'image' && node.type !== 'video') continue;
+    if (!['image', 'video', 'audio'].includes(node.type)) continue;
     const parsed = CanvasMediaData.safeParse(node.data);
     if (!parsed.success) continue;
     for (const version of parsed.data.versions) {

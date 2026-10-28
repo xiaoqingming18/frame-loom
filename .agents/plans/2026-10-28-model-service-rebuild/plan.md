@@ -31,7 +31,7 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 | 03 | [首批协议适配器](03-protocol-adapters.md) | done | 01、02 | 15 个协议描述＋适配器、文本经 pi-ai 接入统一地址、契约测试与集成测试 |
 | 04 | [设置页重写](04-settings-ui.md) | done | 01、02 | 渠道列表与表单、渠道详情、读取模型、模型编辑三个标签、测试、默认模型页、组件测试与 E2E |
 | 05 | [画布图像与视频](05-canvas-media.md) | done | 01、02、03 | 宿主接口、能力卡驱动参数面板、视频方式与端口、图片编辑能力推导、节点数据迁移、E2E |
-| 06 | [画布音频节点](06-canvas-audio.md) | draft | 03、05 | TTS 音频节点、音色、写回、连接视频参考音频、E2E |
+| 06 | [画布音频节点](06-canvas-audio.md) | done | 03、05 | TTS 音频节点、音色、写回、连接视频参考音频、E2E |
 | 07 | [视频编辑与续写](07-video-edit-extend.md) | draft | 03、05 | `edit`／`extend` 方式、待编辑视频端口、Seedance 与可灵承接、测试 |
 | 08 | [整体验收与收尾](08-acceptance.md) | draft | 01、02、03、04、05、06、07 | 残留扫描、全量门禁、限定范围 E2E、验收文档、笔记与计划生命周期收尾 |
 

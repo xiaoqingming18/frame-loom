@@ -127,6 +127,7 @@ export function migrateCanvasMediaData(value: unknown, hasLastFrame = false): un
 export const CANVAS_BUILTIN_DATA: Record<string, z.ZodType> = {
   image: CanvasMediaData,
   video: CanvasMediaData,
+  audio: CanvasMediaData,
   group: CanvasGroupData,
 };
 
@@ -149,7 +150,7 @@ export const CanvasNode = z.strictObject({
   data: z.unknown(),
 });
 export type CanvasNode = z.infer<typeof CanvasNode>;
-export const TAGGABLE_NODE_TYPES = ['image', 'video'] as const;
+export const TAGGABLE_NODE_TYPES = ['image', 'video', 'audio'] as const;
 const HandleId = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
 export const CanvasEdge = z.strictObject({
   id: Id,
