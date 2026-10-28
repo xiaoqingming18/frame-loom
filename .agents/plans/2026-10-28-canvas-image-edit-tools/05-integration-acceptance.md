@@ -38,6 +38,8 @@ Note: ../../notes/implemented/feature/2026-10-28-canvas-image-edit-tools.md
 
 Vite 默认不复制 `apps/desktop/public` 到 renderer，因此单测及开发构建无法发现打包 Worker／WASM／GLB 丢失；加固目录版资源请求现作为验收门。编辑工具栏位于节点标题相同的负 top 区域会拦截标题双击，现将工具栏上移一档并以持久化 E2E 回归。
 
+2026-10-28 后续诊断发现开发 loader 的 `?import` 转换与历史模型目录能力字段缺失未由上述目录包／手框路径覆盖；保留原验证事实，新增缺口和回归见[运行时修复计划](../2026-10-28-canvas-image-edit-runtime/plan.md)。本轮未重新执行原验收。
+
 ## 交接
 
-无。
+原实施阶段已完成；后续新缺陷交由独立运行时修复计划，不在本 done 计划中补记为已修复。
