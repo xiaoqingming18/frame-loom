@@ -1,6 +1,6 @@
 # Plan: 模型扩展性、跨模态与桌面整体验收
 
-Status: active
+Status: dropped — 2026-10-28 整体被模型服务配置层重构取代
 Parent: plan.md
 
 ## 目标

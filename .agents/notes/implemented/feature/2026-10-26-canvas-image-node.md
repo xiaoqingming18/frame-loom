@@ -27,7 +27,7 @@ Status: implemented
 
 ### 已落地边界
 
-后续[多模态服务配置与模型演进重构](../../proposed/architecture/2026-10-27-model-service-experience-and-evolution.md)已获用户确认，拟拆分模型能力、接入和调度，动态化视频节点，并保留本篇图片语义参数、多任务和引用。能力匹配与普通配置入口的后续变化由新篇持有，尚未实现，不将本篇既有证据解释为新方案交付。
+后续[多模态服务配置与模型演进重构](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)已获用户确认，拟拆分模型能力、接入和调度，动态化视频节点，并保留本篇图片语义参数、多任务和引用。能力匹配与普通配置入口的后续变化由新篇持有，尚未实现，不将本篇既有证据解释为新方案交付。2026-10-28 该篇已转 rejected，由[模型服务配置层重构](../../proposed/architecture/2026-10-28-model-service-rebuild.md)取代：图片档案与前缀匹配将被用户能力卡替换，语义参数、每张独立任务与 @ 引用保留。
 
 共享契约、engine 档案与适配器、画布多任务运行时、节点与输入框界面及 @ 引用均已落地。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，桌面宿主加载图片档案时使用相同匹配规则，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
 
@@ -206,7 +206,7 @@ Status: implemented
 
 ## Consequences
 
-- **后续提案**：[模型服务接入契约与路由](../../proposed/architecture/2026-10-27-model-service-protocol-routing.md)拟按中转接入和精确型号约束能力，将型号匹配用于推荐而非静默提高能力。本篇现有前缀匹配是实现事实，尚未改变；语义参数、显式档案、每张独立任务及任务档案快照继续保留。
+- **后续提案**：[模型服务接入契约与路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)拟按中转接入和精确型号约束能力，将型号匹配用于推荐而非静默提高能力。本篇现有前缀匹配是实现事实，尚未改变；语义参数、显式档案、每张独立任务及任务档案快照继续保留。
 
 - **收益与代价**：语义参数和共享换算让界面与供应商请求保持一致，模型切换保留兼容选择；代价是需要维护模型族能力随上游变化。轻量 @ 编辑器避免新增富文本依赖，但仍需在 Chromium 升级时回归选区、粘贴与原生组字。
 

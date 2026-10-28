@@ -49,7 +49,7 @@ loader 改动只需一个 URL 边界测试，覆盖当前根路径、完整开�
 | 笔记 | 归属处理 |
 | --- | --- |
 | [图片编辑实现](../../implemented/feature/2026-10-28-canvas-image-edit-tools.md) | 部分重叠；新增互链，保留功能决定和当时验收事实，旧验收不替代本次真实运行时证据。 |
-| [模型服务与能力演进](../../proposed/architecture/2026-10-27-model-service-experience-and-evolution.md) | 部分重叠；补互链，沿用定义／接入交集、升级确认与历史任务冻结约定，本篇不接管其余未完成验收。 |
+| [模型服务与能力演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md) | 部分重叠；补互链，沿用定义／接入交集、升级确认与历史任务冻结约定，本篇不接管其余未完成验收。2026-10-28 该篇已转 rejected，编辑能力来源改由[模型服务配置层重构](../../proposed/architecture/2026-10-28-model-service-rebuild.md)的能力卡与协议上限持有。 |
 | [主题与应用外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md) | 相邻约束；本修复不扩大 CSP，不改变主题系统，无需重写其历史决定。 |
 | [图片节点语义参数](../../implemented/feature/2026-10-26-canvas-image-node.md) | 相邻实现；比例、清晰度、普通多图和引用语法保持原义，不吸收或归档。 |
 

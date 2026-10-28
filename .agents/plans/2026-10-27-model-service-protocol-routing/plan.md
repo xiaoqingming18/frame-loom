@@ -1,7 +1,7 @@
 # Plan: 模型服务接入契约与路由优化
 
 Status: dropped — 未完成范围交由已确认的多模态服务重构计划接管
-Note: ../../notes/proposed/architecture/2026-10-27-model-service-protocol-routing.md
+Note: ../../notes/rejected/architecture/2026-10-27-model-service-protocol-routing.md
 
 ## 目标
 

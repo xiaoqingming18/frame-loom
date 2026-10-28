@@ -14,7 +14,7 @@ Status: implemented
 
 ## Related notes
 
-[输入框修复](../../implemented/bug-fix/2026-10-26-canvas-composer-input.md)、[无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)与本篇部分重叠，保留中文输入、固定下方 620px 布局及撤销。模式切换依照当前实现保留连线，不恢复旧笔记的自动断线。[模型能力演进](../../proposed/architecture/2026-10-27-model-service-experience-and-evolution.md)部分重叠，沿用有效档案与不兼容阻塞。其余搜索命中涉及图片、项目资产或接入路由，与本次布局无关。
+[输入框修复](../../implemented/bug-fix/2026-10-26-canvas-composer-input.md)、[无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)与本篇部分重叠，保留中文输入、固定下方 620px 布局及撤销。模式切换依照当前实现保留连线，不恢复旧笔记的自动断线。[模型能力演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)部分重叠，沿用有效档案与不兼容阻塞。该篇于 2026-10-28 转 rejected，视频方式与参数来源改由[模型服务配置层重构](../../proposed/architecture/2026-10-28-model-service-rebuild.md)的能力卡与协议规则持有，槽位布局与「比例 · 时长」入口保留。其余搜索命中涉及图片、项目资产或接入路由，与本次布局无关。
 
 ## Alternatives considered
 

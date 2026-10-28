@@ -1,7 +1,7 @@
 # Plan: 多模态模型服务配置、调用与模型演进重构
 
-Status: active
-Note: ../../notes/proposed/architecture/2026-10-27-model-service-experience-and-evolution.md
+Status: dropped — 2026-10-28 用户确认清库重构，剩余范围交 2026-10-28-model-service-rebuild 计划
+Note: ../../notes/rejected/architecture/2026-10-27-model-service-experience-and-evolution.md
 
 ## 目标
 
@@ -29,7 +29,7 @@ Note: ../../notes/proposed/architecture/2026-10-27-model-service-experience-and-
 | 05 | [画布视频动态能力](05-canvas-capabilities.md) | done | 01、02、03 | 模式／素材／声音动态 UI、切换保护及生成写回 |
 | 06 | [TTS 音色与音频范围](06-tts-audio.md) | done | 01、02、03、04 | TTS 完整管理与测试、真实元数据、额外音频逐项结论 |
 | 07 | [迁移与旧视频配置清理](07-migration-cleanup.md) | done | 01、02、03、04、05、06 | 版本化升级、旧型号退出、历史及在途连接保留 |
-| 08 | [扩展性与整体验收](08-acceptance.md) | active | 01、02、03、04、05、06、07 | 模型扩展证据、全链路回归、供应商支持矩阵和交接 |
+| 08 | [扩展性与整体验收](08-acceptance.md) | dropped | 01、02、03、04、05、06、07 | 模型扩展证据、全链路回归、供应商支持矩阵和交接 |
 
 ## 依赖与顺序
 
@@ -51,6 +51,8 @@ Note: ../../notes/proposed/architecture/2026-10-27-model-service-experience-and-
 - 真实生成只在明确账号、型号、模式、费用范围授权后执行；未验证项逐项交接，不把某渠道或模式成功外推全部。不能因缺真实联调而伪造完成或提前将笔记转 implemented。
 
 ## 发现与偏差
+
+- 2026-10-28：用户确认[模型服务配置层重构](../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md)：不内置模型库、清除旧数据、渠道与模型两层。本计划与 08 停止执行，相关笔记转 rejected；后续工作见[重构计划](../2026-10-28-model-service-rebuild/plan.md)。
 
 - 2026-10-27：08 新增视频、图片、TTS 定义导入到执行／归档／更新隔离／重启的集成证据；本轮全仓 697 项、最终完整 Electron E2E 18 项通过，目录版和 NSIS 构建成功。用户明确本轮不做真实收费联调，并以物理 Esc 停止 Computer Use；加固目录版已观察明亮设置和帮助 Portal，其余原生项目保留缺口。核对发现有限映射尚未执行、Kling/Wan 官方协议未对齐及部分模式／声音证据不足，详见[整体验收记录](../../../docs/model-service-acceptance.md)。08 与整个需求未完成，不提前将笔记转 implemented。
 

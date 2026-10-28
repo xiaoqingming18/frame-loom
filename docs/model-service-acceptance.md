@@ -1,6 +1,6 @@
 # 模型服务整体验收记录
 
-验收日期：2026-10-27。基线提交：`c08cc55`，另加本轮扩展测试及文档改动。环境：Windows 11 x64、Node.js 24.22.0、pnpm 12.15.0、Electron 45.0.0。对应[子计划 08](../.agents/plans/2026-10-27-model-service-experience-and-evolution/08-acceptance.md)与[决策笔记](../.agents/notes/proposed/architecture/2026-10-27-model-service-experience-and-evolution.md)。
+验收日期：2026-10-27。基线提交：`c08cc55`，另加本轮扩展测试及文档改动。环境：Windows 11 x64、Node.js 24.22.0、pnpm 12.15.0、Electron 45.0.0。对应[子计划 08](../.agents/plans/2026-10-27-model-service-experience-and-evolution/08-acceptance.md)与[决策笔记](../.agents/notes/rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)。
 
 结论：本地自动回归通过，新增三类模型可以通过定义、接入和绑定运行现有协议；整体重构尚未通过全部验收。用户明确本轮不进行真实收费联调。以下能力表描述仓库实现，不能作为供应商支持承诺。
 

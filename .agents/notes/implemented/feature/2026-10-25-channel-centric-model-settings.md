@@ -27,7 +27,7 @@ Status: implemented
 
 ## Consequences
 
-- **后续提案**：[模型服务接入契约与路由](../../proposed/architecture/2026-10-27-model-service-protocol-routing.md)已部分落地模型级地址、模板及任务恢复，整体真实验收未闭合。2026-10-27 用户确认[多模态服务配置与模型演进重构](../../proposed/architecture/2026-10-27-model-service-experience-and-evolution.md)，拟由高级服务接入管理协议与地址，普通表单不再选择 API 格式或能力档案，并移除特定中转站内置模板；保留本篇草稿拉取与事务保存。新方案尚未实现，本篇已落地行为不改写。
+- **后续提案**：[模型服务接入契约与路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)已部分落地模型级地址、模板及任务恢复，整体真实验收未闭合。2026-10-27 用户确认[多模态服务配置与模型演进重构](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)，拟由高级服务接入管理协议与地址，普通表单不再选择 API 格式或能力档案，并移除特定中转站内置模板；保留本篇草稿拉取与事务保存。新方案尚未实现，本篇已落地行为不改写。2026-10-28 两篇后续提案均转 rejected，[模型服务配置层重构](../../proposed/architecture/2026-10-28-model-service-rebuild.md)落地后将完全取代本篇（渠道 API 格式改为仅决定模型列表格式、档案下拉删除）；草稿拉取不写库与不按域名猜鉴权由新篇继承，届时本篇归档。
 
 - **收益**：设置列表只呈现渠道；拉取不再产生未分类垃圾记录；类别与协议不匹配在 renderer 和 engine 两侧被拦截；一次保存要么全部生效要么全部回滚；去掉了覆盖项与请求头的手写 JSON。
 - **代价**：`ChannelWrite`／`Channel` 的 `preset` 字段改名为 `apiFormat`，属于内部契约破坏性变更，renderer、engine 与测试在同一提交内迁移；常见供应商不再自动填写地址。删除模型现在通过"保存时缺席"发生，误操作的防线是编辑页内的移除按钮和取消按钮，保存前不会生效。
