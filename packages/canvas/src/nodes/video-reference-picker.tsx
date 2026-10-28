@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { ArrowLeftRight, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import {
-  checkGenerationMedia,
-  generationRoleReason,
+  MEDIA_ROLE_LABELS,
   type CanvasDocument,
   type CanvasMediaData,
-  type GenerationInput,
-  type GenerationRequest,
-  type ModelProfile,
+  type SemanticInput,
+  type VideoModeId,
 } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@frame-loom/ui/components/popover';
@@ -16,9 +14,11 @@ import { connect, isNodeLocked, updateData } from '../commands/commands';
 import type { NodeRegistry } from '../registry/registry';
 import { checkConnection } from '../registry/connections';
 import { generationSources } from './generation-inputs';
-import { activeVersion } from './media';
+import { activeVersion, videoInputs } from './media';
+import type { CanvasGenerationModel } from '../host';
+import { referenceRoleReason, referenceCandidateIssue } from './reference-check';
 
-type Role = GenerationInput['role'];
+type Role = SemanticInput['role'];
 
 function removeVideoReferences(document: CanvasDocument, nodeId: string, ids: string[]) {
   return {
@@ -46,40 +46,29 @@ function videoReferenceCandidates(
   registry: NodeRegistry,
   document: CanvasDocument,
   nodeId: string,
-  profile: ModelProfile,
+  model: CanvasGenerationModel,
   role: Role,
 ) {
   const target = document.nodes.find((node) => node.id === nodeId);
   if (!target || isNodeLocked(document, target)) return [];
   const data = target.data as CanvasMediaData;
-  const replaced = role === 'reference' ? [] : roleReferences(document, nodeId, role);
+  const replaced =
+    role === 'reference' || role === 'keyframe' ? [] : roleReferences(document, nodeId, role);
   const base = removeVideoReferences(document, nodeId, replaced);
   const refs = generationSources(base, nodeId);
   return document.nodes.flatMap((node) => {
     if (!['image', 'video'].includes(node.type) || !registry.supports(node)) return [];
     const media = activeVersion(node.data as CanvasMediaData);
     if (!media) return [];
-    const input: GenerationInput = {
+    const input: SemanticInput = {
       kind: node.type as 'image' | 'video',
       role,
       sha256: media.sha256,
+      order: refs.length,
     };
-    const request: GenerationRequest = {
-      modelId: data.modelId ?? '',
-      mode: data.mode ?? 'text',
-      prompt: data.prompt,
-      params: data.params ?? {},
-      inputs: [...refs.map((ref) => ref.input), input],
-      source: 'canvas',
-    };
+    input.order = refs.length;
     if (
-      generationRoleReason(profile, request, role, input.kind) ||
-      request.inputs.length > 50 ||
-      request.inputs.filter((ref) => ref.kind === input.kind).length >
-        (profile.inputs.find((limit) => limit.kind === input.kind)?.maxCount ?? 0) ||
-      checkGenerationMedia(profile, [...refs, { input, media }]).some(
-        (issue) => issue.field === 'inputs' || issue.field === `inputs.${refs.length}`,
-      ) ||
+      referenceCandidateIssue(model, data, refs, { input, media }) ||
       !checkConnection(registry, base, {
         source: node.id,
         sourceHandle: 'out',
@@ -94,12 +83,12 @@ function videoReferenceCandidates(
 
 export function VideoReferencePicker({
   nodeId,
-  profile,
+  model,
   role,
   disabled,
 }: {
   nodeId: string;
-  profile: ModelProfile;
+  model: CanvasGenerationModel;
   role: Role;
   disabled: boolean;
 }) {
@@ -107,24 +96,16 @@ export function VideoReferencePicker({
   const document = useCanvasState((state) => state.document);
   const [open, setOpen] = useState(false);
   const refs = generationSources(document, nodeId).filter((ref) => ref.input.role === role);
-  const current = role === 'reference' ? undefined : refs[0];
-  const label = role === 'first_frame' ? '首帧' : role === 'last_frame' ? '尾帧' : '参考素材';
-  const candidates = videoReferenceCandidates(registry, document, nodeId, profile, role);
+  const current = role === 'first_frame' || role === 'last_frame' ? refs[0] : undefined;
+  const label = MEDIA_ROLE_LABELS[role];
+  const candidates = videoReferenceCandidates(registry, document, nodeId, model, role);
   const target = document.nodes.find((node) => node.id === nodeId)?.data as
     CanvasMediaData | undefined;
-  const request = {
-    mode: target?.mode ?? 'text',
-    params: target?.params ?? {},
-    inputs: generationSources(document, nodeId).map((ref) => ref.input),
-  };
-  const blocked =
-    role === 'reference'
-      ? ['image', 'video'].every((kind) =>
-          generationRoleReason(profile, request, role, kind as 'image' | 'video'),
-        )
-        ? '当前模型或模式不支持画布参考素材'
-        : undefined
-      : generationRoleReason(profile, request, role, 'image');
+  const blocked = (['image', 'video', 'audio'] as const).every((kind) =>
+    referenceRoleReason(model, target ?? {}, role, kind),
+  )
+    ? '当前方式不支持此素材角色'
+    : undefined;
   const occupied = role !== 'reference' && roleReferences(document, nodeId, role).length > 0;
   return (
     <div className="flex shrink-0 flex-col items-center gap-1">
@@ -167,7 +148,7 @@ export function VideoReferencePicker({
                 onClick={() => {
                   store.getState().apply((latest) => {
                     if (
-                      !videoReferenceCandidates(registry, latest, nodeId, profile, role).some(
+                      !videoReferenceCandidates(registry, latest, nodeId, model, role).some(
                         (item) => item.node.id === node.id,
                       )
                     )
@@ -228,44 +209,27 @@ export function VideoReferencePicker({
 
 export function VideoReferenceSlots({
   nodeId,
-  profile,
+  model,
   mode,
   disabled,
 }: {
   nodeId: string;
-  profile: ModelProfile;
-  mode: string;
+  model: CanvasGenerationModel;
+  mode: VideoModeId;
   disabled: boolean;
 }) {
+  const ports = model.capability.kind === 'video' ? videoInputs({ mode }, model.capability) : [];
   return (
     <div className="flex items-start gap-2">
-      {mode === 'frames' ? (
-        <>
-          <VideoReferencePicker
-            nodeId={nodeId}
-            profile={profile}
-            role="first_frame"
-            disabled={disabled}
-          />
-          <ArrowLeftRight
-            aria-hidden="true"
-            className="mt-4 size-3.5 shrink-0 text-muted-foreground"
-          />
-          <VideoReferencePicker
-            nodeId={nodeId}
-            profile={profile}
-            role="last_frame"
-            disabled={disabled}
-          />
-        </>
-      ) : (
+      {ports.map((port) => (
         <VideoReferencePicker
+          key={port.id}
           nodeId={nodeId}
-          profile={profile}
-          role="reference"
+          model={model}
+          role={port.id as Role}
           disabled={disabled}
         />
-      )}
+      ))}
     </div>
   );
 }

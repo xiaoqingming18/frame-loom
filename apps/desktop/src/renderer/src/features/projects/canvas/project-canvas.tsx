@@ -7,8 +7,10 @@ import {
   ProjectMutationResult,
   ProjectTag,
   ProjectTagUsage,
-  ChannelList,
-  ChannelModelList,
+  Channel,
+  Model,
+  getProtocol,
+  effectiveCapability,
   EngineEvent,
   GenerationJob,
   MediaFile,
@@ -147,8 +149,8 @@ export function ProjectCanvas({
         generation: {
           load: async (signal) => {
             const [channels, models, defaults, storage] = await Promise.all([
-              engineClient.request('/channels', ChannelList, { signal }),
-              engineClient.request('/channel-models', ChannelModelList, { signal }),
+              engineClient.request('/channels', Channel.array(), { signal }),
+              engineClient.request('/models', Model.array(), { signal }),
               engineClient.request('/model-defaults', ModelDefaults, { signal }),
               engineClient.request('/object-storage', ObjectStorageState, { signal }),
             ]);
@@ -158,19 +160,32 @@ export function ProjectCanvas({
                 .flatMap((model) => {
                   if (
                     !model.enabled ||
+                    model.blockedReason ||
                     !channels.some(
                       (channel) => channel.id === model.channelId && channel.enabled,
                     ) ||
-                    (model.kind !== 'image' && model.kind !== 'video')
+                    (model.kind !== 'image' && model.kind !== 'video' && model.kind !== 'tts')
                   )
                     return [];
+                  const protocol = model.protocolId ? getProtocol(model.protocolId) : undefined;
+                  if (!protocol) return [];
+                  const transport = Object.fromEntries(
+                    (['image', 'video', 'audio'] as const).map((kind) => [
+                      kind,
+                      model.transport[kind] && model.transport[kind] !== 'auto'
+                        ? model.transport[kind]
+                        : (protocol.transports[kind]?.auto ?? 'inline'),
+                    ]),
+                  ) as Record<'image' | 'video' | 'audio', 'inline' | 'url'>;
                   return [
                     {
                       id: model.id,
                       label: model.displayName,
                       kind: model.kind,
-                      profile: model.effectiveProfile ?? null,
-                      upload: model.connection?.runtime?.upload,
+                      capability: effectiveCapability(model.capability, protocol),
+                      protocol,
+                      transport,
+                      extras: model.extras,
                       preferred: defaults[model.kind] === model.id,
                     },
                   ];

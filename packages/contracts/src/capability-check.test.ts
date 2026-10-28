@@ -15,6 +15,20 @@ import type { ImageCap, VideoCap, TtsCap } from './capabilities.js';
 import { imageEditSupport } from './image-edit.js';
 
 const modelId = '00000000-0000-4000-8000-000000000001';
+it('仅设置总时长上限时仍累计参考素材时长', () => {
+  const cap = structuredClone(getProtocol('ark-seedance')!.templates.video!);
+  cap.references.audio = { maxTotalSec: 5 };
+  const inputs = [0, 1].map((order) => ({
+    input: {
+      kind: 'audio' as const,
+      role: 'reference' as const,
+      order,
+      sha256: String(order).repeat(64),
+    },
+    media: { durationMs: 3000 },
+  }));
+  expect(checkMedia(inputs, cap).map((issue) => issue.message)).toContain('同类素材总时长超过限制');
+});
 const modes: VideoModeId[] = [
   't2v',
   'first',

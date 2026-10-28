@@ -645,7 +645,7 @@ it('视频预览跟随参考混用选项，协议锁定的比例置灰', () => {
   cap.defaultMode = 'first_last';
   cap.aspectRatios = ['adaptive', '16:9'];
   const view = wrap(<CanvasPreview capability={cap} descriptor={descriptor} name="视频" />);
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: '16:9' }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '比例 16:9' }).disabled).toBe(true);
   expect(screen.queryByText(/图 0\//)).toBeNull();
   const mode = cap.modes.find((mode) => mode.id === 'first_last')!;
   mode.withReference = true;
@@ -697,7 +697,7 @@ it('导出 JSON 从公开接口读取，下载文件不含凭据', async () => {
   await waitFor(() => expect(blobs).toHaveLength(1));
   const text = await new Promise<string>((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
     reader.readAsText(blobs[0]);
   });
   expect(JSON.parse(text)).toEqual(exported);

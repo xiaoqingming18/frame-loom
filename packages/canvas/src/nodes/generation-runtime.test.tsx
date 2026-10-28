@@ -25,7 +25,7 @@ it('失效任务不阻塞其他历史任务恢复，重新打开补写结果，�
   store.getState().apply(() => doc([]));
   const get = vi.fn((id: string) =>
     id === 'missing'
-      ? Promise.reject(new Error('任务不存在'))
+      ? Promise.reject(Object.assign(new Error('任务不存在'), { status: 404 }))
       : Promise.resolve(id === failed.id ? failed : job),
   );
   const subscribe = vi.fn();
@@ -51,6 +51,7 @@ it('失效任务不阻塞其他历史任务恢复，重新打开补写结果，�
     ]),
   );
   act(() => store.getState().undo());
+  expect((store.getState().document.nodes[0].data as CanvasMediaData).pendingJobIds).toEqual([]);
   await waitFor(() =>
     expect(store.getState().generationJobs.get(failed.id)?.status).toBe('failed'),
   );

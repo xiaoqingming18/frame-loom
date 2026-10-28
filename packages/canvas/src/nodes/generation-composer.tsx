@@ -10,14 +10,12 @@ import {
   RectangleHorizontal,
 } from 'lucide-react';
 import {
-  IMAGE_PARAM_LABELS,
   IMAGE_QUALITY_LABELS,
-  IMAGE_BACKGROUND_LABELS,
-  resolveImagePrompt,
-  executableGenerationModes,
+  resolvePromptReferences,
   type CanvasMediaData,
-  type GenerationInput,
-  type GenerationRequest,
+  type SemanticInput,
+  type SemanticParams,
+  type Value,
 } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Textarea } from '@frame-loom/ui/components/textarea';
@@ -35,10 +33,12 @@ import { generationSources } from './generation-inputs';
 import { VideoReferences } from './video-references';
 import { VideoReferenceSlots } from './video-reference-picker';
 import { ImagePromptEditor } from './image-prompt-editor';
-import { GenerationParams } from './generation-params';
+import { CapabilityParams } from './params';
+import { ExtraParams } from './params/extra-params';
+import { defaultMediaParams } from './params/defaults';
 
 type Model = CanvasGenerationConfig['models'][number];
-type Params = GenerationRequest['params'];
+type Params = SemanticParams;
 
 export function GenerationComposer({
   nodeId,
@@ -54,7 +54,8 @@ export function GenerationComposer({
   onGenerate,
   onPrompt,
   onCount,
-  onParam,
+  onParams,
+  onExtras,
   onModel,
 }: {
   nodeId: string;
@@ -63,14 +64,15 @@ export function GenerationComposer({
   model: Model | undefined;
   options: Model[];
   params: Params;
-  inputs: GenerationInput[];
+  inputs: SemanticInput[];
   locked: boolean;
   countDisabled: boolean;
   disabledReason: string | undefined;
   onGenerate: () => void;
   onPrompt: (prompt: string) => void;
   onCount: (count: number) => void;
-  onParam: (key: string, value: Params[string]) => void;
+  onParams: (params: SemanticParams) => void;
+  onExtras: (extras: Record<string, Value>) => void;
   onModel: (id: string) => void;
 }) {
   const { host, store } = useCanvas();
@@ -100,22 +102,25 @@ export function GenerationComposer({
         updateData<CanvasMediaData>(document, nodeId, (data) => ({ ...data, inputOrder: order })),
       );
   }
-  const profile = model?.profile ?? undefined;
+  const capability = model?.capability;
   const summary =
     kind === 'image'
-      ? Object.keys(IMAGE_PARAM_LABELS)
-          .filter((key) => profile?.params.some((param) => param.key === key))
-          .map((key) =>
-            key === 'quality'
-              ? IMAGE_QUALITY_LABELS[params[key] as keyof typeof IMAGE_QUALITY_LABELS]
-              : key === 'background'
-                ? IMAGE_BACKGROUND_LABELS[params[key] as keyof typeof IMAGE_BACKGROUND_LABELS]
-                : String(params[key]),
-          )
+      ? [
+          params.tier,
+          params.aspectRatio,
+          params.quality ? (IMAGE_QUALITY_LABELS[params.quality] ?? params.quality) : undefined,
+        ]
+          .filter(Boolean)
           .join(' · ')
       : '比例 · 时长';
-  const videoMode = data.mode ?? 'text';
-  const hasMaterialBar = kind === 'image' || videoMode !== 'text' || inputs.length > 0;
+  const videoMode = data.mode ?? (capability?.kind === 'video' ? capability.defaultMode : 't2v');
+  const hasMaterialBar = kind === 'image' || videoMode !== 't2v' || inputs.length > 0;
+  const preview = resolvePromptReferences(
+    data.prompt,
+    references.map((ref) => ({ id: ref.sourceId, kind: ref.input.kind })),
+    capability?.kind === 'video' ? capability.promptRef.syntax : 'ordinal',
+    capability?.kind === 'video' ? capability.promptRef.base : 1,
+  );
   return (
     <TooltipProvider>
       <div
@@ -126,10 +131,10 @@ export function GenerationComposer({
           className={`flex items-start justify-between gap-3 px-2 pt-2 ${hasMaterialBar ? 'min-h-16' : 'relative h-0 p-0'}`}
         >
           <div aria-label="参考素材" className="flex min-w-0 items-center gap-2 overflow-x-auto">
-            {kind === 'video' && profile && videoMode !== 'text' && (
+            {kind === 'video' && model && videoMode !== 't2v' && (
               <VideoReferenceSlots
                 nodeId={nodeId}
-                profile={profile}
+                model={model}
                 mode={videoMode}
                 disabled={locked}
               />
@@ -148,7 +153,9 @@ export function GenerationComposer({
               </Button>
             )}
             {inputs.map((input, index) =>
-              kind === 'video' && videoMode === 'frames' && input.role !== 'reference' ? null : (
+              kind === 'video' &&
+              ['first', 'last', 'first_last'].includes(videoMode) &&
+              input.role !== 'reference' ? null : (
                 <span
                   key={references[index].id}
                   title={`${input.role === 'first_frame' ? '首帧' : input.role === 'last_frame' ? '尾帧' : '参考'} ${index + 1}`}
@@ -203,8 +210,8 @@ export function GenerationComposer({
                 </span>
               ),
             )}
-            {kind === 'video' && profile && (videoMode !== 'text' || inputs.length > 0) && (
-              <VideoReferences nodeId={nodeId} data={data} profile={profile} disabled={locked} />
+            {kind === 'video' && model && (videoMode !== 't2v' || inputs.length > 0) && (
+              <VideoReferences nodeId={nodeId} data={data} model={model} disabled={locked} />
             )}
           </div>
           <Button
@@ -229,7 +236,7 @@ export function GenerationComposer({
             value={data.prompt}
             disabled={locked}
             expanded={expanded}
-            profile={profile}
+            model={model}
             onChange={onPrompt}
           />
         ) : (
@@ -238,7 +245,11 @@ export function GenerationComposer({
             aria-label="生成提示词"
             disabled={locked}
             defaultValue={data.prompt}
-            maxLength={profile?.promptMaxLength ?? 32000}
+            maxLength={
+              capability && 'promptMaxChars' in capability
+                ? (capability.promptMaxChars ?? 32000)
+                : 32000
+            }
             placeholder="描述你想要生成的内容…"
             className={`min-h-0 resize-none rounded-none border-0 bg-transparent px-3.5 py-3 pr-11 text-sm shadow-none transition-[height] duration-200 ease-in-out focus-visible:ring-0 motion-reduce:transition-none ${expanded ? 'h-[292px]' : 'h-32'}`}
             onCompositionStart={() => {
@@ -269,13 +280,10 @@ export function GenerationComposer({
             <Copy aria-hidden="true" className="size-3.5" />
           </Button>
           <span aria-label="提示词字数">
-            {kind === 'image'
-              ? resolveImagePrompt(
-                  data.prompt,
-                  references.map((reference) => reference.sourceId),
-                ).prompt.length
-              : data.prompt.length}{' '}
-            / {profile?.promptMaxLength ?? 32000}
+            {preview.prompt.length} /{' '}
+            {capability && 'promptMaxChars' in capability
+              ? (capability.promptMaxChars ?? 32000)
+              : 32000}
           </span>
         </div>
         <div className="flex items-center gap-1 px-3 pb-3">
@@ -307,7 +315,7 @@ export function GenerationComposer({
                 <Button
                   key={item.id}
                   variant="ghost"
-                  disabled={!item.profile}
+                  disabled={false}
                   aria-pressed={item.id === model?.id}
                   className="h-auto w-full flex-col items-start gap-1 px-2 py-2 text-left"
                   onClick={() => {
@@ -317,13 +325,7 @@ export function GenerationComposer({
                 >
                   <span className="text-xs">{item.label}</span>
                   <span className="text-xs font-normal whitespace-normal text-muted-foreground">
-                    {item.profile
-                      ? `${item.profile.name} · ${executableGenerationModes(item.profile)
-                          .map((mode) => mode.name)
-                          .join(
-                            ' / ',
-                          )} · 最多 ${item.profile.inputs.find((input) => input.kind === 'image')?.maxCount ?? 0} 张参考`
-                      : '无匹配档案'}
+                    {item.protocol.label}
                   </span>
                 </Button>
               ))}
@@ -339,7 +341,7 @@ export function GenerationComposer({
                 variant="ghost"
                 size="sm"
                 aria-label="生成参数"
-                disabled={!profile || locked}
+                disabled={!model || locked}
                 className="h-8 min-w-0 gap-1 px-1 text-xs font-normal"
               >
                 <RectangleHorizontal
@@ -358,26 +360,22 @@ export function GenerationComposer({
               collisionPadding={{ top: 58, right: 16, bottom: 16, left: 16 }}
               className={`nodrag nopan nowheel w-[420px] max-w-[calc(100vw-32px)] overflow-y-auto ${kind === 'video' ? 'max-h-[min(580px,var(--radix-popover-content-available-height))] rounded-2xl border-0 p-6 shadow-panel' : 'max-h-[min(440px,var(--radix-popover-content-available-height))] rounded-xl'}`}
             >
-              {profile && (
+              {model && (
                 <>
-                  <GenerationParams
-                    profile={profile}
+                  <CapabilityParams
+                    capability={model.capability}
+                    protocol={model.protocol}
+                    mode={data.mode}
+                    inputs={inputs}
                     params={params}
-                    request={{
-                      modelId: model!.id,
-                      mode:
-                        kind === 'image'
-                          ? inputs.length
-                            ? 'reference'
-                            : 'text'
-                          : (data.mode ?? 'text'),
-                      prompt: data.prompt,
-                      params,
-                      inputs,
-                      source: 'canvas',
-                    }}
                     disabled={locked}
-                    onChange={onParam}
+                    onChange={onParams}
+                  />
+                  <ExtraParams
+                    definitions={model.extras}
+                    values={data.extras ?? {}}
+                    onChange={onExtras}
+                    disabled={locked}
                   />
                   {Object.keys(data.pendingParams ?? {}).length > 0 && (
                     <div className="mt-3 border-t pt-3 text-xs">
@@ -394,12 +392,8 @@ export function GenerationComposer({
                               ...current,
                               pendingParams: {},
                               params: {
+                                ...defaultMediaParams(model.capability),
                                 ...current.params,
-                                ...Object.fromEntries(
-                                  profile.params
-                                    .filter((param) => param.key in (current.pendingParams ?? {}))
-                                    .map((param) => [param.key, param.default]),
-                                ),
                               },
                             })),
                           )
@@ -435,7 +429,10 @@ export function GenerationComposer({
                   collisionPadding={{ top: 58, right: 16, bottom: 16, left: 16 }}
                   className="nodrag nopan nowheel w-28 p-1"
                 >
-                  {[1, 2, 3, 4].map((count) => (
+                  {Array.from(
+                    { length: capability?.kind === 'image' ? (capability.count.max ?? 4) : 1 },
+                    (_, index) => index + 1,
+                  ).map((count) => (
                     <Button
                       key={count}
                       variant="ghost"

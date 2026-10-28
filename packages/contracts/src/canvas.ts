@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ImageEditRecipe } from './image-edit.js';
-import { Sha256, GenerationInput, MediaFile } from './generation.js';
+import { Sha256, MediaFile } from './generation-job.js';
+import { InputRole, SemanticParams, Value, VideoModeId } from './semantic-request.js';
 
 export const CANVAS_LIMITS = { nodes: 2000, edges: 4000, bytes: 8 * 1024 * 1024 } as const;
 export const canvasDocumentBytes = (document: unknown): number =>
@@ -40,33 +41,31 @@ export const CanvasMediaVersion = z.strictObject({
   createdAt: z.string().datetime(),
 });
 export type CanvasMediaVersion = z.infer<typeof CanvasMediaVersion>;
-export const CanvasVideoMode = z.enum(['text', 'frames', 'reference']);
-export type CanvasVideoMode = z.infer<typeof CanvasVideoMode>;
-const ParamValue = z.union([z.string().max(2000), z.number().finite(), z.boolean()]);
 export const CanvasMediaData = z
   .strictObject({
     versions: z.array(CanvasMediaVersion).max(100),
     activeVersion: z.number().int().nonnegative(),
     prompt: z.string().max(32_000),
-    mode: CanvasVideoMode.optional(),
+    mode: VideoModeId.optional(),
     inputOrder: z.array(Id).max(64),
     modelId: z.string().uuid().optional(),
-    params: z.record(z.string().max(100), ParamValue).optional(),
-    pendingParams: z.record(z.string().max(100), ParamValue).optional(),
+    params: SemanticParams.optional(),
+    pendingParams: SemanticParams.optional(),
+    extras: z.record(z.string(), Value).optional(),
     mediaReferences: z
       .array(
         z.strictObject({
           id: Id,
           name: z.string().max(200),
-          role: GenerationInput.shape.role,
+          role: InputRole,
           media: MediaFile,
         }),
       )
       .max(50)
       .optional(),
     pendingJobId: z.string().uuid().optional(),
-    pendingJobIds: z.array(z.string().uuid()).max(4).optional(),
-    count: z.number().int().min(1).max(4).optional(),
+    pendingJobIds: z.array(z.string().uuid()).optional(),
+    count: z.number().int().min(1).optional(),
     imageEdit: ImageEditRecipe.optional(),
   })
   .refine(
@@ -74,6 +73,55 @@ export const CanvasMediaData = z
     '当前版本超出范围',
   );
 export type CanvasMediaData = z.infer<typeof CanvasMediaData>;
+
+/** 仅转换已发布的旧字段；未知参数不带入新的语义请求。 */
+export function migrateCanvasMediaData(value: unknown, hasLastFrame = false): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const data = value as Record<string, unknown>;
+  const aliases: Record<string, string> = {
+    ratio: 'aspectRatio',
+    aspect_ratio: 'aspectRatio',
+    seconds: 'duration',
+    generate_audio: 'audio',
+    sound: 'audio',
+  };
+  const keys = new Set<string>(SemanticParams.keyof().options);
+  const params = (raw: unknown) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+    const entries = Object.entries(raw);
+    return Object.fromEntries(
+      entries
+        .filter(([key]) => keys.has(key) || Object.hasOwn(aliases, key))
+        .sort(([a], [b]) => Number(keys.has(a)) - Number(keys.has(b)))
+        .map(([key, value]) => [aliases[key] ?? key, value]),
+    );
+  };
+  const { pendingJobId, ...rest } = data;
+  const localLast =
+    Array.isArray(data.mediaReferences) &&
+    data.mediaReferences.some(
+      (ref: unknown) =>
+        !!ref && typeof ref === 'object' && 'role' in ref && ref.role === 'last_frame',
+    );
+  return {
+    ...rest,
+    ...(data.mode !== undefined
+      ? {
+          mode:
+            data.mode === 'text'
+              ? 't2v'
+              : data.mode === 'frames'
+                ? hasLastFrame || localLast
+                  ? 'first_last'
+                  : 'first'
+                : data.mode,
+        }
+      : {}),
+    ...(data.params !== undefined ? { params: params(data.params) } : {}),
+    ...(data.pendingParams !== undefined ? { pendingParams: params(data.pendingParams) } : {}),
+    ...(pendingJobId && !data.pendingJobIds ? { pendingJobIds: [pendingJobId] } : {}),
+  };
+}
 
 /** 内置节点类型的 data schema；其他类型由前端注册表校验，engine 原样保存。 */
 export const CANVAS_BUILTIN_DATA: Record<string, z.ZodType> = {
@@ -118,6 +166,23 @@ export const CanvasDocument = z
     nodes: z.array(CanvasNode).max(CANVAS_LIMITS.nodes),
     edges: z.array(CanvasEdge).max(CANVAS_LIMITS.edges),
   })
+  .transform((document) => ({
+    ...document,
+    nodes: document.nodes.map((node) =>
+      (node.type === 'image' || node.type === 'video') && node.typeVersion < 3
+        ? {
+            ...node,
+            typeVersion: 3,
+            data: migrateCanvasMediaData(
+              node.data,
+              document.edges.some(
+                (edge) => edge.target === node.id && edge.targetHandle === 'last_frame',
+              ),
+            ),
+          }
+        : node,
+    ),
+  }))
   .superRefine((document, context) => {
     if (canvasDocumentBytes(document) > CANVAS_LIMITS.bytes)
       context.addIssue({ code: 'custom', message: '画布文档不能超过 8 MiB' });

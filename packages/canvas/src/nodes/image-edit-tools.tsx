@@ -2,11 +2,7 @@ import { useState } from 'react';
 import { Camera, ScanFace, Sun } from 'lucide-react';
 import { Button } from '@frame-loom/ui/components/button';
 import { Dialog, DialogContent, DialogTitle } from '@frame-loom/ui/components/dialog';
-import {
-  ImageEditRecipe,
-  imageEditCapabilityIssue,
-  type CanvasMediaData,
-} from '@frame-loom/contracts';
+import { ImageEditRecipe, imageEditSupport, type CanvasMediaData } from '@frame-loom/contracts';
 import { useCanvas, useCanvasState } from '../context';
 import { createImageEditChild } from '../commands/commands';
 import { EmotionWorkspace } from './emotion-workspace';
@@ -36,7 +32,7 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
   const [showTemplate, setShowTemplate] = useState(false);
   const [modelId, setModelId] = useState(data.modelId ?? '');
   if (!version) return null;
-  const models = (config?.models ?? []).filter((model) => model.kind === 'image' && model.profile);
+  const models = (config?.models ?? []).filter((model) => model.capability.kind === 'image');
   const model = models.find((item) => item.id === modelId);
   if (tool === 'emotion')
     return (
@@ -72,12 +68,13 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
     );
   const createChild = (operation: 'angle' | 'lighting') => {
     const selectedModel = model;
-    if (!selectedModel?.profile) {
+    if (selectedModel?.capability.kind !== 'image') {
       store.getState().notify('请选择图片编辑模型');
       return;
     }
     const params = recipe(operation);
-    const issue = imageEditCapabilityIssue(params, selectedModel.profile);
+    const issue = imageEditSupport(selectedModel.capability, selectedModel.protocol)[operation]
+      .reason;
     if (issue) {
       store.getState().notify(issue);
       return;
@@ -103,10 +100,10 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
       void host.generation
         .create({
           modelId: selectedModel.id,
-          mode: 'reference',
           prompt,
           params: {},
-          inputs: [{ kind: 'image', role: 'reference', sha256: version.sha256 }],
+          extras: {},
+          inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: version.sha256 }],
           imageEdit: params,
           source: 'canvas',
         })
@@ -127,12 +124,11 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
     } else setTool(null);
   };
   const activeModel = model;
-  const visibleRecipe = recipe(tool ?? 'angle');
-  const disabled =
-    !activeModel?.profile || !!imageEditCapabilityIssue(visibleRecipe, activeModel.profile);
-  const issue = activeModel?.profile
-    ? imageEditCapabilityIssue(visibleRecipe, activeModel.profile)
-    : undefined;
+  const issue =
+    activeModel?.capability.kind === 'image'
+      ? imageEditSupport(activeModel.capability, activeModel.protocol)[tool ?? 'angle'].reason
+      : undefined;
+  const disabled = activeModel?.capability.kind !== 'image' || !!issue;
   return (
     <div className="nodrag nopan relative inline-flex items-center gap-1">
       <Button
@@ -377,7 +373,7 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
                 </p>
               </>
             )}
-            {!activeModel?.profile && (
+            {activeModel?.capability.kind !== 'image' && (
               <p role="alert" className="text-xs text-destructive">
                 请选择图片编辑模型
               </p>

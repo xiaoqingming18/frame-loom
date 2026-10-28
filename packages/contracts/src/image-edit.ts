@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { ModelProfile } from './generation.js';
 import type { ImageCap } from './capabilities.js';
 import type { ProtocolDescriptor } from './protocols.js';
 
@@ -65,14 +64,6 @@ export const ImageEditRecipe = ImageEditRecipeUnion.superRefine((recipe, context
 });
 export type ImageEditRecipe = z.infer<typeof ImageEditRecipe>;
 
-export const ImageEditCapabilities = z.strictObject({
-  operations: z.array(z.enum(['angle', 'lighting', 'emotion'])).max(3),
-  maxReferenceImages: z.number().int().min(1).max(50),
-  openAiImageEdit: z.boolean(),
-  mask: z.boolean(),
-});
-export type ImageEditCapabilities = z.infer<typeof ImageEditCapabilities>;
-
 export function imageEditSupport(cap: ImageCap, descriptor: ProtocolDescriptor) {
   const max = cap.references.max ?? Infinity;
   const available = max >= 1;
@@ -91,36 +82,4 @@ export function imageEditSupport(cap: ImageCap, descriptor: ProtocolDescriptor) 
       ...(!emotion ? { reason: '需要编辑接口与至少两个参考图' } : {}),
     },
   };
-}
-
-export function imageEditCapabilityIssue(
-  recipe: ImageEditRecipe,
-  profile: Pick<ModelProfile, 'kind' | 'protocol' | 'modes' | 'inputs' | 'imageEditCapabilities'>,
-): string | undefined {
-  const capability = profile.imageEditCapabilities;
-  if (!capability) return '所选模型的图片编辑能力尚未确认，请更新模型定义';
-  if (
-    recipe.operation === 'emotion' &&
-    (profile.protocol !== 'openai-images' || !capability.openAiImageEdit)
-  )
-    return '表情编辑需要 OpenAI Images 编辑协议';
-  if (!capability.operations.includes(recipe.operation)) return '所选模型已禁用此图片编辑操作';
-  if (
-    profile.kind !== 'image' ||
-    !['openai-images', 'gemini-image', 'ark-images'].includes(profile.protocol)
-  )
-    return '所选模型协议不支持图片编辑';
-  if (!profile.modes.some((mode) => mode.id === 'reference')) return '所选模型未开放参考图模式';
-  const maxReferences = Math.min(
-    capability.maxReferenceImages,
-    profile.inputs.find((input) => input.kind === 'image' && input.transport === 'inline')
-      ?.maxCount ?? 0,
-  );
-  if (recipe.operation === 'emotion' && recipe.maskMode === 'provider' && !capability.mask)
-    return '所选模型不支持蒙版';
-  const requiredReferences =
-    recipe.operation === 'emotion' ? (recipe.maskMode === 'provider' ? 3 : 2) : 1;
-  if (maxReferences < requiredReferences)
-    return `${recipe.operation === 'emotion' ? '表情编辑' : '图片编辑'}需要至少 ${requiredReferences} 个图片参考`;
-  return undefined;
 }

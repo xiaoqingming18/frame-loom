@@ -10,12 +10,11 @@ const date = '2026-10-25T00:00:00.000Z';
 const job = GenerationJob.parse({
   id,
   kind: 'image',
-  channelModelId: '22222222-2222-4222-8222-222222222222',
-  profileId: 'openai-images-default',
+  modelId: '22222222-2222-4222-8222-222222222222',
+  configHash: 'test',
   status: 'succeeded',
   request: {
     modelId: '22222222-2222-4222-8222-222222222222',
-    mode: 'text',
     prompt: '生成画面',
     params: {},
     inputs: [],

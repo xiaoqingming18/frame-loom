@@ -81,7 +81,7 @@ it('按节点输入顺序映射当前版本和目标端口角色', () => {
     ],
   };
   expect(generationInputs(document, 'video1')).toEqual([
-    { kind: 'image', role: 'last_frame', sha256: 'b'.repeat(64) },
-    { kind: 'image', role: 'first_frame', sha256: 'a'.repeat(64) },
+    { kind: 'image', role: 'last_frame', order: 0, sha256: 'b'.repeat(64) },
+    { kind: 'image', role: 'first_frame', order: 1, sha256: 'a'.repeat(64) },
   ]);
 });

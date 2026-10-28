@@ -16,3 +16,4 @@ export { generationInputs } from './nodes/generation-inputs';
 
 export { NodeHeader } from './nodes/views';
 export { isTaggable, setTag } from './commands/commands';
+export { CapabilityPreview } from './nodes/params';

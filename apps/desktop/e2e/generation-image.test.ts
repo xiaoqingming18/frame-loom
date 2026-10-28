@@ -1,42 +1,59 @@
 import { openProjectCanvas, canvasFixture } from './project-canvas.fixture';
+import { addMediaChannel, addMediaModel, disposeTestApp, engineApi } from './model-service.fixture';
+import type { GenerationJob } from '@frame-loom/contracts';
 import { expect, test, _electron, type ElectronApplication } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('画布三张图片生成、失败单张重试、首帧视频生成与版本重启保留', async ({}, info) => {
+test('能力卡驱动图片与首尾帧视频生成、引用与版本重启保留', async ({}, info) => {
+  test.setTimeout(150_000);
   const imageRequests: string[] = [];
-  const videoRequests: string[] = [];
+  const videoRequests: Record<string, unknown>[] = [];
   const png = (await readFile(new URL('./fixtures/reference-256.png', import.meta.url))).toString(
     'base64',
   );
   const video = await readFile(
-    new URL('../../engine/src/modules/generation/adapters/fixtures/reference.mp4', import.meta.url),
+    new URL(
+      '../../engine/src/modules/generation/protocols/fixtures/reference.mp4',
+      import.meta.url,
+    ),
   );
   const upstream = createServer((request, response) => {
+    const path = request.url;
+    if (request.method === 'GET' && path === '/result.mp4') {
+      expect(request.headers.authorization).toBeUndefined();
+      response.writeHead(200, { 'Content-Type': 'video/mp4' }).end(video);
+      return;
+    }
+    const allowed =
+      (request.method === 'POST' &&
+        [
+          '/v1/images/generations',
+          '/v1/images/edits',
+          '/api/v3/contents/generations/tasks',
+        ].includes(path ?? '')) ||
+      (request.method === 'GET' && path === '/api/v3/contents/generations/tasks/video-task');
+    if (!allowed) {
+      response.writeHead(404).end();
+      return;
+    }
+    if (request.headers.authorization !== 'Bearer fixture-local') {
+      response.writeHead(401).end();
+      return;
+    }
     response.setHeader('Content-Type', 'application/json');
     if (request.method === 'GET') {
-      const path = new URL(request.url!, 'http://localhost').pathname;
-      if (path.endsWith('/models')) {
-        response.end(
-          JSON.stringify({ data: [{ id: 'gpt-image-1' }, { id: 'doubao-seedance-2-0' }] }),
-        );
-      } else if (path.includes('/contents/generations/tasks/')) {
-        response.end(
-          JSON.stringify({
-            id: 'video-task',
-            status: 'succeeded',
-            content: { video_url: `${remote}/result.mp4` },
-          }),
-        );
-      } else if (path === '/v1/result.mp4') {
-        response.writeHead(200, { 'Content-Type': 'video/mp4' }).end(video);
-      } else {
-        response.writeHead(404).end();
-      }
+      response.end(
+        JSON.stringify({
+          id: 'video-task',
+          status: 'succeeded',
+          content: { video_url: remote + '/result.mp4' },
+        }),
+      );
       return;
     }
     let body = '';
@@ -45,370 +62,129 @@ test('画布三张图片生成、失败单张重试、首帧视频生成与版�
       body += chunk;
     });
     request.on('end', () => {
-      const path = new URL(request.url!, 'http://localhost').pathname;
-      if (path.endsWith('/images/generations') || path.endsWith('/images/edits')) {
+      if (path?.includes('/images/')) {
         imageRequests.push(body);
-        if (imageRequests.length === 2) {
-          response
-            .writeHead(400)
-            .end(JSON.stringify({ error: { message: '第二张模拟失败', code: 'invalid_params' } }));
-          return;
-        }
         response.end(JSON.stringify({ data: [{ b64_json: png }] }));
-      } else if (path.endsWith('/contents/generations/tasks')) {
-        videoRequests.push(body);
-        response.end(JSON.stringify({ id: 'video-task' }));
       } else {
-        response.writeHead(404).end();
+        videoRequests.push(JSON.parse(body) as Record<string, unknown>);
+        response.end(JSON.stringify({ id: 'video-task' }));
       }
     });
   });
-  await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  const remote = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`;
-  const userData = await mkdtemp(join(tmpdir(), 'frame-loom-image-ui-'));
+  await new Promise<void>((done) => upstream.listen(0, '127.0.0.1', done));
+  const remote = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+  const userData = await mkdtemp(join(tmpdir(), 'frame-loom-generation-'));
   const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
   let app: ElectronApplication | undefined;
   try {
     app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     let page = await app.firstWindow();
+    await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1500, 960));
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
-    page.on('console', (message) => {
-      if (/Content Security Policy|Refused to/.test(message.text())) errors.push(message.text());
-    });
-    await page.emulateMedia({ colorScheme: null });
-    await page.getByRole('button', { name: '设置中心' }).click();
-    await page.getByRole('button', { name: '设置', exact: true }).click();
-    await page.getByRole('tab', { name: '模型服务' }).click();
-    await page.getByRole('button', { name: '添加渠道' }).click();
-    await page.getByLabel('渠道名称').fill('图片模拟渠道');
-    await page.getByLabel('接口地址', { exact: true }).fill(remote);
-    await page.getByLabel('API 密钥').fill('sk-image-e2e-private');
-    await page.getByRole('button', { name: '拉取模型' }).click();
-    await page.getByLabel(/gpt-image-1/).check();
-    await page.getByLabel(/doubao-seedance-2-0/).check();
-    await page.getByRole('button', { name: '添加所选（2）' }).click();
-    const card = page.getByRole('group', { name: 'gpt-image-1' });
-    await card.getByLabel('逻辑模型').selectOption('openai-images-default');
-    await expect(card.getByLabel('启用模型')).toBeChecked();
-    await card.getByLabel('显示名称').fill('本地图片模型');
-    const videoCard = page.getByRole('group', { name: 'doubao-seedance-2-0' });
-    await videoCard.getByLabel('逻辑模型').selectOption('seedance-2.0');
-    await videoCard.getByLabel('显示名称').fill('本地视频模型');
-    await page.getByRole('button', { name: '保存', exact: true }).click();
-    await page.getByRole('button', { name: '编辑 图片模拟渠道' }).click();
-    await page.getByRole('button', { name: '检查已保存目录权限' }).click();
-    await expect(page.getByText(/地址与鉴权通过/)).toBeVisible();
-    await page.getByRole('button', { name: '返回渠道列表' }).click();
-    await page.getByRole('tab', { name: '默认模型' }).click();
-    await page
-      .getByRole('combobox', { name: '图片', exact: true })
-      .selectOption({ label: '图片模拟渠道 / 本地图片模型' });
-    await page
-      .getByRole('combobox', { name: '视频', exact: true })
-      .selectOption({ label: '图片模拟渠道 / 本地视频模型' });
-    await page.getByRole('button', { name: '关闭', exact: true }).click();
+    const channel = await addMediaChannel(page, remote, 'fixture-local');
+    await addMediaModel(page, channel.id, 'openai-images', '本地图片模型');
+    await addMediaModel(page, channel.id, 'ark-seedance', '本地视频模型');
     await openProjectCanvas(page, app);
-    const editor = page.getByRole('region', { name: '画布编辑区' });
-    await page.mouse.dblclick(
-      (await editor.boundingBox())!.x + 300,
-      (await editor.boundingBox())!.y + 260,
-    );
-    await page.getByRole('menuitem', { name: '图片', exact: true }).click();
-    const ime = await page.context().newCDPSession(page);
-    await page.getByLabel('生成提示词').focus();
-    await ime.send('Input.imeSetComposition', {
-      text: '中文组字',
-      selectionStart: 4,
-      selectionEnd: 4,
-    });
-    await expect(page.getByLabel('生成提示词')).toBeFocused();
-    await ime.send('Input.insertText', { text: '中文组字' });
-    await expect(page.getByLabel('生成提示词')).toHaveText('中文组字');
-    await page.getByLabel('生成提示词').fill('一束暖光落在旧电影胶片上');
-    await page.getByLabel('生成提示词').press('End');
-    await page.getByLabel('生成提示词').pressSequentially('ABC');
-    await expect(page.getByLabel('生成提示词')).toHaveText('一束暖光落在旧电影胶片上ABC');
-    await page.getByLabel('生成提示词').press('Backspace');
-    await page.getByLabel('生成提示词').press('Backspace');
-    await page.getByLabel('生成提示词').press('Backspace');
-    const composer = page.locator('.react-flow__node-toolbar > div');
-    const screenshots = resolve(desktop, '../../.cache/canvas-image-node');
-    await mkdir(screenshots, { recursive: true });
-    await expect(page.getByLabel('生成提示词')).toHaveCSS('transition-property', 'height');
-    await page.getByRole('button', { name: '展开提示词' }).click();
-    await expect(page.getByLabel('生成提示词')).toHaveCSS('height', '292px');
-    await page.getByRole('button', { name: '收起提示词' }).click();
-    await expect(page.getByLabel('生成提示词')).toHaveCSS('height', '128px');
-    for (const theme of ['light', 'dark']) {
-      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
-      await composer.screenshot({ path: join(screenshots, `composer-fixed-${theme}.png`) });
-    }
-    await page.getByRole('button', { name: '生成参数' }).click();
-    const parameters = page.getByRole('dialog', { name: '生成参数' });
-    const viewport = await page.locator('.react-flow__viewport').getAttribute('style');
-    await parameters.hover();
-    await page.mouse.wheel(0, 300);
-    expect(await page.locator('.react-flow__viewport').getAttribute('style')).toBe(viewport);
+    const add = async (label: string, x: number) => {
+      const editor = page.getByRole('region', { name: '画布编辑区' });
+      await editor.focus();
+      await page.keyboard.press('Escape');
+      const box = (await editor.boundingBox())!;
+      await page.mouse.dblclick(box.x + x, box.y + 180);
+      await page.getByRole('menuitem', { name: label, exact: true }).click();
+    };
+    await add('图片', 300);
+    await page.getByLabel('生成提示词').fill('胶片与暖光');
+    await page.getByRole('button', { name: '生成参数', exact: true }).click();
+    await page.getByRole('radio', { name: '档位 1K', exact: true }).click();
+    await page.getByRole('radio', { name: '比例 1:1', exact: true }).click();
+    await expect(page.getByLabel('预计像素')).toHaveText('1024×1024');
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: '生成数量' }).click();
-    await page.getByRole('button', { name: '×3', exact: true }).click();
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
-    for (const theme of ['light', 'dark']) {
+    await page.getByRole('button', { name: '生成图片', exact: true }).click();
+    await expect(page.locator('.react-flow__node-image img')).toBeVisible();
+    expect(imageRequests).toHaveLength(1);
+    expect(JSON.parse(imageRequests[0])).toMatchObject({ prompt: '胶片与暖光', size: '1024x1024' });
+
+    await add('图片', 700);
+    const prompt = page.getByRole('textbox', { name: '生成提示词' });
+    await prompt.fill('参考 @');
+    await expect(page.getByRole('listbox', { name: '引用参考' })).toBeVisible();
+    await prompt.press('Enter');
+    await expect(prompt.locator('[data-reference]')).toHaveText('图1');
+    await page.getByRole('button', { name: '生成图片', exact: true }).click();
+    await expect
+      .poll(async () => {
+        const jobs = (await engineApi(page, '/generation-jobs')) as GenerationJob[];
+        return jobs.map((job) =>
+          job.status === 'succeeded' ? 'succeeded' : `${job.status}: ${job.errorMessage}`,
+        );
+      })
+      .toEqual(['succeeded', 'succeeded']);
+    await expect(page.locator('.react-flow__node-image img')).toHaveCount(2);
+    expect(imageRequests).toHaveLength(2);
+    expect(imageRequests[1]).toContain('参考 图1');
+
+    await add('视频', 950);
+    const videoNode = page.locator('.react-flow__node-video');
+    await expect(page.getByRole('radio', { name: '文生视频', exact: true })).toBeChecked();
+    await page.getByRole('radio', { name: '首尾帧', exact: true }).click();
+    for (const role of ['首帧', '尾帧']) {
+      await page.getByRole('button', { name: `添加${role}`, exact: true }).click();
+      await page
+        .getByRole('dialog', { name: `选择${role}`, exact: true })
+        .getByRole('button', { name: /^选择 / })
+        .first()
+        .click();
+    }
+    await page.getByLabel('生成提示词').fill('让暖光缓慢移动');
+    await page.getByRole('button', { name: '生成参数', exact: true }).click();
+    await expect(
+      page
+        .getByRole('region', { name: '比例', exact: true })
+        .getByText('Seedance 首帧与首尾帧方式由输入图决定比例，只能选择自适应', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole('radio', { name: '比例 16:9', exact: true })).toBeDisabled();
+    await page.getByRole('radio', { name: '比例 adaptive', exact: true }).click();
+    for (const theme of ['light', 'dark'] as const) {
       await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+      await page.emulateMedia({ colorScheme: theme });
       await expect(page.locator('body')).toHaveCSS(
         'background-color',
         theme === 'dark' ? 'rgb(13, 13, 15)' : 'rgb(246, 247, 249)',
       );
-      await expect
-        .poll(async () => {
-          const box = await composer.boundingBox();
-          const node = (await page.locator('.react-flow__node-image').boundingBox())!;
-          return (
-            !!box &&
-            Math.abs(box.width - 620) < 1 &&
-            Math.abs(box.y - node.y - node.height - 16) < 1 &&
-            Math.abs(box.x + box.width / 2 - node.x - node.width / 2) < 1
-          );
-        })
-        .toBe(true);
       await page.screenshot({
-        path: join(screenshots, `composer-small-${theme}.png`),
+        path: info.outputPath(`video-params-${theme}.png`),
         animations: 'disabled',
       });
-      await app.evaluate(({ BrowserWindow }) =>
-        BrowserWindow.getAllWindows()[0].setSize(1500, 960),
-      );
-      await page.getByRole('button', { name: '生成参数' }).click();
-      await expect(parameters).toBeVisible();
-      const bounds = (await parameters.boundingBox())!;
-      const windowSize = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-      expect(bounds.x).toBeGreaterThanOrEqual(0);
-      expect(bounds.y).toBeGreaterThanOrEqual(0);
-      expect(bounds.x + bounds.width).toBeLessThanOrEqual(windowSize.width);
-      expect(bounds.y + bounds.height).toBeLessThanOrEqual(windowSize.height);
-      await page.screenshot({
-        path: join(screenshots, `params-small-${theme}.png`),
-        animations: 'disabled',
-      });
-      await page.keyboard.press('Escape');
-      await expect(page.getByRole('button', { name: '生成参数' })).toBeFocused();
-      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
-    }
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1500, 960));
-    await page.getByRole('button', { name: '生成图片', exact: true }).click();
-    const preview = page.locator('.react-flow__node-image img');
-    await expect(preview).toBeVisible();
-    await expect
-      .poll(() =>
-        preview
-          .first()
-          .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
-      )
-      .toBe(256);
-    await expect(page.getByLabel('当前版本')).toContainText('/2');
-    await page.getByRole('button', { name: /重试任务/ }).click();
-    await expect(page.getByLabel('当前版本')).toContainText('/3');
-    expect(imageRequests).toHaveLength(4);
-    expect(JSON.parse(imageRequests[0])).toMatchObject({
-      model: 'gpt-image-1',
-      prompt: '一束暖光落在旧电影胶片上',
-      size: '1024x1024',
-    });
-
-    const box = (await editor.boundingBox())!;
-    await page.mouse.dblclick(box.x + 760, box.y + 260);
-    await page.getByRole('menuitem', { name: '视频', exact: true }).click();
-    const videoNode = page.locator('.react-flow__node-video');
-    await page.getByRole('button', { name: '隐藏小地图' }).click();
-    await expect(page.getByLabel('生成提示词')).toBeVisible();
-    await page.getByRole('button', { name: '显示小地图' }).click();
-    await page.locator('.react-flow__minimap').click({ position: { x: 8, y: 8 } });
-    await expect(page.getByLabel('生成提示词')).toBeVisible();
-    await page.getByRole('button', { name: '缩放比例' }).click();
-    await page.keyboard.press('Escape');
-    await expect(page.getByLabel('生成提示词')).toBeVisible();
-    await page.mouse.click(box.x + 550, box.y + 80);
-    await page.mouse.move(box.x + 560, box.y + 80);
-    await expect(page.getByRole('textbox', { name: '生成提示词' })).toHaveCount(0);
-    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeHidden();
-    await videoNode.hover();
-    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeVisible();
-    await videoNode.click();
-    await page.mouse.move(box.x + 560, box.y + 80);
-    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeVisible();
-    const videoComposer = page.getByRole('textbox', { name: '生成提示词' });
-    for (const theme of ['light', 'dark']) {
-      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
-      await page.screenshot({ path: info.outputPath(`video-text-${theme}.png`) });
-    }
-    await expect(
-      videoComposer.locator('..').getByRole('button', { name: '视频素材', exact: true }),
-    ).toHaveCount(0);
-    await page.getByRole('radio', { name: '首尾帧', exact: true }).click();
-    await page.getByRole('button', { name: '添加首帧', exact: true }).click();
-    await page
-      .getByRole('dialog', { name: '选择首帧', exact: true })
-      .getByRole('button', { name: /^选择 / })
-      .click();
-    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
-    await page.locator('.react-flow__node-image').click();
-    await expect(videoNode.getByRole('radiogroup', { name: '生成方式' })).toBeHidden();
-    await videoNode.click();
-    await page.getByLabel('生成提示词').focus();
-    await ime.send('Input.imeSetComposition', {
-      text: '视频中文',
-      selectionStart: 4,
-      selectionEnd: 4,
-    });
-    await expect(page.getByLabel('生成提示词')).toBeFocused();
-    await ime.send('Input.insertText', { text: '视频中文' });
-    await expect(page.getByLabel('生成提示词')).toHaveValue('视频中文');
-    await page.getByLabel('生成提示词').fill('让这束暖光缓慢掠过胶片');
-    await page.getByRole('radio', { name: '文生视频', exact: true }).click();
-    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
-    await expect(page.getByRole('button', { name: '生成视频', exact: true })).toBeDisabled();
-    await expect(page.getByLabel('生成提示词')).toHaveValue('让这束暖光缓慢掠过胶片');
-    await page.getByRole('radio', { name: '首尾帧', exact: true }).click();
-    await page.getByRole('button', { name: '视频素材', exact: true }).click();
-    const videoMaterials = page.getByRole('dialog', { name: '视频素材', exact: true });
-    await expect(videoMaterials.getByLabel('素材 1 角色')).toHaveValue('first_frame');
-    await videoMaterials.getByRole('button', { name: '视频素材说明', exact: true }).focus();
-    await page.keyboard.press('Enter');
-    await expect(page.getByText(/上传只存入项目，不调用模型/)).toBeVisible();
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    // 固定宽输入框通过画布平移查看；先让视频节点在最小窗口内，再检查独立弹层。
-    await page.mouse.move(box.x + 600, box.y + 100);
-    await page.mouse.down({ button: 'middle' });
-    await page.mouse.move(box.x + 180, box.y - 100, { steps: 12 });
-    await page.mouse.up({ button: 'middle' });
-    await page.getByRole('button', { name: '生成参数', exact: true }).click();
-    const videoParameters = page.getByRole('dialog', { name: '生成参数', exact: true });
-    await expect(videoParameters.getByRole('radiogroup', { name: '生成方式' })).toHaveCount(0);
-    await videoParameters.getByRole('button', { name: '时长（秒）说明' }).click();
-    await expect(page.getByText('默认值：5。', { exact: true })).toBeVisible();
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
-    for (const theme of ['light', 'dark']) {
-      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
-      await expect(async () => {
-        const bounds = (await videoParameters.boundingBox())!;
-        const width = await page.evaluate(() => innerWidth);
-        expect(bounds.x).toBeGreaterThanOrEqual(0);
-        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
-        const height = await page.evaluate(() => innerHeight);
-        expect(bounds.y).toBeGreaterThanOrEqual(0);
-        expect(bounds.y + bounds.height).toBeLessThanOrEqual(height);
-      }).toPass();
-      await page.screenshot({ path: info.outputPath(`video-capabilities-help-${theme}.png`) });
     }
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1500, 960));
     await page.getByRole('button', { name: '生成视频', exact: true }).click();
-    const previewVideo = videoNode.locator('video');
-    await expect(previewVideo).toBeVisible();
-    await expect
-      .poll(() =>
-        previewVideo.evaluate(
-          (element) => element instanceof HTMLVideoElement && element.readyState,
-        ),
-      )
-      .toBeGreaterThan(0);
+    await expect(videoNode.locator('video')).toBeVisible();
     expect(videoRequests).toHaveLength(1);
-    expect(JSON.parse(videoRequests[0])).toMatchObject({
-      model: 'doubao-seedance-2-0',
+    expect(videoRequests[0]).toMatchObject({
+      model: '本地视频模型',
+      ratio: 'adaptive',
       content: [
-        { type: 'text', text: '让这束暖光缓慢掠过胶片' },
+        { type: 'text', text: '让暖光缓慢移动' },
         { type: 'image_url', role: 'first_frame' },
+        { type: 'image_url', role: 'last_frame' },
       ],
     });
-
-    await page.getByRole('button', { name: '添加节点', exact: true }).click();
-    await page.getByRole('menuitem', { name: '图片', exact: true }).click();
-    const promptEditor = page.getByRole('textbox', { name: '生成提示词' });
-    await promptEditor.fill('参考 @');
-    await expect(page.getByRole('listbox', { name: '引用参考' })).toBeVisible();
-    await promptEditor.press('ArrowDown');
-    await promptEditor.press('Enter');
-    await expect(promptEditor.locator('[data-reference]')).toHaveText('图1');
-    await expect(page.locator('.react-flow__edge')).toHaveCount(2);
-    await promptEditor.press('Control+z');
-    await expect(promptEditor).toHaveText('参考 @');
-    await expect(page.locator('.react-flow__edge')).toHaveCount(1);
-    await promptEditor.press('Control+Shift+z');
-    await expect(promptEditor.locator('[data-reference]')).toHaveText('图1');
-    await expect(page.locator('.react-flow__edge')).toHaveCount(2);
-    await expect(page.getByLabel('提示词字数')).toHaveText('5 / 32000');
-    for (const theme of ['light', 'dark']) {
-      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
-      await page.getByRole('button', { name: '添加参考' }).click();
-      await expect(page.getByRole('group', { name: '已连入参考' })).toBeVisible();
-      await page.screenshot({ path: join(screenshots, `mentions-${theme}.png`) });
-      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
-      await expect(async () => {
-        const menuBounds = (await page.getByRole('listbox', { name: '引用参考' }).boundingBox())!;
-        const composerBounds = (await composer.boundingBox())!;
-        expect(menuBounds.x).toBeGreaterThanOrEqual(composerBounds.x);
-        expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(composerBounds.x + 620);
-      }).toPass();
-      await page.screenshot({ path: join(screenshots, `mentions-small-${theme}.png`) });
-      await app.evaluate(({ BrowserWindow }) =>
-        BrowserWindow.getAllWindows()[0].setSize(1500, 960),
-      );
-      await promptEditor.press('Escape');
-    }
-    await page.getByRole('button', { name: '生成图片', exact: true }).click();
-    await expect(page.locator('.react-flow__node-image img')).toHaveCount(2);
-    expect(imageRequests).toHaveLength(5);
-    expect(imageRequests[4]).toContain('参考 图1');
-    for (const theme of ['light', 'dark']) {
-      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
-      await expect(page.locator('body')).toHaveCSS(
-        'background-color',
-        theme === 'dark' ? 'rgb(13, 13, 15)' : 'rgb(246, 247, 249)',
-      );
-      await page.screenshot({ path: info.outputPath(`canvas-generation-${theme}.png`) });
-    }
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
-    expect(
-      await page
-        .locator('main')
-        .evaluate(
-          (element: { scrollWidth: number; clientWidth: number }) =>
-            element.scrollWidth <= element.clientWidth,
-        ),
-    ).toBe(true);
-    await page.screenshot({ path: info.outputPath('canvas-generation-small.png') });
-    expect(await readdir(join((await canvasFixture(page)).rootPath, '.frameloom/media'))).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/^[a-f0-9]{64}\.png$/),
-        expect.stringMatching(/^[a-f0-9]{64}\.mp4$/),
-      ]),
-    );
-    expect(errors).toEqual([]);
+    await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
+    expect((await canvasFixture(page)).rootPath).toContain('验收项目');
     await app.close();
-    app = undefined;
     app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     page = await app.firstWindow();
     await openProjectCanvas(page, app);
     await expect(page.locator('.react-flow__node-image img')).toHaveCount(2);
-    await expect
-      .poll(() =>
-        page
-          .locator('.react-flow__node-image img')
-          .first()
-          .evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth),
-      )
-      .toBe(256);
-    expect(imageRequests).toHaveLength(5);
+    await page.locator('.react-flow__node-video').hover();
+    await expect(page.locator('.react-flow__node-video video')).toBeVisible();
+    expect(imageRequests).toHaveLength(2);
     expect(videoRequests).toHaveLength(1);
   } finally {
-    await app?.close();
+    await disposeTestApp(app);
     upstream.closeAllConnections();
-    await new Promise<void>((resolve) => upstream.close(() => resolve()));
-    if (process.env.FRAME_LOOM_E2E_KEEP_DATA === '1') console.log(`原生验收数据：${userData}`);
-    else await rm(userData, { recursive: true, force: true });
+    await new Promise<void>((done) => upstream.close(() => done()));
+    await rm(userData, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });

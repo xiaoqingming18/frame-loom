@@ -30,13 +30,44 @@ const key = (
     ...extra,
   }) as KeyboardEvent;
 
-it('旧剪贴板节点迁移到 v2，任务引用保留', () => {
+it('旧剪贴板节点迁移到 v3，任务引用保留', () => {
   const id = '11111111-1111-4111-8111-111111111111';
   const node = media('old', 'image', { typeVersion: 1 });
   node.data = { ...(node.data as object), pendingJobId: id };
   const next = deserialize(serialize({ nodes: [node], edges: [] }), createBuiltinRegistry());
-  expect(next?.nodes[0]).toMatchObject({ typeVersion: 2, data: { pendingJobIds: [id] } });
+  expect(next?.nodes[0]).toMatchObject({ typeVersion: 3, data: { pendingJobIds: [id] } });
   expect(next?.nodes[0].data).not.toHaveProperty('pendingJobId');
+});
+
+it('旧剪贴板结合尾帧连线迁移模式与语义参数', () => {
+  const source = media('source');
+  const target = media('target', 'video', { typeVersion: 2 });
+  target.data = {
+    versions: [],
+    activeVersion: 0,
+    prompt: '保留',
+    inputOrder: [],
+    mode: 'frames',
+    params: { ratio: '16:9', seconds: 5, unknown: true },
+  };
+  const payload = {
+    nodes: [source, target],
+    edges: [
+      {
+        id: 'tail',
+        source: 'source',
+        target: 'target',
+        sourceHandle: 'out',
+        targetHandle: 'last_frame',
+      },
+    ],
+  };
+  const migrated = deserialize(serialize(payload), createBuiltinRegistry());
+  expect(migrated?.nodes[1]).toMatchObject({
+    typeVersion: 3,
+    data: { mode: 'first_last', params: { aspectRatio: '16:9', duration: 5 } },
+  });
+  expect((migrated?.nodes[1].data as { params: unknown }).params).not.toHaveProperty('unknown');
 });
 
 describe('快捷键', () => {

@@ -55,6 +55,16 @@ it('HTTP 创建渠道和模型，图像／视频／TTS 写回项目，完整预�
     },
     {
       method: 'POST',
+      path: '/v1/images/edits',
+      headers: { authorization: 'Bearer test-key' },
+      reply: (request) => {
+        expect(request.body).toContain('参考 图1');
+        expect(request.body).toContain('name="image[]"');
+        return { body: JSON.stringify({ data: [{ b64_json: png.toString('base64') }] }) };
+      },
+    },
+    {
+      method: 'POST',
       path: '/v1beta/models/tts-alias:generateContent',
       headers: { 'x-goog-api-key': 'test-key' },
       reply: () => ({
@@ -195,6 +205,32 @@ it('HTTP 创建渠道和模型，图像／视频／TTS 写回项目，完整预�
       expect(
         upstream.requests.filter((req) => req.method === 'POST' && req.path === submit),
       ).toHaveLength(1);
+      if (model.kind === 'image') {
+        const hash = job.outputs[0].sha256;
+        const edit = await engine.request('/generation-jobs', 'POST', {
+          modelId: model.id,
+          projectId: project.id,
+          pageId: page.id,
+          prompt: `参考 @{${hash}}`,
+          params: {},
+          extras: {},
+          source: 'test',
+          inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: hash }],
+        });
+        expect(edit.status).toBe(201);
+        const created = GenerationJob.parse(await edit.json());
+        await expect
+          .poll(
+            async () =>
+              GenerationJob.parse(
+                await (await engine.request(`/generation-jobs/${created.id}`)).json(),
+              ).status,
+          )
+          .toBe('succeeded');
+        expect(
+          upstream.requests.filter((request) => request.path === '/v1/images/edits'),
+        ).toHaveLength(1);
+      }
       if (model.kind === 'video')
         expect(
           upstream.requests.some(

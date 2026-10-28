@@ -1,16 +1,21 @@
-import type { CanvasDocument, CanvasMediaData, GenerationInput } from '@frame-loom/contracts';
+import {
+  InputRole,
+  type CanvasDocument,
+  type CanvasMediaData,
+  type SemanticInput,
+} from '@frame-loom/contracts';
 import type { CanvasGenerationConfig } from '../host';
 
 export function generationModel(
   config: CanvasGenerationConfig | null,
-  kind: 'image' | 'video',
+  kind: 'image' | 'video' | 'tts',
   modelId?: string,
 ) {
   const models = config?.models.filter((model) => model.kind === kind) ?? [];
   return modelId ? models.find((model) => model.id === modelId) : models[0];
 }
 
-export function generationInputs(document: CanvasDocument, nodeId: string): GenerationInput[] {
+export function generationInputs(document: CanvasDocument, nodeId: string): SemanticInput[] {
   return generationSources(document, nodeId).map((reference) => reference.input);
 }
 
@@ -46,7 +51,9 @@ export function generationSources(document: CanvasDocument, nodeId: string) {
     const index = data?.inputOrder.indexOf(id) ?? -1;
     return index < 0 ? (data?.inputOrder.length ?? 0) : index;
   };
-  return [...refs, ...local].sort((a, b) => rank(a.id) - rank(b.id));
+  return [...refs, ...local]
+    .sort((a, b) => rank(a.id) - rank(b.id))
+    .map((ref, order) => ({ ...ref, input: { ...ref.input, order } }));
 }
 
 /** 编号、缩略图和请求输入共用同一次排序及有效产物筛选。 */
@@ -75,12 +82,9 @@ export function generationReferences(document: CanvasDocument, nodeId: string) {
               media,
               input: {
                 kind: source.type === 'video' ? ('video' as const) : ('image' as const),
-                role:
-                  edge.targetHandle === 'first_frame'
-                    ? ('first_frame' as const)
-                    : edge.targetHandle === 'last_frame'
-                      ? ('last_frame' as const)
-                      : ('reference' as const),
+                role: InputRole.safeParse(edge.targetHandle).success
+                  ? InputRole.parse(edge.targetHandle)
+                  : ('reference' as const),
                 sha256: media.sha256,
               },
             },

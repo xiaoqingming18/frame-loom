@@ -4,7 +4,7 @@ import { useCanvas } from '../context';
 import { isActiveGenerationJob, writeGenerationJob } from './generation-writeback';
 
 export function GenerationRuntime() {
-  const { host, store } = useCanvas();
+  const { host, store, registry } = useCanvas();
   const generation = host.generation;
   useEffect(() => {
     if (!generation) return;
@@ -34,8 +34,26 @@ export function GenerationRuntime() {
           let job;
           try {
             job = await generation.get(id, controller.signal);
-          } catch {
-            // 导入文档中的失效任务不能阻塞其他节点恢复；保留引用供后续查询。
+          } catch (error) {
+            if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+              store.getState().applySystem((document) => ({
+                ...document,
+                nodes: document.nodes.map((node) => {
+                  if (node.type !== 'image' && node.type !== 'video') return node;
+                  const data = node.data as CanvasMediaData;
+                  return data.pendingJobIds?.includes(id)
+                    ? {
+                        ...node,
+                        data: {
+                          ...data,
+                          pendingJobIds: data.pendingJobIds.filter((pending) => pending !== id),
+                        },
+                      }
+                    : node;
+                }),
+              }));
+            }
+            // 网络错误保留任务；清库或导入带来的 404 同步清理当前文档及历史。
             continue;
           }
           if (controller.signal.aborted) return;
@@ -57,7 +75,10 @@ export function GenerationRuntime() {
     };
     void generation
       .load(controller.signal)
-      .then((config) => store.getState().setGenerationConfig(config))
+      .then((config) => {
+        registry.setGenerationModels(config.models);
+        store.getState().setGenerationConfig(config);
+      })
       .catch((error: unknown) =>
         store
           .getState()
@@ -70,6 +91,6 @@ export function GenerationRuntime() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [generation, store]);
+  }, [generation, store, registry]);
   return null;
 }

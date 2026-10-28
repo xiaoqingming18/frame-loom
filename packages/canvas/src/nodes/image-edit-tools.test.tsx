@@ -1,9 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ModelProfile, type CanvasMediaData } from '@frame-loom/contracts';
+import { type CanvasMediaData, type ImageCap } from '@frame-loom/contracts';
 import { CanvasContext } from '../context';
 import { createCanvasStore } from '../store/store';
-import { doc, generationJob, media, sha } from '../test-utils';
+import { doc, generationJob, generationModelFixture, media, sha } from '../test-utils';
 import { createBuiltinRegistry } from './builtin';
 import { ImageEditTools } from './image-edit-tools';
 import { detectFaces } from './face-detection';
@@ -16,7 +16,7 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function setup(overrides: Partial<ModelProfile> = {}) {
+function setup(overrides: Partial<ImageCap> = {}) {
   const job = generationJob();
   const data: CanvasMediaData = {
     versions: job.outputs,
@@ -25,45 +25,10 @@ function setup(overrides: Partial<ModelProfile> = {}) {
     inputOrder: [],
   };
   const store = createCanvasStore(doc([media('source', 'image', { data })]));
-  const profile = ModelProfile.parse({
-    id: 'image-edit',
-    name: '图片编辑',
-    kind: 'image',
-    protocol: 'openai-images',
-    matchIds: [],
-    generic: false,
-    modes: [{ id: 'reference', name: '参考图' }],
-    params: [],
-    constraints: [],
-    inputs: [
-      {
-        kind: 'image',
-        transport: 'inline',
-        maxCount: 3,
-        maxBytes: 1000000,
-        mimeTypes: ['image/png'],
-      },
-    ],
-    runtime: {
-      concurrency: 1,
-      pollInitialMs: 1000,
-      pollMaxMs: 5000,
-      timeoutMs: 10000,
-      submitTimeoutMs: 1000,
-      supportsCancel: false,
-    },
-    imageEditCapabilities: {
-      operations: ['angle', 'lighting', 'emotion'],
-      maxReferenceImages: 3,
-      openAiImageEdit: true,
-      mask: true,
-    },
-    ...overrides,
-  });
-  store.getState().setGenerationConfig({
-    storageReady: true,
-    models: [{ id: job.channelModelId, label: '兼容模型', kind: 'image', profile }],
-  });
+  const model = generationModelFixture();
+  if (model.capability.kind !== 'image') throw new Error('图片夹具无效');
+  model.capability = { ...model.capability, ...overrides };
+  store.getState().setGenerationConfig({ storageReady: true, models: [model] });
   const create = vi.fn().mockResolvedValue(job);
   const host = {
     media: { upload: vi.fn(), url: (hash: string) => hash },
@@ -88,7 +53,7 @@ it('单一模型仍要求显式选择，角度只提交一次并保留源图', a
   const { store, create, job } = setup();
   fireEvent.click(screen.getByRole('button', { name: '多角度编辑' }));
   expect(screen.getByRole<HTMLButtonElement>('button', { name: '确认' }).disabled).toBe(true);
-  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.channelModelId } });
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.modelId } });
   fireEvent.click(screen.getByRole('button', { name: '确认' }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0][0]).toMatchObject({
@@ -100,35 +65,23 @@ it('单一模型仍要求显式选择，角度只提交一次并保留源图', a
   );
 });
 
-it.each(['gemini-image', 'ark-images'] as const)(
-  '%s 单参考操作可选用，表情显示协议拒绝',
-  async (protocol) => {
-    vi.mocked(detectFaces).mockResolvedValue({ faces: [], imageWidth: 256, imageHeight: 256 });
-    const { create, job } = setup({
-      protocol,
-      imageEditCapabilities: {
-        operations: ['angle', 'lighting'],
-        maxReferenceImages: 1,
-        openAiImageEdit: false,
-        mask: false,
-      },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '多角度编辑' }));
-    fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.channelModelId } });
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '确认' }).disabled).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: '确认' }));
-    await waitFor(() => expect(create).toHaveBeenCalledOnce());
-    fireEvent.click(screen.getByRole('button', { name: '表情编辑' }));
-    fireEvent.change(screen.getByLabelText('表情模型'), { target: { value: job.channelModelId } });
-    expect(screen.getByText('表情编辑需要 OpenAI Images 编辑协议')).toBeDefined();
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成表情' }).disabled).toBe(true);
-  },
-);
+it('参考图不足时表情禁用并说明原因，单参考角度仍可用', async () => {
+  vi.mocked(detectFaces).mockResolvedValue({ faces: [], imageWidth: 256, imageHeight: 256 });
+  const { create, job } = setup({ references: { max: 1, formats: ['image/png'] } });
+  fireEvent.click(screen.getByRole('button', { name: '多角度编辑' }));
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.modelId } });
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole('button', { name: '表情编辑' }));
+  fireEvent.change(screen.getByLabelText('表情模型'), { target: { value: job.modelId } });
+  expect(screen.getByText('需要编辑接口与至少两个参考图')).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成表情' }).disabled).toBe(true);
+});
 
 it('打光模板关闭编辑仍即时生效，关闭面板后重开恢复默认且不提交任务', () => {
   const { create, store, job } = setup();
   fireEvent.click(screen.getByRole('button', { name: '重打光编辑' }));
-  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.channelModelId } });
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.modelId } });
   fireEvent.click(screen.getByRole('button', { name: '设置提示词模板' }));
   fireEvent.change(screen.getByLabelText('打光提示词模板'), {
     target: { value: '会话专用，{{brightnessPrompt}}' },
@@ -169,7 +122,7 @@ it('表情选中角色后源版本改变会阻止提交，边缘情绪坐标可�
   });
   const { store, create, job } = setup();
   fireEvent.click(screen.getByRole('button', { name: '表情编辑' }));
-  fireEvent.change(screen.getByLabelText('表情模型'), { target: { value: job.channelModelId } });
+  fireEvent.change(screen.getByLabelText('表情模型'), { target: { value: job.modelId } });
   fireEvent.click(await screen.findByRole('radio', { name: '角色1' }));
   fireEvent.click(screen.getAllByRole('gridcell')[0]);
   act(() => {

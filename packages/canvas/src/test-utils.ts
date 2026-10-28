@@ -1,8 +1,30 @@
 import type { CanvasDocument, CanvasEdge, CanvasNode } from '@frame-loom/contracts';
-import { GenerationJob } from '@frame-loom/contracts';
+import { GenerationJob, getProtocol, type Capability } from '@frame-loom/contracts';
+import type { CanvasGenerationModel } from './host';
 import { emptyMedia } from './nodes/media';
 
 export const sha = (char: string) => char.repeat(64);
+
+export function generationModelFixture(
+  protocolId = 'openai-images',
+  capability?: Capability,
+): CanvasGenerationModel {
+  const protocol = structuredClone(getProtocol(protocolId)!);
+  const cap =
+    capability ??
+    structuredClone(
+      protocol.templates.image ?? protocol.templates.video ?? protocol.templates.tts!,
+    );
+  return {
+    id: '22222222-2222-4222-8222-222222222222',
+    label: '图片模型',
+    kind: cap.kind as 'image' | 'video' | 'tts',
+    capability: cap,
+    protocol,
+    transport: { image: 'inline', video: 'url', audio: 'url' },
+    extras: [],
+  };
+}
 
 export function generationJob(overrides: Partial<GenerationJob> = {}): GenerationJob {
   const modelId = '22222222-2222-4222-8222-222222222222';
@@ -10,12 +32,11 @@ export function generationJob(overrides: Partial<GenerationJob> = {}): Generatio
   return GenerationJob.parse({
     id: '11111111-1111-4111-8111-111111111111',
     kind: 'image',
-    channelModelId: modelId,
-    profileId: 'openai-images-default',
+    modelId,
+    configHash: 'test',
     status: 'succeeded',
     request: {
       modelId,
-      mode: 'text',
       prompt: '生成画面',
       params: {},
       inputs: [],
@@ -54,11 +75,11 @@ export function media(
   return {
     id,
     type,
-    typeVersion: 2,
+    typeVersion: 3,
     position: { x: 0, y: 0 },
     size: { width: 100, height: 100 },
     title: id,
-    data: emptyMedia(type === 'video' ? 'text' : undefined),
+    data: emptyMedia(type === 'video' ? 't2v' : undefined),
     ...extra,
   };
 }

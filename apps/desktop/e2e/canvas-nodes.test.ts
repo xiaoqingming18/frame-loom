@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { addMediaChannel, addMediaModel } from './model-service.fixture';
 
 const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const png = Buffer.from(
@@ -26,6 +27,10 @@ test('节点连线：类型、重复、环、端口限额、方式切换一步�
   try {
     const page = await app.firstWindow();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1500, 960));
+    await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
+    const channel = await addMediaChannel(page, 'http://127.0.0.1:1', 'fixture-local');
+    await addMediaModel(page, channel.id, 'openai-images', '图片端口夹具');
+    await addMediaModel(page, channel.id, 'ark-seedance', '视频端口夹具');
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => {
@@ -187,7 +192,7 @@ test('媒体导入：上传、拖入、粘贴、视频封面和单播放器', as
     await expect(page.locator('.react-flow__node-image')).toHaveCount(3);
     const fixture = resolve(
       desktop,
-      '../engine/src/modules/generation/adapters/fixtures/reference.mp4',
+      '../engine/src/modules/generation/protocols/fixtures/reference.mp4',
     );
     await input.setInputFiles(fixture);
     const video = page.locator('.react-flow__node-video');

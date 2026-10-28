@@ -1,5 +1,5 @@
 import { Film, Group, ImageIcon } from 'lucide-react';
-import { CanvasGroupData, CanvasMediaData } from '@frame-loom/contracts';
+import { CanvasGroupData, CanvasMediaData, migrateCanvasMediaData } from '@frame-loom/contracts';
 import { defineNodeType, NodeRegistry } from '../registry/registry';
 import {
   activeVersion,
@@ -12,13 +12,12 @@ import {
 import { GroupNodeView, ImageNodeView, VideoNodeView } from './views';
 
 function migrateMedia(data: unknown): CanvasMediaData {
-  const { pendingJobId, ...rest } = CanvasMediaData.parse(data);
-  return pendingJobId && !rest.pendingJobIds ? { ...rest, pendingJobIds: [pendingJobId] } : rest;
+  return CanvasMediaData.parse(migrateCanvasMediaData(data));
 }
 
 export const imageNode = defineNodeType({
   type: 'image',
-  version: 2,
+  version: 3,
   label: '图片',
   icon: <ImageIcon />,
   category: 'media',
@@ -39,7 +38,7 @@ export const imageNode = defineNodeType({
 
 export const videoNode = defineNodeType({
   type: 'video',
-  version: 2,
+  version: 3,
   label: '视频',
   icon: <Film />,
   category: 'media',
@@ -48,8 +47,8 @@ export const videoNode = defineNodeType({
   keepAspect: true,
   dataSchema: CanvasMediaData,
   migrate: migrateMedia,
-  createData: () => emptyMedia('text'),
-  inputs: (data) => videoInputs(data.mode),
+  createData: () => emptyMedia('t2v'),
+  inputs: (data) => videoInputs(data),
   outputs: () => videoOutputs,
   output(data) {
     const version = activeVersion(data);

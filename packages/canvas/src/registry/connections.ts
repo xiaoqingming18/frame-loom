@@ -1,6 +1,6 @@
 import type { CanvasDocument, CanvasEdge, CanvasNode } from '@frame-loom/contracts';
 import type { NodeRegistry, PortDataType } from './registry';
-import { videoInputs } from '../nodes/media';
+import { retainedVideoInputs } from '../nodes/media';
 
 export interface ConnectionAttempt {
   source: string;
@@ -43,7 +43,7 @@ export function checkConnection(
   const output = registry.outputs(source).find((port) => port.id === attempt.sourceHandle);
   const input = (
     allowInactiveVideoPorts && target.type === 'video'
-      ? [...videoInputs('frames'), ...videoInputs('reference')]
+      ? retainedVideoInputs
       : registry.inputs(target)
   ).find((port) => port.id === attempt.targetHandle);
   if (!output || !input) return { ok: false, reason: '端口不存在' };

@@ -116,10 +116,10 @@ it('删除提示未结束任务，勾选后先放弃任务再移到回收站', a
   const job = {
     id: pageId,
     kind: 'image',
-    channelModelId: id,
-    profileId: 'test',
+    modelId: id,
+    configHash: 'test',
     status: 'running',
-    request: { projectId: id, modelId: id, mode: 'text', prompt: 'test' },
+    request: { projectId: id, modelId: id, prompt: 'test', inputs: [], params: {}, extras: {} },
     remoteTaskId: null,
     remoteStatus: null,
     attempts: 1,

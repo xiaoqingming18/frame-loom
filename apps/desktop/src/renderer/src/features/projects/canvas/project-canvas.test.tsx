@@ -11,7 +11,8 @@ import type { ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CanvasEditorProps, CanvasHost, CanvasStore } from '@frame-loom/canvas';
 import {
-  ModelProfile,
+  Model,
+  getProtocol,
   ProjectTag,
   ProjectTagUsage,
   emptyCanvasDocument,
@@ -194,13 +195,12 @@ function setup(initialFailure?: Error) {
       if (failure) return Promise.reject(failure);
       if (path.endsWith('/tags')) return Promise.resolve(schema.parse([]));
       if (path === '/channels') return Promise.resolve(schema.parse([]));
-      if (path === '/channel-models') return Promise.resolve(schema.parse([]));
+      if (path === '/models') return Promise.resolve(schema.parse([]));
       if (path === '/model-defaults')
         return Promise.resolve(schema.parse({ chat: null, image: null, video: null, tts: null }));
       if (path === '/generation-jobs' && init?.method === 'POST')
         return Promise.reject(new Error('只检查生成请求归属'));
-      if (path === '/model-profiles' || path === '/generation-jobs')
-        return Promise.resolve(schema.parse([]));
+      if (path === '/generation-jobs') return Promise.resolve(schema.parse([]));
       return Promise.resolve(schema.parse(init?.method ? { revision: 2, missing: [] } : record));
     },
     stream() {
@@ -339,95 +339,71 @@ it('当前页改派后保存失败保留本地修改，但不发送删除请求'
   expect(screen.getByRole('alert').textContent).toContain('改派保存失败');
 });
 
-it('宿主使用服务端有效档案而不按别名推断，单张重试调用 resubmit', async () => {
-  const base = ModelProfile.parse({
-    id: 'base',
-    name: '图片',
-    kind: 'image',
-    protocol: 'openai-images',
-    matchIds: ['gpt-image-2'],
-    generic: false,
-    modes: [{ id: 'text', name: '文生图' }],
-    params: [],
-    constraints: [],
-    inputs: [],
-    runtime: {
-      concurrency: 1,
-      pollInitialMs: 1000,
-      pollMaxMs: 5000,
-      timeoutMs: 10000,
-      submitTimeoutMs: 1000,
-      supportsCancel: false,
-    },
-  });
-  const profiles = [
-    base,
-    { ...base, id: 'new', matchIds: ['gpt-image-2.5'] },
-    { ...base, id: 'generic', generic: true, matchIds: [] },
-  ];
+it('宿主过滤禁用渠道、禁用与阻塞模型，默认优先且传递 TTS', async () => {
   const channelId = crypto.randomUUID();
-  const model = {
-    channelId,
-    enabled: true,
-    kind: 'image',
-    protocol: 'openai-images',
-    displayName: '图片',
-    profileId: null,
-    overrides: {},
-    metadata: null,
-    lastCheck: null,
+  const disabledChannelId = crypto.randomUUID();
+  const now = '2026-10-29T00:00:00Z';
+  const channel = (id: string, enabled: boolean) => ({
+    id,
+    enabled,
+    name: '渠道',
+    baseUrl: 'http://127.0.0.1:12345',
+    catalogFormat: 'openai',
+    concurrency: 2,
+    hasKey: true,
+    keyHint: 'test',
+    hasSecretKey: false,
+    headerNames: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  const make = (protocolId: string, kind: 'image' | 'video' | 'tts') => {
+    const protocol = getProtocol(protocolId)!;
+    return Model.parse({
+      id: crypto.randomUUID(),
+      channelId,
+      kind,
+      enabled: true,
+      displayName: kind,
+      upstreamModelId: 'custom-alias',
+      protocolId,
+      capability: protocol.templates[kind],
+      configHash: 'test',
+      createdAt: now,
+      updatedAt: now,
+      blockedReason: null,
+      lastCheck: null,
+      endpoints: { operations: {}, foreignHosts: [], issues: [] },
+    });
   };
+  const image = make('openai-images', 'image');
+  const preferred = make('ark-seedream', 'image');
+  const tts = make('openai-speech', 'tts');
+  const models = [
+    image,
+    preferred,
+    tts,
+    { ...make('ark-seedance', 'video'), enabled: false },
+    { ...make('ark-seedance', 'video'), blockedReason: '地址未确认' },
+    { ...make('ark-seedance', 'video'), channelId: disabledChannelId },
+  ];
   const request = vi.fn<EngineClient['request']>().mockImplementation((path, schema) => {
     const values: Record<string, unknown> = {
-      '/channels': [
-        {
-          id: channelId,
-          name: '渠道',
-          enabled: true,
-          apiFormat: 'openai-completions',
-          baseUrl: 'https://example.com',
-          hasKey: true,
-          keyHint: null,
-          headerNames: [],
-          lastCheck: null,
-          createdAt: '2026-10-26T00:00:00Z',
-          updatedAt: '2026-10-26T00:00:00Z',
-        },
-      ],
-      '/channel-models': [
-        {
-          ...model,
-          id: crypto.randomUUID(),
-          upstreamModelId: 'custom-billing-id',
-          effectiveProfile: profiles[1],
-        },
-        {
-          ...model,
-          id: crypto.randomUUID(),
-          upstreamModelId: 'gpt-image-2.5',
-          profileId: 'base',
-          effectiveProfile: base,
-        },
-      ],
-      '/model-defaults': { chat: null, image: null, video: null, tts: null },
-      '/model-profiles': profiles,
+      '/channels': [channel(channelId, true), channel(disabledChannelId, false)],
+      '/models': models,
+      '/model-defaults': { chat: null, image: preferred.id, video: null, tts: tts.id },
       '/object-storage': null,
-      '/projects/00000000-0000-4000-8000-000000000001/tags': [],
-      '/projects/00000000-0000-4000-8000-000000000001/pages/00000000-0000-4000-8000-000000000002':
-        null,
-      '/projects/00000000-0000-4000-8000-000000000001/sessions/open': { saved: true },
-      '/projects/00000000-0000-4000-8000-000000000001/sessions/close': { saved: true },
+      [`/projects/${projectId}/tags`]: [],
+      [`/projects/${projectId}/pages/${pageId}`]: record,
+      [`/projects/${projectId}/sessions/open`]: { saved: true },
+      [`/projects/${projectId}/sessions/close`]: { saved: true },
     };
-    return Promise.resolve(
-      schema.parse(
-        path.endsWith('/pages/00000000-0000-4000-8000-000000000002') ? record : values[path],
-      ),
-    );
+    return Promise.resolve(schema.parse(values[path]));
   });
   render(
     <ProjectCanvas
-      projectId="00000000-0000-4000-8000-000000000001"
-      pageId="00000000-0000-4000-8000-000000000002"
+      projectId={projectId}
+      pageId={pageId}
       engineClient={{
         request: (path, schema, init) =>
           request(path, schema, init).then((value) => schema.parse(value)),
@@ -437,8 +413,11 @@ it('宿主使用服务端有效档案而不按别名推断，单张重试调用 
   );
   await screen.findByRole('button', { name: '编辑画布' });
   const config = await captured.host!.generation!.load(new AbortController().signal);
-  expect(config.models.map((model) => model.profile?.id)).toEqual(['new', 'base']);
-  expect(request.mock.calls.some(([path]) => path === '/model-profiles')).toBe(false);
+  expect(config.models.map((model) => model.id)).toEqual([preferred.id, tts.id, image.id]);
+  expect(config.models[2].protocol.id).toBe('openai-images');
+  expect(config.models[1].kind).toBe('tts');
+  expect(config.models[2].transport.image).toBe('inline');
+  expect(config.models[2]).not.toHaveProperty('profile');
   request.mockRejectedValueOnce(new Error('重试响应'));
   await expect(captured.host!.generation!.resubmit('failed-id')).rejects.toThrow('重试响应');
   expect(request).toHaveBeenLastCalledWith(
@@ -472,9 +451,9 @@ it('会话先打开再加载，离开时保存成功后关闭，生成请求附�
   await captured
     .host!.generation!.create({
       modelId: '00000000-0000-4000-8000-000000000003',
-      mode: 'text',
       prompt: '项目生成',
       params: {},
+      extras: {},
       inputs: [],
       source: 'canvas',
     })

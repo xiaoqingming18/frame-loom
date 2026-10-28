@@ -7,13 +7,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  getProtocol,
   ProjectPageRecord,
-  Channel,
-  ChannelModelList,
   GenerationJob,
   MediaFile,
   type CanvasDocument,
 } from '@frame-loom/contracts';
+
+import { addMediaChannel, addMediaModel, disposeTestApp } from './model-service.fixture';
 
 const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -37,15 +38,28 @@ async function api(page: Page, path: string, method = 'GET', body?: unknown) {
   );
 }
 
-test('图片节点验收：模型回退、双参考编号与旧文档重启补写', async () => {
+test('图片节点验收：参数待确认、双参考编号与旧文档重启补写', async () => {
   test.setTimeout(120_000);
   const png = await readFile(new URL('./fixtures/reference-256.png', import.meta.url));
+  const requests: string[] = [];
   let finishLegacy: (() => void) | undefined;
   const upstream = createServer((request, response) => {
+    if (
+      request.method !== 'POST' ||
+      !['/v1/images/generations', '/v1/images/edits'].includes(request.url ?? '')
+    ) {
+      response.writeHead(404).end();
+      return;
+    }
+    if (request.headers.authorization !== 'Bearer sk-image-acceptance-local') {
+      response.writeHead(401).end();
+      return;
+    }
     let body = '';
     request.setEncoding('utf8');
     request.on('data', (chunk: string) => (body += chunk));
     request.on('end', () => {
+      requests.push(body);
       const finish = () => {
         if (response.writableEnded || response.destroyed) return;
         response.setHeader('Content-Type', 'application/json');
@@ -62,26 +76,18 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     let page = await app.firstWindow();
     await expect(page.getByRole('heading', { name: '帧织' })).toBeVisible();
-    const channel = Channel.parse(
-      await api(page, '/channels', 'POST', {
-        name: '验收模拟渠道',
-        apiFormat: 'openai-completions',
-        apiKey: 'sk-image-acceptance-local',
-        baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`,
-        enabled: true,
-        models: ['gpt-image-2.5', 'gpt-image-1'].map((id) => ({
-          upstreamModelId: id,
-          displayName: id,
-          kind: 'image',
-          protocol: 'openai-images',
-          profileId: null,
-          overrides: {},
-          enabled: true,
-        })),
-      }),
+    const channel = await addMediaChannel(
+      page,
+      `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`,
+      'sk-image-acceptance-local',
     );
-    const models = ChannelModelList.parse(await api(page, `/channels/${channel.id}/models`));
-    const model = models.find((item) => item.upstreamModelId === 'gpt-image-2.5')!;
+    const model = await addMediaModel(page, channel.id, 'openai-images', '宽幅模型');
+    const narrow = structuredClone(getProtocol('openai-images')!.templates.image!);
+    narrow.size.tiers = narrow.size.tiers.map((tier) => ({
+      ...tier,
+      ratios: tier.ratios.filter((cell) => cell.ratio !== '21:9'),
+    }));
+    await addMediaModel(page, channel.id, 'openai-images', '窄幅模型', narrow);
     await api(page, '/model-defaults', 'PUT', { image: model.id });
     await openProjectCanvas(page, app);
     for (const path of ['./fixtures/reference-256.png', '../resources/icon.png']) {
@@ -101,7 +107,7 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
         {
           id: 'target',
           type: 'image',
-          typeVersion: 2,
+          typeVersion: 3,
           title: '引用目标',
           position: { x: 400, y: 180 },
           size: { width: 280, height: 280 },
@@ -113,8 +119,8 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
             modelId: model.id,
             params: {
               aspectRatio: '21:9',
-              resolution: '4K',
-              quality: 'max',
+              tier: '1K',
+              quality: 'high',
               background: 'transparent',
             },
           },
@@ -135,14 +141,10 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     await openProjectCanvas(page, app);
     await page.locator('.react-flow__node[data-id="target"]').click();
     await page.getByRole('button', { name: '生成模型', exact: true }).click();
-    await page.getByRole('button', { name: /^gpt-image-1 / }).click();
-    await expect(page.getByText(/已按新模型调整/)).toBeVisible();
-    await expect(page.getByRole('button', { name: '生成参数', exact: true })).toContainText(
-      '3:2 · 高 · 透明',
-    );
+    await page.getByRole('button', { name: /^窄幅模型 / }).click();
+    await expect(page.getByRole('button', { name: '生成图片', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: '生成参数', exact: true }).click();
-    await expect(page.getByRole('radio', { name: '比例 21:9', exact: true })).toBeDisabled();
-    await expect(page.getByRole('region', { name: '清晰度', exact: true })).toHaveCount(0);
+    await page.getByRole('radio', { name: '比例 3:2', exact: true }).click();
     await page.keyboard.press('Escape');
     await page
       .getByRole('button', { name: '参考 1，Alt 加方向键排序', exact: true })
@@ -159,17 +161,33 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
       await expect
         .poll(async () => {
           const jobs = (await api(page, '/generation-jobs')) as GenerationJob[];
-          return jobs.find((job) => job.request.prompt === expected)?.status;
+          return jobs.find(
+            (job) =>
+              job.request.prompt ===
+              text
+                .replaceAll(
+                  `@{${sources[0].id}}`,
+                  `@{${(sources[0].data as { versions: MediaFile[] }).versions[0].sha256}}`,
+                )
+                .replaceAll(
+                  `@{${sources[1].id}}`,
+                  `@{${(sources[1].data as { versions: MediaFile[] }).versions[0].sha256}}`,
+                ),
+          )?.status;
         })
         .toBe('succeeded');
       const jobs = (await api(page, '/generation-jobs')) as GenerationJob[];
-      const job = jobs.find((job) => job.request.prompt === expected)!;
+      const job = jobs.find(
+        (job) => job.status === 'succeeded' && job.request.prompt.startsWith(text.slice(0, 3)),
+      )!;
+      expect(requests.at(-1)).toContain(expected);
       expect(job.request.inputs.map((input) => input.sha256)).toEqual(
         [...sources]
           .reverse()
           .map((node) => (node.data as { versions: MediaFile[] }).versions[0].sha256),
       );
       expect(job.request.params).toEqual({
+        tier: '1K',
         aspectRatio: '3:2',
         quality: 'high',
         background: 'transparent',
@@ -181,9 +199,9 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     const job = GenerationJob.parse(
       await api(page, '/generation-jobs', 'POST', {
         modelId: model.id,
-        mode: 'text',
         prompt: '旧文档补写',
         params: {},
+        extras: {},
         inputs: [],
         source: 'canvas',
       }),
@@ -223,7 +241,7 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');
     const migrated = ProjectPageRecord.parse(await api(page, (await canvasFixture(page)).pagePath));
     expect(migrated.document.nodes[0]).toMatchObject({
-      typeVersion: 2,
+      typeVersion: 3,
       data: {
         pendingJobIds: [],
         versions: [expect.objectContaining({ jobId: job.id })],
@@ -242,10 +260,10 @@ test('图片节点验收：模型回退、双参考编号与旧文档重启补�
     ).toHaveLength(1);
   } finally {
     finishLegacy?.();
-    await app?.close();
+    await disposeTestApp(app);
     upstream.closeAllConnections();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
-    await rm(userData, { recursive: true, force: true });
+    await rm(userData, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });
 
@@ -254,6 +272,17 @@ test('图片编辑验收：角度立即提交、打光二阶段提交与表情�
   const png = await readFile(new URL('./fixtures/reference-256.png', import.meta.url));
   const submissions: { body: string; url?: string }[] = [];
   const upstream = createServer((request, response) => {
+    if (
+      request.method !== 'POST' ||
+      !['/v1/images/generations', '/v1/images/edits'].includes(request.url ?? '')
+    ) {
+      response.writeHead(404).end();
+      return;
+    }
+    if (request.headers.authorization !== 'Bearer sk-image-edit-local') {
+      response.writeHead(401).end();
+      return;
+    }
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
@@ -268,27 +297,12 @@ test('图片编辑验收：角度立即提交、打光二阶段提交与表情�
   try {
     app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
     let page = await app.firstWindow();
-    const channel = Channel.parse(
-      await api(page, '/channels', 'POST', {
-        name: '图片编辑模拟渠道',
-        apiFormat: 'openai-completions',
-        apiKey: 'sk-image-edit-local',
-        baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`,
-        enabled: true,
-        models: [
-          {
-            upstreamModelId: 'gpt-image-1',
-            displayName: 'GPT Image 1',
-            kind: 'image',
-            protocol: 'openai-images',
-            profileId: null,
-            overrides: {},
-            enabled: true,
-          },
-        ],
-      }),
+    const channel = await addMediaChannel(
+      page,
+      `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`,
+      'sk-image-edit-local',
     );
-    const model = ChannelModelList.parse(await api(page, `/channels/${channel.id}/models`))[0];
+    const model = await addMediaModel(page, channel.id, 'openai-images', '编辑模型');
     await api(page, '/model-defaults', 'PUT', { image: model.id });
     await openProjectCanvas(page, app);
     await page
@@ -413,9 +427,9 @@ test('图片编辑验收：角度立即提交、打光二阶段提交与表情�
     });
     expect(submissions).toHaveLength(3);
   } finally {
-    await app?.close();
+    await disposeTestApp(app);
     upstream.closeAllConnections();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
-    await rm(userData, { recursive: true, force: true });
+    await rm(userData, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });

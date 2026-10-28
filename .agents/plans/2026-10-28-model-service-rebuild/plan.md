@@ -30,7 +30,7 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 | 02 | [engine 基座](02-engine-foundation.md) | done | 01 | 清库迁移、新表与仓库、模型服务 HTTP 接口、协议注册表、执行链与快照、读取模型、旧 engine 代码删除 |
 | 03 | [首批协议适配器](03-protocol-adapters.md) | done | 01、02 | 15 个协议描述＋适配器、文本经 pi-ai 接入统一地址、契约测试与集成测试 |
 | 04 | [设置页重写](04-settings-ui.md) | done | 01、02 | 渠道列表与表单、渠道详情、读取模型、模型编辑三个标签、测试、默认模型页、组件测试与 E2E |
-| 05 | [画布图像与视频](05-canvas-media.md) | draft | 01、02、03 | 宿主接口、能力卡驱动参数面板、视频方式与端口、图片编辑能力推导、节点数据迁移、E2E |
+| 05 | [画布图像与视频](05-canvas-media.md) | done | 01、02、03 | 宿主接口、能力卡驱动参数面板、视频方式与端口、图片编辑能力推导、节点数据迁移、E2E |
 | 06 | [画布音频节点](06-canvas-audio.md) | draft | 03、05 | TTS 音频节点、音色、写回、连接视频参考音频、E2E |
 | 07 | [视频编辑与续写](07-video-edit-extend.md) | draft | 03、05 | `edit`／`extend` 方式、待编辑视频端口、Seedance 与可灵承接、测试 |
 | 08 | [整体验收与收尾](08-acceptance.md) | draft | 01、02、03、04、05、06、07 | 残留扫描、全量门禁、限定范围 E2E、验收文档、笔记与计划生命周期收尾 |
@@ -95,3 +95,4 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 - 03 核对官方正文后使用 MiniMax content／ratio 与可灵 contents；可灵未开放本地音频，voice_id 不能由文件 URL 替代。协议扩展默认附加字段、视频尺寸映射与开放容器描述，详见 03 发现与偏差。
 - 03 文本运行时信息存入描述；媒体以 buildSubmit、文本以 pi-ai 实际请求验证保留字段。ElevenLabs 的混合版本操作路径、Gemini PCM／WAV 与既有安全测试 URL 扫描例外见 03 记录；全部上游仍为本地 mock。
 - 04 补齐请求体预览与文本测试 steps；设置页移除旧体系，项目／画布夹具的旧字段留给 05 同步迁移。能力预览暂为本地实现，05 T9 替换并回填 04 验证。详见 04 的发现与偏差。
+- 05 宿主模型额外携带已声明 `extras`，保证参数控件与共享校验有同一事实来源；文本流与用量 DTO 从旧模型文件迁到 `llm.ts` 保留。旧文档必须先结合连线迁移再解析，不能只在 registry 校验后迁移。素材仅总时长限制漏计问题在共享 `checkMedia` 修复并补回归。限定 E2E 保留目录包运行时用例，但默认跳过本计划排除的原生窗口／目录包验收。

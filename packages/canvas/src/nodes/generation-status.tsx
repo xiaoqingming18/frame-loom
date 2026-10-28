@@ -67,7 +67,7 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
         const retryAvailable =
           job?.recoveryAction !== 'new_job' ||
           job.kind !== 'video' ||
-          config?.models.some((model) => model.id === job.channelModelId && !!model.profile);
+          config?.models.some((model) => model.id === job.modelId);
         return (
           <div key={id} className="space-y-1">
             {job?.errorMessage && (

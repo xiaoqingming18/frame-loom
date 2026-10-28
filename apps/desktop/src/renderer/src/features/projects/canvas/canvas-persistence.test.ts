@@ -10,7 +10,7 @@ const document = () => ({
     {
       id: 'one',
       type: 'image',
-      typeVersion: 2,
+      typeVersion: 3,
       position: { x: 10, y: 20 },
       size: { width: 280, height: 180 },
       data: { versions: [], activeVersion: 0, prompt: '第一版', inputOrder: [] },
@@ -103,7 +103,7 @@ it('持久化旧文档加载时迁移任务，保留原参数和提示词', asyn
   });
   await session.reload();
   expect(store.getState().document.nodes[0]).toMatchObject({
-    typeVersion: 2,
+    typeVersion: 3,
     data: { prompt: '第一版', pendingJobIds: [id] },
   });
   expect(store.getState().document.nodes[0].data).not.toHaveProperty('pendingJobId');

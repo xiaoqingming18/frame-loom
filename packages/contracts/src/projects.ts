@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CanvasDocument, CanvasSaveResult, CanvasView } from './canvas.js';
-import { Sha256 } from './generation.js';
+import { Sha256 } from './generation-job.js';
 
 export const ProjectId = z.string().uuid();
 export const ProjectPageId = z.string().uuid();

@@ -6,7 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { ImageEditRecipe, imageEditCapabilityIssue } from '@frame-loom/contracts';
+import { ImageEditRecipe, imageEditSupport } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Dialog, DialogContent, DialogTitle } from '@frame-loom/ui/components/dialog';
 import { useCanvas } from '../context';
@@ -58,25 +58,11 @@ export function EmotionWorkspace({
   const controller = useRef<AbortController | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const model = models.find((item) => item.id === modelId);
-  const capabilityIssue = model?.profile
-    ? imageEditCapabilityIssue(
-        ImageEditRecipe.parse({
-          version: 1,
-          operation: 'emotion',
-          source: { nodeId, sha256: sourceHash },
-          targetFace: { x: 0, y: 0, width: 1, height: 1 },
-          editRegion: { x: 0, y: 0, width: 1, height: 1 },
-          imageWidth: 1,
-          imageHeight: 1,
-          presetId: preset.id,
-          intimacy: preset.intimacy,
-          arousal: preset.arousal,
-          characterName: '角色1',
-          maskMode: model.profile.imageEditCapabilities?.mask ? 'provider' : 'local',
-        }),
-        model.profile,
-      )
-    : undefined;
+  const support =
+    model?.capability.kind === 'image'
+      ? imageEditSupport(model.capability, model.protocol).emotion
+      : undefined;
+  const capabilityIssue = support?.reason;
 
   useEffect(() => {
     const abort = new AbortController();
@@ -109,7 +95,7 @@ export function EmotionWorkspace({
   };
 
   async function submit() {
-    if (!selectedFace || !model?.profile || !host.generation) return;
+    if (!selectedFace || !model || !support?.available || !host.generation) return;
     const current = store.getState().document.nodes.find((node) => node.id === nodeId);
     const currentData = current?.data as {
       versions?: { sha256: string }[];
@@ -119,7 +105,7 @@ export function EmotionWorkspace({
       setError('源图片版本已变化，请重新选择');
       return;
     }
-    const maskSupported = !!model.profile.imageEditCapabilities?.mask;
+    const maskSupported = !!support?.mask;
     const recipeBase = {
       version: 1 as const,
       operation: 'emotion' as const,
@@ -144,7 +130,7 @@ export function EmotionWorkspace({
       setError('表情编辑参数无效');
       return;
     }
-    const issue = imageEditCapabilityIssue(base.data, model.profile);
+    const issue = support?.reason;
     if (issue) {
       setError(issue);
       return;
@@ -188,10 +174,10 @@ export function EmotionWorkspace({
       store.getState().select([child.id]);
       const job = await host.generation.create({
         modelId: model.id,
-        mode: 'reference',
         prompt,
         params: {},
-        inputs: [{ kind: 'image', role: 'reference', sha256: sourceHash }],
+        extras: {},
+        inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: sourceHash }],
         imageEdit: recipe,
         source: 'canvas',
       });
@@ -445,7 +431,7 @@ export function EmotionWorkspace({
                 取消
               </Button>
               <Button
-                disabled={!selectedFace || !model?.profile || !!capabilityIssue || busy}
+                disabled={!selectedFace || !support?.available || !!capabilityIssue || busy}
                 onClick={() => void submit()}
               >
                 {busy ? '准备中…' : '生成表情'}

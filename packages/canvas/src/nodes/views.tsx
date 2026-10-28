@@ -18,24 +18,29 @@ import {
   Upload,
 } from 'lucide-react';
 import {
-  executableGenerationModes,
-  generationRoleReason,
+  VIDEO_MODE_LABELS,
   type CanvasNode,
   type CanvasGroupData,
   type CanvasMediaData,
-  type CanvasVideoMode,
+  type VideoModeId,
 } from '@frame-loom/contracts';
 import { cn } from '@frame-loom/ui/lib/utils';
 import { Button } from '@frame-loom/ui/components/button';
 import { NodeActionsContext, useCanvas, useCanvasState } from '../context';
 import { isNodeLocked, isTaggable, updateData, updateNode } from '../commands/commands';
 import type { InputPort, NodeViewProps, OutputPort } from '../registry/registry';
-import { activeVersion, appendVersion, GROUP_COLORS, VIDEO_MODES, videoInputs } from './media';
+import {
+  activeVersion,
+  appendVersion,
+  GROUP_COLORS,
+  retainedVideoInputs,
+  videoInputs,
+} from './media';
 import { importMedia } from '../interaction/media-import';
 import { GenerationStatus } from './generation-status';
 import { checkConnection } from '../registry/connections';
 import { GenerationPanel } from './generation-panel';
-import { generationInputs, generationModel } from './generation-inputs';
+import { generationModel } from './generation-inputs';
 import { ImageEditTools } from './image-edit-tools';
 
 const portClass: Record<string, string> = {
@@ -259,37 +264,25 @@ function MediaFrame({
   const Generation = host.generation?.Panel ?? GenerationPanel;
   const single = useCanvasState((state) => state.selectedNodes.size <= 1);
   const nodeActions = useContext(NodeActionsContext);
-  const profile = useCanvasState(
-    (state) => generationModel(state.generationConfig, kind, node.data.modelId)?.profile,
+  const model = useCanvasState((state) =>
+    generationModel(state.generationConfig, kind, node.data.modelId),
   );
   const document = useCanvasState((state) => state.document);
-  const baseInputs = registry.inputs(node);
+  const baseInputs =
+    model?.capability.kind === 'video'
+      ? videoInputs(node.data, model.capability)
+      : registry.inputs(node);
   const retained =
     kind === 'video'
-      ? [...videoInputs('frames'), ...videoInputs('reference')].filter(
+      ? retainedVideoInputs.filter(
           (port) =>
             !baseInputs.some((entry) => entry.id === port.id) &&
             document.edges.some((edge) => edge.target === node.id && edge.targetHandle === port.id),
         )
       : [];
   const ports = [...baseInputs, ...retained];
-  const disabledInputs =
-    profile && kind === 'video'
-      ? ports
-          .filter((port) =>
-            generationRoleReason(
-              profile,
-              {
-                mode: node.data.mode ?? 'text',
-                params: node.data.params ?? {},
-                inputs: generationInputs(document, node.id),
-              },
-              port.id as 'reference' | 'first_frame' | 'last_frame',
-              'image',
-            ),
-          )
-          .map((port) => port.id)
-      : retained.map((port) => port.id);
+  const disabledInputs = retained.map((port) => port.id);
+
   return (
     <div className="group/media flex size-full flex-col">
       <NodeHeader node={node} icon={kind === 'image' ? <ImageIcon /> : <Film />} />
@@ -539,11 +532,12 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
   });
   // 悬停优先，其次选中的第一个视频；整张画布最多挂载一个预览播放器。
   const play = !!version && active;
-  const mode = props.node.data.mode ?? 'text';
-  const profile = useCanvasState(
-    (state) => generationModel(state.generationConfig, 'video', props.node.data.modelId)?.profile,
+  const mode = props.node.data.mode ?? 't2v';
+  const capability = useCanvasState(
+    (state) =>
+      generationModel(state.generationConfig, 'video', props.node.data.modelId)?.capability,
   );
-  const setMode = (next: CanvasVideoMode) => {
+  const setMode = (next: VideoModeId) => {
     if (next === mode) return;
     const state = store.getState();
     state.apply((document) =>
@@ -565,12 +559,11 @@ export function VideoNodeView(props: NodeViewProps<CanvasMediaData>) {
           )}
         >
           <div className="flex gap-0.5 rounded-lg border bg-popover p-0.5 shadow-canvas-panel">
-            {(profile
-              ? executableGenerationModes(profile).map((item) => ({
-                  id: item.id as CanvasVideoMode,
-                  label: item.name,
-                }))
-              : VIDEO_MODES
+            {(capability?.kind === 'video'
+              ? capability.modes
+                  .filter((item) => item.id !== 'edit' && item.id !== 'extend')
+                  .map((item) => ({ id: item.id, label: VIDEO_MODE_LABELS[item.id] }))
+              : []
             ).map((item) => (
               <button
                 key={item.id}

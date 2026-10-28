@@ -1,6 +1,6 @@
 # Plan: 画布图像与视频
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -64,20 +64,20 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 修改 contracts 的画布数据契约，迁移 `GenerationJob` 并删除旧契约文件；修复全仓类型错误，engine 端同步 — 验证：`pnpm run typecheck`
-- [ ] T2 修改宿主接口与 `project-canvas.tsx` 的加载逻辑 — 验证：`project-canvas.test.tsx` 覆盖只加载已启用且无阻塞原因的媒体模型、默认模型排第一、TTS 模型传给画布（为 06 预留）
-- [ ] T3 实现节点 `migrate` 与 404 清理 — 验证：canvas 单测覆盖旧模式与旧参数键映射、未知键丢弃、类型版本加 1、404 时移除 `pendingJobIds`，并覆盖 `document-file.ts`、`clipboard.ts` 的迁移路径
-- [ ] T4 实现 `nodes/params/` 下的图像参数控件和 `CapabilityPreview` — 验证：组件测试覆盖关闭档位后按钮消失、取消勾选比例后网格项消失、像素来自 `resolveImageSize`、`provider` 文案、自定义宽高越界报错、质量只停在支持值、生成数量上限
-- [ ] T5 实现视频方式标签、端口、参数卡片和素材限制 — 验证：组件测试覆盖以下内容：
+- [x] T1 修改 contracts 的画布数据契约，迁移 `GenerationJob` 并删除旧契约文件；修复全仓类型错误，engine 端同步 — 验证：`pnpm run typecheck`
+- [x] T2 修改宿主接口与 `project-canvas.tsx` 的加载逻辑 — 验证：`project-canvas.test.tsx` 覆盖只加载已启用且无阻塞原因的媒体模型、默认模型排第一、TTS 模型传给画布（为 06 预留）
+- [x] T3 实现节点 `migrate` 与 404 清理 — 验证：canvas 单测覆盖旧模式与旧参数键映射、未知键丢弃、类型版本加 1、404 时移除 `pendingJobIds`，并覆盖 `document-file.ts`、`clipboard.ts` 的迁移路径
+- [x] T4 实现 `nodes/params/` 下的图像参数控件和 `CapabilityPreview` — 验证：组件测试覆盖关闭档位后按钮消失、取消勾选比例后网格项消失、像素来自 `resolveImageSize`、`provider` 文案、自定义宽高越界报错、质量只停在支持值、生成数量上限
+- [x] T5 实现视频方式标签、端口、参数卡片和素材限制 — 验证：组件测试覆盖以下内容：
   - 只列勾选的方式；首尾帧显示两个槽位。
   - Kling 型能力卡（`withReference: true`）在首帧方式下出现参考端口；Seedance 型不出现。
   - 规则锁定：Seedance 首尾帧时比例置灰且说明原因；MiniMax 文生时 adaptive 置灰。
   - 固定声音显示只读文字。
   - 参考素材类型与数量上限、总时长超限提示。
   - 切换方式后连线保留，不兼容端口禁用。
-- [ ] T6 实现附加参数「更多参数」、`SemanticRequest` 组装、提交前校验、模型切换时的 `pendingParams` — 验证：`generation-panel.test.tsx` 改写后覆盖请求体中的 role、order、params、extras；校验问题阻止提交；需要对象存储时阻止提交；模型切换保留兼容值、不兼容值进入 `pendingParams`、`extras` 被过滤；每张图独立任务的数量
-- [ ] T7 图片编辑能力来源改为 `imageEditSupport`，同步 engine 调用 — 验证：`image-edit-tools.test.tsx`、`image-edit-parameters.test.ts`、engine 的 `image-emotion.test.ts` 通过；不支持蒙版或参考图不足时禁用并说明原因
-- [ ] T8 E2E：重写 `generation-image.test.ts`，并改写 `image-node-acceptance.test.ts`、`image-edit-runtime.test.ts`、`canvas-nodes.test.ts` 中依赖模型与生成的部分（`canvas-nodes.test.ts` 中与生成无关的用例不改）。模拟上游提供 `openai-images` 与 `ark-seedance`，经设置接口或 engine HTTP 直接创建渠道和模型 — 验证：E2E 覆盖以下流程：
+- [x] T6 实现附加参数「更多参数」、`SemanticRequest` 组装、提交前校验、模型切换时的 `pendingParams` — 验证：`generation-panel.test.tsx` 改写后覆盖请求体中的 role、order、params、extras；校验问题阻止提交；需要对象存储时阻止提交；模型切换保留兼容值、不兼容值进入 `pendingParams`、`extras` 被过滤；每张图独立任务的数量
+- [x] T7 图片编辑能力来源改为 `imageEditSupport`，同步 engine 调用 — 验证：`image-edit-tools.test.tsx`、`image-edit-parameters.test.ts`、engine 的 `image-emotion.test.ts` 通过；不支持蒙版或参考图不足时禁用并说明原因
+- [x] T8 E2E：重写 `generation-image.test.ts`，并改写 `image-node-acceptance.test.ts`、`image-edit-runtime.test.ts`、`canvas-nodes.test.ts` 中依赖模型与生成的部分（`canvas-nodes.test.ts` 中与生成无关的用例不改）。模拟上游提供 `openai-images` 与 `ark-seedance`，经设置接口或 engine HTTP 直接创建渠道和模型 — 验证：E2E 覆盖以下流程：
   - 图片节点选模型 → 档位与比例 → 生成 → 写回版本。
   - 参考图 @ 引用 → 请求体中为 `图1`。
   - 视频节点文生 → 首尾帧，并验证比例锁定提示 → 生成 → 写回。
@@ -85,22 +85,26 @@ Parent: plan.md
   - 角度编辑提交。
   - 截取明暗两种主题下的视频参数卡片截图并人工查看。
   - 命令：`pnpm --filter @frame-loom/desktop test:e2e -- generation-image image-node-acceptance image-edit-runtime canvas-nodes`
-- [ ] T9 接入 04 的画布参数预览：`capability-tab.tsx` 改用 `CapabilityPreview`，补跑 04 的 T6 组件测试 — 验证：`pnpm --filter @frame-loom/desktop test`
-- [ ] T10 扫描残留 — 验证：`rg -n "ModelProfile|profileId|CanvasVideoMode|VIDEO_MODES|executableGenerationModes|generationRoleReason|imageRequestSize|imageEditCapabilityIssue|'frames'|aspect_ratio" packages apps/desktop/src` 结果中只允许出现在适配器之外的注释和迁移映射表里，逐条确认后在「发现与偏差」记录；运行 `pnpm --filter @frame-loom/canvas test`
+- [x] T9 接入 04 的画布参数预览：`capability-tab.tsx` 改用 `CapabilityPreview`，补跑 04 的 T6 组件测试 — 验证：`pnpm --filter @frame-loom/desktop test`
+- [x] T10 扫描残留 — 验证：`rg -n "ModelProfile|profileId|CanvasVideoMode|VIDEO_MODES|executableGenerationModes|generationRoleReason|imageRequestSize|imageEditCapabilityIssue|'frames'|aspect_ratio" packages apps/desktop/src` 结果中只允许出现在适配器之外的注释和迁移映射表里，逐条确认后在「发现与偏差」记录；运行 `pnpm --filter @frame-loom/canvas test`
 
 ## 验证
 
 - 预期：canvas、desktop、contracts、engine 单测通过；限定的 4 个 E2E 通过；截图经人工查看；残留扫描已确认。
-- 实际：未执行。
+- 实际（2026-10-29）：contracts 16 文件 236 用例、engine 29 文件 256 用例、canvas 25 文件 140 用例、desktop 21 文件 214 用例通过。限定 E2E 为 6 passed、1 skipped（计划排除的目录包用例）；参数说明与主题截图调整后 generation-image 单独复跑 1/1 通过，明暗截图均人工查看，锁定原因去重、文字可读、弹层可滚动。全仓 typecheck、lint 通过；最终格式与笔记门禁见本次提交。
 
 ## 进度
 
 - 2026-10-28：创建子计划草稿。
+- 2026-10-29：开始迁移任务契约、画布宿主和能力卡消费者；01–04 已完成。
 
 ## 发现与偏差
 
-无。
+- 宿主增加 extras，避免控件与共享校验各自推断附加参数。设置页图像／视频预览已复用 CapabilityPreview。
+- 带项目参考图的任务预构造请求时发现项目串行队列重入死锁；素材解析与对象存储交付复用队列内已验证的项目根路径，增强真实 HTTP 集成场景验证任务创建和完成。
+- T10 扫描逐条确认：canvas.ts 的旧键与 frames 为迁移映射；canvas-migration、interaction 与 generation-inputs 测试中的旧值为旧文档／剪贴板夹具；generation-job 测试的 profileId 为拒绝旧字段断言；protocols.ts 的 aspect_ratio 为协议事实注释。生产运行逻辑无旧契约依赖。
+- E2E 同步浏览器 colorScheme 并关闭截图动画，避免把浅色或颜色过渡态误记为暗色验收。目录包运行时用例保留，默认跳过本计划明确排除的原生窗口验收。
 
 ## 交接
 
-尚未开始。完成后，06 可复用 `nodes/params/` 与宿主 TTS 模型；07 在视频端口上增加 `base_video`。
+T1–T10 已完成。06 可复用 `nodes/params/` 与宿主 TTS 模型；07 在视频端口上增加 `base_video`。全部上游仅使用本地严格模拟。

@@ -134,7 +134,12 @@ export class ObjectStorageService {
     url.searchParams.set('x-frame-loom-request', randomUUID());
     return (await client.sign(url, { method: 'GET', aws: { signQuery: true } })).url;
   }
-  async reference(media: StoredMedia, signal?: AbortSignal, projectId?: string): Promise<string> {
+  async reference(
+    media: StoredMedia,
+    signal?: AbortSignal,
+    projectId?: string,
+    root?: string,
+  ): Promise<string> {
     const { row, client } = this.require();
     const fingerprint = createHash('sha256')
       .update(
@@ -168,7 +173,10 @@ export class ObjectStorageService {
         // 生命周期可能删除旧对象；缓存一天后重传，兼容推荐的七天过期规则。
         if (cached && Date.now() - Date.parse(cached.uploadedAt) < 86_400_000) return;
         const blob = await openAsBlob(
-          (await this.mediaService.resolve(media.sha256, projectId)).path,
+          (root
+            ? await this.mediaService.resolveAt(media.sha256, root)
+            : await this.mediaService.resolve(media.sha256, projectId)
+          ).path,
           { type: media.mime },
         );
         await this.request(client, this.url(row, key), 'PUT', blob, media.sha256, signal);

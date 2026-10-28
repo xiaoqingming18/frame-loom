@@ -1,10 +1,10 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { CanvasMediaData, ModelProfile } from '@frame-loom/contracts';
+import type { CanvasMediaData } from '@frame-loom/contracts';
 import { CanvasContext, NodeActionsContext, useCanvasState } from '../context';
 import { createCanvasStore } from '../store/store';
-import { doc, edge, media, sha, generationJob } from '../test-utils';
+import { doc, edge, media, sha, generationJob, generationModelFixture } from '../test-utils';
 import { createBuiltinRegistry } from './builtin';
 import { ImageNodeView, VideoNodeView, NodeHeader } from './views';
 
@@ -163,19 +163,14 @@ it('图片节点空态可上传、添加并连接，生成进度叠在已有版�
   expect(screen.getByRole('button', { name: '放弃任务' })).toBeDefined();
 });
 
-it('视频档案隐藏不支持的方式并禁用尾帧，未加载档案时保留通用端口', () => {
+it('视频只显示能力卡方式，非当前方式连线端口保留但禁用', () => {
   const node = media('video', 'video');
-  node.data = { ...(node.data as CanvasMediaData), mode: 'frames' };
-  const store = createCanvasStore(doc([node]));
-  const profile = {
-    modes: [{ id: 'text' }, { id: 'frames' }],
-    constraints: [{ when: {}, forbidRoles: ['last_frame'], message: '当前模型不支持尾帧' }],
-    inputs: [{ kind: 'image', maxCount: 1 }],
-  } as ModelProfile;
-  store.getState().setGenerationConfig({
-    storageReady: false,
-    models: [{ id: 'sora', label: 'Sora', kind: 'video', profile }],
-  });
+  node.data = { ...(node.data as CanvasMediaData), mode: 'first' };
+  const store = createCanvasStore(doc([node], []));
+  const model = generationModelFixture('ark-seedance');
+  if (model.capability.kind !== 'video') throw new Error('视频夹具无效');
+  model.capability.modes = [{ id: 't2v' }, { id: 'first' }];
+  store.getState().setGenerationConfig({ storageReady: false, models: [model] });
   render(
     <CanvasContext.Provider
       value={{
@@ -187,26 +182,25 @@ it('视频档案隐藏不支持的方式并禁用尾帧，未加载档案时保�
       <VideoNodeView node={{ ...node, data: node.data as CanvasMediaData }} selected />
     </CanvasContext.Provider>,
   );
-  expect(screen.queryByRole('radio', { name: '参考生视频' })).toBeNull();
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'last_frame' }).disabled).toBe(true);
+  expect(screen.queryByRole('radio', { name: '首尾帧' })).toBeNull();
+  expect(screen.queryByRole('radio', { name: '全模态参考' })).toBeNull();
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'first_frame' }).disabled).toBe(
     false,
   );
-  act(() => store.getState().setGenerationConfig({ storageReady: false, models: [] }));
-  expect(screen.getByRole('radio', { name: '参考生视频' })).toBeDefined();
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'last_frame' }).disabled).toBe(
-    false,
-  );
+  expect(screen.queryByRole('button', { name: 'last_frame' })).toBeNull();
 });
 
 it('模式切换保留首尾帧连线和提示词，文生模式保留端口但不能新连线', () => {
   const node = media('video', 'video');
-  node.data = { ...(node.data as CanvasMediaData), mode: 'frames', prompt: '保留创作内容' };
+  node.data = { ...(node.data as CanvasMediaData), mode: 'first_last', prompt: '保留创作内容' };
   const document = doc(
     [media('source'), node],
     [{ ...edge('first', 'source', 'video'), targetHandle: 'first_frame' }],
   );
   const store = createCanvasStore(document);
+  store
+    .getState()
+    .setGenerationConfig({ storageReady: false, models: [generationModelFixture('ark-seedance')] });
   function View() {
     const current = useCanvasState((state) => state.document.nodes[1]);
     return <VideoNodeView node={{ ...current, data: current.data as CanvasMediaData }} selected />;
@@ -225,7 +219,7 @@ it('模式切换保留首尾帧连线和提示词，文生模式保留端口但�
   fireEvent.click(screen.getByRole('radio', { name: '文生视频' }));
   expect(store.getState().document.edges).toEqual(document.edges);
   expect(store.getState().document.nodes[1].data).toMatchObject({
-    mode: 'text',
+    mode: 't2v',
     prompt: '保留创作内容',
   });
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'first_frame' }).disabled).toBe(

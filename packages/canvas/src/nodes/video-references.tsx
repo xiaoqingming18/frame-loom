@@ -1,29 +1,27 @@
 import { useRef, useState } from 'react';
 import { CircleHelp } from 'lucide-react';
-import {
-  generationRoleReason,
-  type CanvasMediaData,
-  type GenerationInput,
-  type ModelProfile,
-} from '@frame-loom/contracts';
+import { MEDIA_ROLE_LABELS, type CanvasMediaData, type SemanticInput } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { NativeSelect } from '@frame-loom/ui/components/native-select';
 import { Popover, PopoverContent, PopoverTrigger } from '@frame-loom/ui/components/popover';
 import { useCanvas, useCanvasState } from '../context';
 import { isNodeLocked, updateData } from '../commands/commands';
 import { generationSources } from './generation-inputs';
+import type { CanvasGenerationModel } from '../host';
+import { videoInputs } from './media';
+import { referenceRoleReason, referenceCandidateIssue } from './reference-check';
 
-const roles = { first_frame: '首帧', last_frame: '尾帧', reference: '参考素材' };
+const roles = MEDIA_ROLE_LABELS;
 
 export function VideoReferences({
   nodeId,
   data,
-  profile,
+  model,
   disabled,
 }: {
   nodeId: string;
   data: CanvasMediaData;
-  profile: ModelProfile;
+  model: CanvasGenerationModel;
   disabled: boolean;
 }) {
   const { host, store } = useCanvas();
@@ -31,14 +29,11 @@ export function VideoReferences({
   const refs = generationSources(document, nodeId);
   const [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const role = useRef<GenerationInput['role']>('reference');
-  const request = {
-    mode: data.mode ?? 'text',
-    params: data.params ?? {},
-    inputs: refs.map((ref) => ref.input),
-  };
-  const reason = (value: GenerationInput['role'], kind: GenerationInput['kind']) =>
-    generationRoleReason(profile, request, value, kind);
+  const role = useRef<SemanticInput['role']>('reference');
+  const capability = model.capability;
+  const ports = capability.kind === 'video' ? videoInputs(data, capability) : [];
+  const reason = (value: SemanticInput['role'], kind: SemanticInput['kind']) =>
+    referenceRoleReason(model, data, value, kind);
   function reorder(index: number, offset: number) {
     const order = refs.map((ref) => ref.id);
     if (index + offset < 0 || index + offset >= order.length) return;
@@ -79,7 +74,7 @@ export function VideoReferences({
               </Button>
             </PopoverTrigger>
             <PopoverContent sticky="always" className="max-w-[calc(100vw-32px)] text-xs">
-              可上传本地图片、视频、音频，或连接画布节点。首尾帧与参考互斥；切换模式或模型保留素材，处理不兼容项后才能生成。编号、排序和请求一致。上传只存入项目，不调用模型。
+              可上传本地图片、视频、音频，或连接画布节点。可用角色及混合方式由模型能力卡决定；切换方式或模型保留素材，处理不兼容项后才能生成。编号、排序和请求一致。上传只存入项目，不调用模型。
             </PopoverContent>
           </Popover>
         </div>
@@ -88,15 +83,31 @@ export function VideoReferences({
           aria-label="上传视频参考素材"
           type="file"
           className="hidden"
-          accept={profile.inputs.flatMap((limit) => limit.mimeTypes).join(',')}
+          accept={
+            capability.kind === 'video'
+              ? Object.values(capability.references)
+                  .flatMap((limit) => (typeof limit === 'object' ? (limit.formats ?? []) : []))
+                  .map((format) => (format.includes('/') ? format : `.${format}`))
+                  .join(',')
+              : ''
+          }
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
             if (!file || uploading || disabled) return;
             const selectedRole = role.current;
-            const limit = profile.inputs.find((limit) => limit.mimeTypes.includes(file.type));
-            if (!limit || file.size > limit.maxBytes || reason(selectedRole, limit.kind)) {
-              store.getState().notify('素材类型、大小或角色不符合当前模式');
+            const kind = file.type.startsWith('image/')
+              ? ('image' as const)
+              : file.type.startsWith('video/')
+                ? ('video' as const)
+                : ('audio' as const);
+            const candidate = {
+              input: { role: selectedRole, kind, order: refs.length, sha256: '0'.repeat(64) },
+              media: { mime: file.type, bytes: file.size },
+            };
+            const issue = referenceCandidateIssue(model, data, refs, candidate);
+            if (issue) {
+              store.getState().notify(issue);
               return;
             }
             setUploading(true);
@@ -107,6 +118,25 @@ export function VideoReferences({
                 const node = state.document.nodes.find((node) => node.id === nodeId);
                 if (!node || isNodeLocked(state.document, node)) return;
                 const id = crypto.randomUUID();
+                const currentRefs = generationSources(state.document, nodeId);
+                const issue = referenceCandidateIssue(
+                  model,
+                  node.data as CanvasMediaData,
+                  currentRefs,
+                  {
+                    input: {
+                      role: selectedRole,
+                      kind,
+                      order: currentRefs.length,
+                      sha256: media.sha256,
+                    },
+                    media,
+                  },
+                );
+                if (issue) {
+                  state.notify(issue);
+                  return;
+                }
                 state.apply((document) =>
                   updateData<CanvasMediaData>(document, nodeId, (current) => ({
                     ...current,
@@ -126,12 +156,14 @@ export function VideoReferences({
         />
         <div className="mb-3 flex flex-wrap gap-1">
           {Object.entries(roles)
-            .filter(([key]) =>
-              key === 'reference' ? request.mode === 'reference' : request.mode === 'frames',
-            )
+            .filter(([key]) => ports.some((port) => port.id === key))
             .map(([key, name]) => {
-              const inputRole = key as GenerationInput['role'];
-              const blocked = reason(inputRole, 'image');
+              const inputRole = key as SemanticInput['role'];
+              const blocked = (['image', 'video', 'audio'] as const).every((kind) =>
+                reason(inputRole, kind),
+              )
+                ? '当前方式不支持该角色'
+                : undefined;
               return (
                 <Button
                   key={key}
@@ -150,7 +182,7 @@ export function VideoReferences({
             })}
           {Object.entries(roles).map(([key]) => (
             <span key={key} id={`role-help-${nodeId}-${key}`} className="sr-only">
-              {reason(key as GenerationInput['role'], 'image')}
+              {reason(key as SemanticInput['role'], 'image')}
             </span>
           ))}
         </div>
@@ -178,7 +210,7 @@ export function VideoReferences({
                     disabled={disabled}
                     className="h-8 w-auto text-xs"
                     onChange={(event) => {
-                      const next = event.target.value as GenerationInput['role'];
+                      const next = event.target.value as SemanticInput['role'];
                       store.getState().apply((document) => ({
                         ...updateData<CanvasMediaData>(document, nodeId, (current) => ({
                           ...current,
@@ -196,7 +228,7 @@ export function VideoReferences({
                       <option
                         key={key}
                         value={key}
-                        disabled={!!reason(key as GenerationInput['role'], ref.input.kind)}
+                        disabled={!!reason(key as SemanticInput['role'], ref.input.kind)}
                       >
                         {name}
                       </option>
@@ -252,13 +284,20 @@ export function VideoReferences({
           {!refs.length && (
             <p className="text-muted-foreground">尚无素材；按模式添加素材或连接画布节点。</p>
           )}
-          {profile.inputs.map((input) => (
-            <p key={input.kind} className="text-muted-foreground">
-              {input.kind === 'image' ? '图片' : input.kind === 'video' ? '视频' : '音频'}最多{' '}
-              {input.maxCount} 个 · 每个 ≤ {Math.round(input.maxBytes / 1024 / 1024)} MB
-              {input.maxTotalDurationMs ? ` · 总时长 ≤ ${input.maxTotalDurationMs / 1000} 秒` : ''}
-            </p>
-          ))}
+          {capability.kind === 'video' &&
+            (['image', 'video', 'audio'] as const).map((kind) => {
+              const limit = capability.references[kind];
+              return limit ? (
+                <p key={kind} className="text-muted-foreground">
+                  {kind === 'image' ? '图片' : kind === 'video' ? '视频' : '音频'}最多{' '}
+                  {limit.max ?? '不限'} 个
+                  {limit.maxBytes !== undefined
+                    ? ` · 每个 ≤ ${Math.round(limit.maxBytes / 1024 / 1024)} MB`
+                    : ''}
+                  {limit.maxTotalSec !== undefined ? ` · 总时长 ≤ ${limit.maxTotalSec} 秒` : ''}
+                </p>
+              ) : null;
+            })}
         </div>
       </PopoverContent>
     </Popover>

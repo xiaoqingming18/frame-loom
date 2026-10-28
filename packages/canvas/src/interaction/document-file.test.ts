@@ -13,7 +13,16 @@ it.each(['image', 'video'] as const)('导入旧 %s 节点迁移任务引用且�
   node.data = { ...(node.data as object), pendingJobId, params: { size: '1024x1024' } };
   const migrated = parseDocument(JSON.stringify(doc([node])), registry).nodes[0];
   const { pendingJobId: oldId, ...rest } = node.data as Record<string, unknown>;
-  expect(migrated).toEqual({ ...node, typeVersion: 2, data: { ...rest, pendingJobIds: [oldId] } });
+  expect(migrated).toEqual({
+    ...node,
+    typeVersion: 3,
+    data: {
+      ...rest,
+      params: {},
+      pendingJobIds: [oldId],
+      ...(kind === 'video' ? { mode: 't2v' } : {}),
+    },
+  });
 });
 
 it('JSON 往返保留分组、层级、锁定与连线，整份替换可撤销重做', () => {

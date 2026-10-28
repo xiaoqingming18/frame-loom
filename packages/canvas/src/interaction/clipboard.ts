@@ -67,8 +67,14 @@ export function deserialize(text: string, registry?: NodeRegistry): ClipboardPay
     const parsed = Payload.safeParse(JSON.parse(text.slice(CLIPBOARD_PREFIX.length)));
     if (!parsed.success) return null;
     const ids = new Set(parsed.data.nodes.map((node) => node.id));
+    const migrated = CanvasDocument.safeParse({
+      schemaVersion: 1,
+      nodes: parsed.data.nodes,
+      edges: parsed.data.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
+    });
+    if (!migrated.success) return null;
     const payload = {
-      nodes: parsed.data.nodes.map((node) => registry?.migrate(node) ?? node),
+      nodes: migrated.data.nodes.map((node) => registry?.migrate(node) ?? node),
       edges: parsed.data.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
     };
     if (!CanvasDocument.safeParse({ schemaVersion: 1, ...payload }).success) return null;

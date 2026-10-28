@@ -1,5 +1,5 @@
 import type { Capability, VideoCap } from './capabilities.js';
-import type { MediaFile } from './generation.js';
+import type { MediaFile } from './generation-job.js';
 import type { ModelWrite } from './model-service.js';
 import { resolveEndpoints } from './endpoints.js';
 import { resolveImageSize } from './image-size.js';
@@ -422,12 +422,13 @@ export function checkMedia(
         issues.push({ field: 'inputs', message: '素材格式不支持' });
       if (media.bytes !== undefined && limit.maxBytes !== undefined && media.bytes > limit.maxBytes)
         issues.push({ field: 'inputs', message: '素材大小超过限制' });
-      if (media.durationMs != null && 'maxDurationSec' in limit) {
+      if (media.durationMs != null && cap.kind === 'video') {
         const seconds = media.durationMs / 1000;
         total += seconds;
+        const durationLimit = cap.references[kind];
         if (
-          (limit.minDurationSec !== undefined && seconds < limit.minDurationSec) ||
-          (limit.maxDurationSec !== undefined && seconds > limit.maxDurationSec)
+          (durationLimit?.minDurationSec !== undefined && seconds < durationLimit.minDurationSec) ||
+          (durationLimit?.maxDurationSec !== undefined && seconds > durationLimit.maxDurationSec)
         )
           issues.push({ field: 'inputs', message: '素材时长超出限制' });
       }

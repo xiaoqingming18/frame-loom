@@ -7,7 +7,7 @@ import {
   CanvasView,
   CanvasMediaVersion,
 } from './canvas.js';
-import { MediaFile } from './generation.js';
+import { MediaFile } from './generation-job.js';
 
 it('媒体上传结果可直接存为画布版本，保留音频元数据并兼容非音频空值', () => {
   const uploaded = MediaFile.parse({
@@ -64,17 +64,14 @@ const edge = (id: string, source: string, target: string) => ({
 });
 const doc = (nodes: unknown[], edges: unknown[] = []) => ({ schemaVersion: 1, nodes, edges });
 
-it('媒体数据兼容旧任务并限制数量和任务数组', () => {
+it('媒体数量由能力卡限制，契约只接受正整数与有效任务标识', () => {
   const id = '11111111-1111-4111-8111-111111111111';
   expect(CanvasMediaData.parse(media({ pendingJobId: id })).pendingJobId).toBe(id);
   expect(CanvasMediaData.parse(media({ pendingJobIds: [id, id, id, id], count: 4 })).count).toBe(4);
-  for (const extra of [
-    { count: 0 },
-    { count: 5 },
-    { count: 1.5 },
-    { pendingJobIds: [id, id, id, id, id] },
-    { pendingJobIds: ['invalid'] },
-  ])
+  expect(
+    CanvasMediaData.parse(media({ pendingJobIds: [id, id, id, id, id], count: 5 })).count,
+  ).toBe(5);
+  for (const extra of [{ count: 0 }, { count: 1.5 }, { pendingJobIds: ['invalid'] }])
     expect(CanvasMediaData.safeParse(media(extra)).success).toBe(false);
 });
 
@@ -83,8 +80,8 @@ describe('CanvasDocument', () => {
     const value = doc(
       [
         node('g', 'group'),
-        node('a', 'image', { parentId: 'g' }),
-        node('b', 'video', { data: media({ mode: 'frames' }) }),
+        node('a', 'image', { parentId: 'g', typeVersion: 3 }),
+        node('b', 'video', { data: media({ mode: 'first_last' }), typeVersion: 3 }),
         node('x', 'plugin:note', { data: { anything: [1, 2] } }),
         node('y', 'constructor', { data: { future: true } }),
       ],

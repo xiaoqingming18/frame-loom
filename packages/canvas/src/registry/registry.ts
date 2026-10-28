@@ -1,6 +1,8 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { z } from 'zod';
-import type { CanvasNode } from '@frame-loom/contracts';
+import type { CanvasNode, CanvasMediaData } from '@frame-loom/contracts';
+import type { CanvasGenerationModel } from '../host';
+import { videoInputs } from '../nodes/media';
 
 /** 端口上流动的数据类型；新增节点只需声明自己的输入输出。 */
 export type PortDataType = 'image' | 'video' | 'audio' | 'text';
@@ -48,6 +50,11 @@ export interface NodeTypeDefinition<Data = unknown> {
 
 export class NodeRegistry {
   private readonly types = new Map<string, NodeTypeDefinition>();
+  private generationModels: CanvasGenerationModel[] = [];
+
+  setGenerationModels(models: CanvasGenerationModel[]): void {
+    this.generationModels = models;
+  }
 
   register<Data>(definition: NodeTypeDefinition<Data>): this {
     if (this.types.has(definition.type)) throw new Error(`节点类型重复注册：${definition.type}`);
@@ -85,6 +92,27 @@ export class NodeRegistry {
   inputs(node: CanvasNode): readonly InputPort[] {
     const definition = this.get(node.type);
     const data = definition?.dataSchema.safeParse(node.data);
+    if (
+      data?.success &&
+      node.typeVersion === definition?.version &&
+      (node.type === 'image' || node.type === 'video')
+    ) {
+      const media = data.data as CanvasMediaData;
+      const models = this.generationModels.filter((model) => model.kind === node.type);
+      const model = media.modelId ? models.find((model) => model.id === media.modelId) : models[0];
+      if (model?.capability.kind === 'video') return videoInputs(media, model.capability);
+      if (model?.capability.kind === 'image')
+        return model.capability.references.max === 0
+          ? []
+          : [
+              {
+                id: 'reference',
+                label: '参考图',
+                accepts: ['image'],
+                max: model.capability.references.max ?? 50,
+              },
+            ];
+    }
     return definition && node.typeVersion === definition.version && data?.success
       ? definition.inputs(data.data)
       : [];

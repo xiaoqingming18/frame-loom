@@ -2,40 +2,60 @@ import type {
   CanvasGroupData,
   CanvasMediaData,
   CanvasMediaVersion,
-  CanvasVideoMode,
+  VideoModeId,
+  VideoCap,
 } from '@frame-loom/contracts';
 import type { InputPort, OutputPort } from '../registry/registry';
 
-/** 图结构允许的参考数量上限，生成前再按模型档案收紧。 */
-export const DEFAULT_REFERENCE_MAX = 16;
-
-export const VIDEO_MODES: { id: CanvasVideoMode; label: string }[] = [
-  { id: 'text', label: '文生视频' },
-  { id: 'frames', label: '首尾帧' },
-  { id: 'reference', label: '参考生视频' },
-];
+/** 未加载模型时仅限制图结构；生成前仍必须经过能力校验。 */
+export const DEFAULT_REFERENCE_MAX = 50;
 
 export const imageInputs: readonly InputPort[] = [
   { id: 'reference', label: '参考图', accepts: ['image'], max: DEFAULT_REFERENCE_MAX },
 ];
 
-export function videoInputs(mode: CanvasVideoMode = 'text'): readonly InputPort[] {
-  if (mode === 'frames')
-    return [
-      { id: 'first_frame', label: '首帧', accepts: ['image'], max: 1 },
-      { id: 'last_frame', label: '尾帧', accepts: ['image'], max: 1 },
-    ];
-  if (mode === 'reference')
-    return [
-      {
-        id: 'reference',
-        label: '参考素材',
-        accepts: ['image', 'video', 'audio'],
-        max: DEFAULT_REFERENCE_MAX,
-      },
-    ];
-  return [];
+export function videoInputs(
+  data: Pick<CanvasMediaData, 'mode'>,
+  capability?: VideoCap,
+): readonly InputPort[] {
+  const mode = data.mode ?? capability?.defaultMode ?? 't2v';
+  const entry = capability?.modes.find((item) => item.id === mode);
+  if (capability && !entry) return [];
+  const ports: InputPort[] = [];
+  const first =
+    mode === 'first' ||
+    mode === 'first_last' ||
+    (mode === 'reference' && entry?.reference?.withFrames);
+  const last =
+    mode === 'last' ||
+    mode === 'first_last' ||
+    (mode === 'reference' && entry?.reference?.withFrames);
+  if (first) ports.push({ id: 'first_frame', label: '首帧', accepts: ['image'], max: 1 });
+  if (last) ports.push({ id: 'last_frame', label: '尾帧', accepts: ['image'], max: 1 });
+  if (mode === 'keyframes')
+    ports.push({
+      id: 'keyframe',
+      label: '关键帧',
+      accepts: ['image'],
+      max: entry?.keyframes?.max ?? 7,
+    });
+  if (mode === 'reference' || entry?.withReference)
+    ports.push({
+      id: 'reference',
+      label: '参考素材',
+      accepts: entry?.reference?.accept ?? ['image', 'video', 'audio'],
+      max: capability?.references.totalCount ?? 50,
+    });
+  return ports;
 }
+
+/** 历史连线可保留在非当前方式端口，提交时由 checkRequest 拒绝。 */
+export const retainedVideoInputs: readonly InputPort[] = [
+  { id: 'first_frame', label: '首帧', accepts: ['image'], max: 1 },
+  { id: 'last_frame', label: '尾帧', accepts: ['image'], max: 1 },
+  { id: 'keyframe', label: '关键帧', accepts: ['image'], max: 50 },
+  { id: 'reference', label: '参考素材', accepts: ['image', 'video', 'audio'], max: 50 },
+];
 
 export const imageOutputs: readonly OutputPort[] = [
   { id: 'out', label: '图片', dataType: 'image' },
@@ -44,7 +64,7 @@ export const videoOutputs: readonly OutputPort[] = [
   { id: 'out', label: '视频', dataType: 'video' },
 ];
 
-export function emptyMedia(mode?: CanvasVideoMode): CanvasMediaData {
+export function emptyMedia(mode?: VideoModeId): CanvasMediaData {
   return { versions: [], activeVersion: 0, prompt: '', inputOrder: [], ...(mode ? { mode } : {}) };
 }
 

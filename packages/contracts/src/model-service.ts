@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { Capability } from './capabilities.js';
 import { Value } from './semantic-request.js';
-import { SemanticRequest } from './semantic-request.js';
-import { GenerationJob as PreviousGenerationJob } from './generation.js';
+export { GenerationJob } from './generation-job.js';
 
 export const ModelKind = z.enum(['chat', 'image', 'video', 'tts']);
 export type ModelKind = z.infer<typeof ModelKind>;
@@ -245,11 +244,3 @@ export const ModelExport = z.strictObject({
   }),
 });
 export type ModelExport = z.infer<typeof ModelExport>;
-export const GenerationJob = PreviousGenerationJob.omit({
-  channelModelId: true,
-  profileId: true,
-  request: true,
-  definitionVersion: true,
-  configVersion: true,
-}).extend({ modelId: z.uuid(), request: SemanticRequest, configHash: z.string() });
-export type GenerationJob = z.infer<typeof GenerationJob>;

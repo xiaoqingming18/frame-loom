@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { defaultTierPixels, resolveImageSize } from './image-size.js';
-import { SEEDREAM_IMAGE_SIZES, IMAGE_ASPECT_RATIOS } from './image-params.js';
 import type { ImageSizeRule } from './protocols.js';
 import type { ImageCap } from './capabilities.js';
 
@@ -32,7 +31,22 @@ describe('图片尺寸', () => {
   it('面积规则保持原像素和比例误差', () => {
     expect(defaultTierPixels(rule, '2K', '1:1')).toBe('1920x1920');
     for (const tier of ['1K', '2K', '4K'])
-      for (const ratio of IMAGE_ASPECT_RATIOS) {
+      for (const ratio of [
+        '1:1',
+        '16:9',
+        '9:16',
+        '3:4',
+        '4:3',
+        '3:2',
+        '2:3',
+        '5:4',
+        '4:5',
+        '21:9',
+        '2:1',
+        '1:2',
+        '3:1',
+        '1:3',
+      ]) {
         const [w, h] = defaultTierPixels(rule, tier, ratio)!.split('x').map(Number);
         const [rw, rh] = ratio.split(':').map(Number);
         expect(w % 16).toBe(0);
@@ -44,14 +58,7 @@ describe('图片尺寸', () => {
       }
   });
   it('Seedream 查表原样保留，未知档位与 provider 不猜测', () => {
-    const table = Object.fromEntries(
-      ['1K', '2K', '4K'].map((tier, index) => [
-        tier,
-        Object.fromEntries(
-          Object.entries(SEEDREAM_IMAGE_SIZES).map(([ratio, sizes]) => [ratio, sizes[index]]),
-        ),
-      ]),
-    );
+    const table = { '1K': { '21:9': '1512x648' } };
     expect(defaultTierPixels({ ...rule, table }, '1K', '21:9')).toBe('1512x648');
     expect(defaultTierPixels(rule, '1k', '1:1')).toBeUndefined();
     expect(defaultTierPixels({ kind: 'provider' }, '1K', '1:1')).toBeUndefined();

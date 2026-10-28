@@ -8,13 +8,8 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
-import {
-  Channel,
-  ChannelModelList,
-  ModelImportPackage,
-  type GenerationJob,
-} from '@frame-loom/contracts';
+import { getProtocol, type GenerationJob } from '@frame-loom/contracts';
+import { addMediaChannel, addMediaModel, disposeTestApp } from './model-service.fixture';
 import { openProjectCanvas } from './project-canvas.fixture';
 
 const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -39,12 +34,23 @@ async function api(page: Page, path: string, method = 'GET', body?: unknown) {
   );
 }
 
-test('真实 Vite Worker 检测及旧目录模型的 UI／提交能力一致', async () => {
+test('真实 Vite Worker 检测及能力卡的 UI／提交一致', async () => {
   test.setTimeout(120_000);
   const userData = await mkdtemp(join(tmpdir(), 'loom-runtime-dev-'));
   const png = await readFile(new URL('./fixtures/reference-256.png', import.meta.url));
   let submissions = 0;
   const upstream = createHttpServer((request, response) => {
+    if (
+      request.method !== 'POST' ||
+      !['/v1/images/generations', '/v1/images/edits'].includes(request.url ?? '')
+    ) {
+      response.writeHead(404).end();
+      return;
+    }
+    if (request.headers.authorization !== 'Bearer fixture-local') {
+      response.writeHead(401).end();
+      return;
+    }
     request.resume();
     request.on('end', () => {
       submissions++;
@@ -69,22 +75,6 @@ test('真实 Vite Worker 检测及旧目录模型的 UI／提交能力一致', a
   try {
     await expect((await app.firstWindow()).getByRole('heading', { name: '帧织' })).toBeVisible();
     await app.close();
-    // 只修改本测试刚创建的目录，模拟已有初始化标记的历史内置档案。
-    const db = new DatabaseSync(join(userData, 'data/frame-loom.sqlite'));
-    try {
-      const row = db
-        .prepare("SELECT package_json FROM model_catalog WHERE id = 'catalog'")
-        .get() as { package_json: string };
-      const catalog = ModelImportPackage.parse(JSON.parse(row.package_json));
-      for (const definition of catalog.definitions)
-        if (definition.kind === 'image') delete definition.profile.imageEditCapabilities;
-      db.prepare("UPDATE model_catalog SET package_json = ? WHERE id = 'catalog'").run(
-        JSON.stringify(catalog),
-      );
-      db.prepare("DELETE FROM app_meta WHERE key = 'image_edit_capabilities_v1'").run();
-    } finally {
-      db.close();
-    }
     app = await _electron.launch({
       args: [desktop, `--user-data-dir=${userData}`],
       env: { ...process.env, ELECTRON_RENDERER_URL: vite.resolvedUrls!.local[0] },
@@ -99,45 +89,18 @@ test('真实 Vite Worker 检测及旧目录模型的 UI／提交能力一致', a
     });
     const remote = upstream.address();
     if (!remote || typeof remote === 'string') throw new Error('模拟服务地址无效');
-    const channel = Channel.parse(
-      await api(page, '/channels', 'POST', {
-        name: '旧目录模拟渠道',
-        apiFormat: 'openai-completions',
-        apiKey: 'fixture-local',
-        baseUrl: `http://127.0.0.1:${remote.port}/v1`,
-        enabled: true,
-        models: [
-          {
-            definitionId: 'openai-images-gpt-image-2.5',
-            connectionId: 'openai-images',
-            upstreamModelId: 'gpt-image-2.5',
-            displayName: '旧模型',
-            kind: 'image',
-            protocol: 'openai-images',
-            profileId: null,
-            overrides: {},
-            enabled: true,
-          },
-          {
-            definitionId: 'gemini-image-default',
-            connectionId: 'gemini-image',
-            upstreamModelId: 'gemini-2.5-flash-image',
-            displayName: '语义编辑模型',
-            kind: 'image',
-            protocol: 'gemini-image',
-            profileId: null,
-            overrides: {},
-            enabled: true,
-          },
-        ],
-      }),
+    const channel = await addMediaChannel(
+      page,
+      `http://127.0.0.1:${remote.port}/v1`,
+      'fixture-local',
     );
-    const models = ChannelModelList.parse(await api(page, `/channels/${channel.id}/models`));
-    const model = models.find((item) => item.protocol === 'openai-images')!;
-    const semantic = models.find((item) => item.protocol === 'gemini-image')!;
-    expect(model.effectiveProfile?.imageEditCapabilities).toMatchObject({
-      operations: ['angle', 'lighting', 'emotion'],
-      mask: false,
+    const capability = structuredClone(getProtocol('openai-images')!.templates.image!);
+    delete capability.mask;
+    capability.references.max = 3;
+    const model = await addMediaModel(page, channel.id, 'openai-images', '编辑模型', capability);
+    const semantic = await addMediaModel(page, channel.id, 'openai-images', '单参考模型', {
+      ...capability,
+      references: { ...capability.references, max: 1 },
     });
     await api(page, '/model-defaults', 'PUT', { image: model.id });
     await openProjectCanvas(page, app);
@@ -196,7 +159,7 @@ test('真实 Vite Worker 检测及旧目录模型的 UI／提交能力一致', a
       imageHeight: 256,
     });
     await page.getByLabel('表情模型').selectOption(semantic.id);
-    await expect(page.getByText('表情编辑需要 OpenAI Images 编辑协议')).toBeVisible();
+    await expect(page.getByText('需要编辑接口与至少两个参考图')).toBeVisible();
     const screenshot = test.info().outputPath('emotion-protocol.png');
     await page.screenshot({ path: screenshot });
     await test.info().attach('表情协议限制', { path: screenshot, contentType: 'image/png' });
@@ -214,11 +177,11 @@ test('真实 Vite Worker 检测及旧目录模型的 UI／提交能力一致', a
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             modelId,
-            mode: 'reference',
             prompt: '表情',
             source: 'test',
             params: {},
-            inputs: [{ kind: 'image', role: 'reference', sha256: source.sha256 }],
+            extras: {},
+            inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: source.sha256 }],
             imageEdit: {
               version: 1,
               operation: 'emotion',
@@ -240,7 +203,7 @@ test('真实 Vite Worker 检测及旧目录模型的 UI／提交能力一致', a
       { modelId: semantic.id, source },
     );
     expect(rejected.status).toBe(422);
-    expect(rejected.body).toContain('表情编辑需要 OpenAI Images 编辑协议');
+    expect(rejected.body).toContain('需要编辑接口与至少两个参考图');
     expect(submissions).toBe(2);
     await page.getByLabel('表情模型').selectOption(model.id);
     await page.getByRole('button', { name: '手动框选' }).click();
@@ -264,15 +227,19 @@ test('真实 Vite Worker 检测及旧目录模型的 UI／提交能力一致', a
       JSON.stringify({ detection, resources, submissions, rejected: rejected.status }),
     );
   } finally {
-    await app.close();
+    await disposeTestApp(app);
     await vite.close();
     upstream.closeAllConnections();
     await new Promise<void>((done) => upstream.close(() => done()));
-    await rm(userData, { recursive: true, force: true });
+    await rm(userData, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });
 
 test('当前加固目录包 app 同源 Worker／WASM／模型真实检测', async () => {
+  test.skip(
+    process.env.FRAME_LOOM_E2E_PACKAGE_RUNTIME !== '1',
+    '本计划排除目录包与原生窗口验收；独立验收时显式启用',
+  );
   test.setTimeout(90_000);
   const userData = await mkdtemp(join(tmpdir(), 'loom-runtime-package-'));
   const child = spawn(

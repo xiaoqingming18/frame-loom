@@ -228,6 +228,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           this.media.get(input.sha256),
           undefined,
           request.projectId,
+          root,
         );
         await publicReference(snapshot.referenceUrls[input.sha256]);
       }
@@ -237,6 +238,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     const ctx = this.context(
       { id, snapshot, projectId: request.projectId ?? null },
       AbortSignal.timeout(60000),
+      root,
     );
     ctx.diagnose = () => {};
     try {
@@ -455,6 +457,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
   private context(
     row: Pick<JobRow, 'id' | 'snapshot' | 'projectId'>,
     signal: AbortSignal,
+    root?: string,
   ): AdapterContext {
     const snapshot = row.snapshot;
     const credentials = this.services.credentials(snapshot.channelId);
@@ -473,7 +476,9 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       credentials,
       signal,
       fetchMedia: async (hash) => {
-        const media = await this.media.resolve(hash, row.projectId ?? undefined);
+        const media = root
+          ? await this.media.resolveAt(hash, root)
+          : await this.media.resolve(hash, row.projectId ?? undefined);
         return { bytes: await readFile(media.path), mime: media.media.mime };
       },
       referenceUrl: (hash) => {

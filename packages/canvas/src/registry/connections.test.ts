@@ -34,8 +34,8 @@ describe('checkConnection', () => {
   const nodes = [
     media('img'),
     media('img2'),
-    video('frames', 'frames'),
-    video('text', 'text'),
+    video('first_last', 'first_last'),
+    video('text', 't2v'),
     video('ref', 'reference'),
     { ...media('aud'), type: 'audio', typeVersion: 1, data: {} },
     group('g'),
@@ -43,7 +43,7 @@ describe('checkConnection', () => {
 
   it('未知、未来版本和非法数据节点保留数据但不暴露端口', () => {
     for (const node of [
-      media('future', 'image', { typeVersion: 3 }),
+      media('future', 'image', { typeVersion: 4 }),
       media('invalid', 'image', { data: {} }),
       media('unknown', 'image', { type: 'plugin:new' }),
     ]) {
@@ -57,10 +57,10 @@ describe('checkConnection', () => {
   it('图片可作为图片参考、首帧、尾帧和全模态参考', () => {
     const document = doc(nodes);
     expect(checkConnection(registry, document, attempt('img', 'img2')).ok).toBe(true);
-    expect(checkConnection(registry, document, attempt('img', 'frames', 'first_frame')).ok).toBe(
-      true,
-    );
-    expect(checkConnection(registry, document, attempt('img', 'frames', 'last_frame')).ok).toBe(
+    expect(
+      checkConnection(registry, document, attempt('img', 'first_last', 'first_frame')).ok,
+    ).toBe(true);
+    expect(checkConnection(registry, document, attempt('img', 'first_last', 'last_frame')).ok).toBe(
       true,
     );
     expect(checkConnection(registry, document, attempt('img', 'ref')).ok).toBe(true);
@@ -71,7 +71,7 @@ describe('checkConnection', () => {
     ['图片连到音频端口', attempt('img', 'aud'), '不接受图片'],
     ['视频作为图片参考', attempt('ref', 'img'), '不接受视频'],
     ['文生视频没有媒体输入', attempt('img', 'text'), '端口不存在'],
-    ['首尾帧没有参考口', attempt('img', 'frames'), '端口不存在'],
+    ['首尾帧没有参考口', attempt('img', 'first_last'), '端口不存在'],
     ['自连', attempt('img', 'img'), '不能连接自己'],
     ['分组参与连线', attempt('img', 'g'), '不支持连线'],
     ['节点不存在', attempt('img', 'missing'), '节点不存在'],
@@ -84,14 +84,14 @@ describe('checkConnection', () => {
   it('拒绝重复连线、超过端口条数和循环依赖', () => {
     const document = doc(nodes, [
       edge('e1', 'img', 'img2'),
-      edge('e2', 'img', 'frames', 'first_frame'),
+      edge('e2', 'img', 'first_last', 'first_frame'),
     ]);
     expect(checkConnection(registry, document, attempt('img', 'img2'))).toMatchObject({
       ok: false,
       reason: '这两个端口已经连接',
     });
     expect(
-      checkConnection(registry, document, attempt('img2', 'frames', 'first_frame')),
+      checkConnection(registry, document, attempt('img2', 'first_last', 'first_frame')),
     ).toMatchObject({
       ok: false,
       reason: '「首帧」最多 1 条连线',
@@ -102,7 +102,7 @@ describe('checkConnection', () => {
     });
     // 重连时忽略被替换的那条边。
     expect(
-      checkConnection(registry, document, attempt('img2', 'frames', 'first_frame'), 'e2').ok,
+      checkConnection(registry, document, attempt('img2', 'first_last', 'first_frame'), 'e2').ok,
     ).toBe(true);
   });
 });
@@ -116,7 +116,7 @@ describe('连线命令', () => {
   });
 
   it('切换视频方式时删除不兼容连线并清理 inputOrder', () => {
-    let document = doc([media('a'), media('b'), video('v', 'frames')]);
+    let document = doc([media('a'), media('b'), video('v', 'first_last')]);
     document = connect(registry, document, attempt('a', 'v', 'first_frame'));
     document = connect(registry, document, attempt('b', 'v', 'last_frame'));
     const toReference = changeDataDroppingEdges<CanvasMediaData>(

@@ -6,7 +6,7 @@ import {
   AssetMoveRequest,
   DesktopPreferences,
   DesktopPreferencesUpdate,
-  GenerationRequest,
+  SemanticRequest,
   ProjectManifest,
   ProjectPageFile,
   ProjectPageSaveResult,
@@ -190,11 +190,11 @@ it('偏好、IPC 参数与生成请求向后兼容且拒绝无效输入', () => 
     ProjectTrashRequest.safeParse({ projectId: randomUUID(), path: '.frameloom/project.json' })
       .success,
   ).toBe(false);
-  const request = { modelId: randomUUID(), mode: 'text', prompt: '测试' };
-  expect(GenerationRequest.safeParse(request).success).toBe(true);
+  const request = { modelId: randomUUID(), prompt: '测试', inputs: [] };
+  expect(SemanticRequest.safeParse(request).success).toBe(true);
   expect(
-    GenerationRequest.safeParse({ ...request, projectId: randomUUID(), pageId: randomUUID() })
+    SemanticRequest.safeParse({ ...request, projectId: randomUUID(), pageId: randomUUID() })
       .success,
   ).toBe(true);
-  expect(GenerationRequest.safeParse({ ...request, projectId: '../x' }).success).toBe(false);
+  expect(SemanticRequest.safeParse({ ...request, projectId: '../x' }).success).toBe(false);
 });

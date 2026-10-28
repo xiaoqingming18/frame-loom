@@ -361,7 +361,7 @@ it('页面增删改、独立视图和封面保存；删除进入回收区、移�
       {
         id: 'img',
         type: 'image',
-        typeVersion: 1,
+        typeVersion: 3,
         position: { x: 0, y: 0 },
         size: { width: 200, height: 100 },
         data: {

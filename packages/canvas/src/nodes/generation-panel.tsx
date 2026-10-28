@@ -1,19 +1,20 @@
 import { useMemo } from 'react';
 import { GenerationComposer } from './generation-composer';
 import {
-  checkGenerationRequest,
-  checkGenerationMedia,
-  imageEditCapabilityIssue,
-  generationParamReason,
-  resolveImageParams,
-  resolveImagePrompt,
+  checkRequest,
+  checkMedia,
+  imageEditSupport,
+  parsePromptReferences,
   type CanvasMediaData,
-  type GenerationRequest,
+  type SemanticRequest,
+  type SemanticParams,
+  type SemanticParamKey,
 } from '@frame-loom/contracts';
 import { isNodeLocked, updateData } from '../commands/commands';
 import { useCanvas, useCanvasState } from '../context';
 import { generationSources, generationModel } from './generation-inputs';
 import { writeGenerationJob } from './generation-writeback';
+import { defaultMediaParams } from './params/defaults';
 
 export function GenerationPanel({
   nodeId,
@@ -36,14 +37,13 @@ export function GenerationPanel({
   });
   const references = useMemo(() => generationSources(document, nodeId), [document, nodeId]);
   const inputs = references.map((reference) => reference.input);
-  const resolved =
-    kind === 'image'
-      ? resolveImagePrompt(
-          data.prompt,
-          references.map((reference) => reference.sourceId),
-        )
-      : { prompt: data.prompt, missingNodeIds: [] };
-  const prompt = resolved.prompt;
+  const missingRefs = parsePromptReferences(data.prompt).filter(
+    (ref) => !references.some((input) => input.sourceId === ref.nodeId),
+  );
+  const prompt = data.prompt.replace(/@\{([A-Za-z0-9_-]+)\}/g, (token, id: string) => {
+    const reference = references.find((item) => item.sourceId === id);
+    return reference ? `@{${reference.input.sha256}}` : token;
+  });
   const missingInputs =
     document.edges.filter((edge) => edge.target === nodeId).length >
     references.filter((ref) => !ref.local).length;
@@ -52,44 +52,57 @@ export function GenerationPanel({
 
   const options = config?.models.filter((model) => model.kind === kind) ?? [];
   const model = generationModel(config, kind, data.modelId);
-  const profile = model?.profile;
-  const mode = kind === 'video' ? (data.mode ?? 'text') : inputs.length ? 'reference' : 'text';
+  const cap = model?.capability;
+  const mode = cap?.kind === 'video' ? (data.mode ?? cap.defaultMode) : undefined;
   const pendingParams = data.pendingParams ?? {};
-  const request: GenerationRequest | undefined =
-    model && profile
+  const request: SemanticRequest | undefined =
+    model && cap
       ? {
           modelId: model.id,
-          mode,
+          ...(mode ? { mode } : {}),
           prompt,
-          params:
-            kind === 'image'
-              ? resolveImageParams(profile, data.params ?? {}).params
-              : {
-                  ...Object.fromEntries(profile.params.map((param) => [param.key, param.default])),
-                  ...data.params,
-                },
+          params: { ...defaultMediaParams(cap), ...data.params },
           inputs,
+          extras: {
+            ...Object.fromEntries(
+              model.extras
+                .filter((param) => param.default !== undefined)
+                .map((param) => [param.key, param.default!]),
+            ),
+            ...data.extras,
+          },
           ...(data.imageEdit ? { imageEdit: data.imageEdit } : {}),
           source: 'canvas',
         }
       : undefined;
+  const editSupport =
+    cap?.kind === 'image' && model ? imageEditSupport(cap, model.protocol) : undefined;
   const imageEditIssue =
-    request?.imageEdit && profile
-      ? imageEditCapabilityIssue(request.imageEdit, profile)
+    request?.imageEdit && editSupport
+      ? !editSupport[request.imageEdit.operation].available
+        ? editSupport[request.imageEdit.operation].reason
+        : request.imageEdit.operation === 'emotion' &&
+            request.imageEdit.maskMode === 'provider' &&
+            !editSupport.emotion.mask
+          ? '所选模型不支持蒙版'
+          : undefined
       : undefined;
   const issues =
-    request && profile
-      ? [...checkGenerationRequest(profile, request), ...checkGenerationMedia(profile, references)]
+    request && model
+      ? [
+          ...checkRequest(
+            request,
+            { kind: model.kind, capability: model.capability, extras: model.extras },
+            model.protocol,
+          ),
+          ...checkMedia(references, model.capability),
+        ]
       : [];
   const storageMissing =
     !!config &&
-    !['provider-file', 'file'].includes(model?.upload ?? '') &&
     !config.storageReady &&
-    inputs.some(
-      (input) =>
-        input.kind !== 'image' ||
-        profile?.inputs.find((limit) => limit.kind === input.kind)?.transport === 'url',
-    );
+    inputs.some((input) => model?.transport[input.kind] === 'url');
+  const countInvalid = cap?.kind === 'image' && (data.count ?? 1) > (cap.count.max ?? 4);
   const setData = (change: (current: CanvasMediaData) => CanvasMediaData) =>
     store.getState().apply((document) => updateData<CanvasMediaData>(document, nodeId, change));
 
@@ -98,10 +111,11 @@ export function GenerationPanel({
       !api ||
       !request ||
       issues.length ||
+      countInvalid ||
       Object.keys(pendingParams).length ||
       storageMissing ||
       missingInputs ||
-      resolved.missingNodeIds.length ||
+      missingRefs.length ||
       prompt.length > 32000 ||
       pendingIds.length ||
       locked ||
@@ -139,13 +153,13 @@ export function GenerationPanel({
     locked && '节点已锁定',
     generating && '正在提交任务',
     pendingIds.length > 0 && '请等待当前任务结束或放弃任务',
-    !config && (configError ?? '正在读取模型档案…'),
+    !config && (configError ?? '正在读取模型配置…'),
     !model &&
       (data.modelId ? '原模型已不可用，请重新选择生成模型' : '请先在模型服务中启用生成模型'),
-    model && !profile && '此模型没有匹配的生成档案，无法提交任务',
+    countInvalid && '生成数量超过当前模型上限',
     !prompt.trim() && '请填写提示词',
-    prompt.length > 32000 && '替换后的提示词最多 32000 字',
-    resolved.missingNodeIds.length > 0 && '引用的参考已断开',
+    prompt.length > 32000 && '提示词最多 32000 字',
+    missingRefs.length > 0 && '引用的参考已断开',
     storageMissing && '当前参考素材需要先配置对象存储',
     missingInputs && '连线来源尚无可用媒体，请先生成或上传素材',
     issues[0]?.message,
@@ -165,63 +179,55 @@ export function GenerationPanel({
       countDisabled={locked || generating || !!pendingIds.length}
       disabledReason={disabledReason}
       onGenerate={() => void generate()}
+      onExtras={(extras) => setData((current) => ({ ...current, extras }))}
       onPrompt={(prompt) => setData((current) => ({ ...current, prompt }))}
       onCount={(count) => setData((current) => ({ ...current, count }))}
-      onParam={(key, value) =>
+      onParams={(params) =>
         setData((current) => {
           const pending = { ...current.pendingParams };
-          delete pending[key];
+          for (const key of Object.keys(params) as SemanticParamKey[]) {
+            if (params[key] !== current.params?.[key] || params[key] === pending[key])
+              delete pending[key];
+          }
           return {
             ...current,
-            params: { ...request?.params, [key]: value },
+            params,
             pendingParams: pending,
           };
         })
       }
       onModel={(id) => {
         const next = options.find((item) => item.id === id);
-        if (!next?.profile) return;
-        const previous = { ...data.pendingParams, ...data.params, ...request?.params };
-        if (kind === 'image') {
-          const resolved = resolveImageParams(next.profile, previous);
-          setData((current) => ({
-            ...current,
-            modelId: id,
-            params: resolved.params,
-            pendingParams: {},
-          }));
-          if (resolved.changes.length)
-            store
-              .getState()
-              .notify(
-                `已按新模型调整：${resolved.changes.map((change) => change.message).join('；')}`,
-              );
-          return;
+        if (!next) return;
+        const previous = { ...data.pendingParams, ...request?.params, ...data.params };
+        const params: SemanticParams = { ...defaultMediaParams(next.capability), ...previous };
+        const nextMode =
+          next.capability.kind === 'video' ? (mode ?? next.capability.defaultMode) : undefined;
+        const problems = checkRequest(
+          { modelId: id, mode: nextMode, prompt, inputs, params, extras: {}, source: 'canvas' },
+          next,
+          next.protocol,
+        );
+        const pending: SemanticParams = {};
+        for (const [key, value] of Object.entries(previous)) {
+          if (
+            problems.some(
+              (issue) =>
+                issue.field === `params.${key}` ||
+                (issue.field === 'params.size' &&
+                  ['tier', 'aspectRatio', 'width', 'height'].includes(key)),
+            )
+          ) {
+            Object.assign(pending, { [key]: value });
+            delete params[key as SemanticParamKey];
+          }
         }
-        const params = Object.fromEntries(
-          next.profile.params.map((param) => [
-            param.key,
-            param.key in previous ? previous[param.key] : param.default,
-          ]),
+        const extras = Object.fromEntries(
+          Object.entries(data.extras ?? {}).filter(([key]) =>
+            next.extras.some((param) => param.key === key),
+          ),
         );
-        const pending = Object.fromEntries(
-          Object.entries(previous).filter(([key, value]) => {
-            return !!generationParamReason(
-              next.profile!,
-              {
-                modelId: id,
-                mode,
-                prompt,
-                inputs,
-                params,
-                source: 'canvas',
-              },
-              key,
-              value,
-            );
-          }),
-        );
-        setData((current) => ({ ...current, modelId: id, params, pendingParams: pending }));
+        setData((current) => ({ ...current, modelId: id, params, extras, pendingParams: pending }));
         if (Object.keys(pending).length)
           store.getState().notify('新模型无法沿用部分参数，请在参数中重新选择或清除待处理项');
       }}

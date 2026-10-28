@@ -1,16 +1,14 @@
-import type { ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { GenerationJob, ModelProfile, type CanvasMediaData } from '@frame-loom/contracts';
+import { type CanvasMediaData } from '@frame-loom/contracts';
 import type { CanvasHost } from '../host';
 import { CanvasContext, useCanvasState } from '../context';
 import { createBuiltinRegistry } from './builtin';
 import { GenerationPanel } from './generation-panel';
 import { GenerationStatus } from './generation-status';
-import { createCanvasStore } from '../store/store';
-import { doc, edge, generationJob, media, sha } from '../test-utils';
 import { writeGenerationJob } from './generation-writeback';
-import { deleteElements } from '../commands/commands';
+import { createCanvasStore } from '../store/store';
+import { doc, edge, generationJob, generationModelFixture, media, sha } from '../test-utils';
 
 function referenceSource(id: string, hash = 'a') {
   const node = media(id);
@@ -201,38 +199,68 @@ it('端口不兼容的图片候选置灰并显示原因', async () => {
   expect(screen.getByText('「参考图」不接受图片')).toBeDefined();
 });
 
-it('替换后超出字数上限时禁止发送', async () => {
-  const test = setupPanel({ prompt: 'x'.repeat(31996) + '@{a}' });
-  await act(() =>
-    test.store.getState().apply((document) => ({
-      ...document,
-      nodes: [referenceSource('a'), document.nodes[1]],
-      edges: [edge('e', 'a', 'target')],
-    })),
-  );
-  expect(screen.getByText('替换后的提示词最多 32000 字')).toBeDefined();
-  expect(screen.getByLabelText('提示词字数').textContent).toBe('32003 / 32000');
-  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
-  expect(test.api.create).not.toHaveBeenCalled();
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
 });
 
-it.each([
-  ['参考 @{source}', '参考 图2'],
-  ['Use @{source}', 'Use Image 2'],
-])('排序后标签与实际请求编号一致：%s', async (prompt, expected) => {
-  const test = setupPanel({ prompt });
+const secondModelId = '44444444-4444-4444-8444-444444444444';
+function setupPanel(data: Partial<CanvasMediaData> = {}, kind: 'image' | 'video' = 'image') {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const target = media('target', kind);
+  target.data = { ...(target.data as CanvasMediaData), prompt: '暖光', ...data };
+  const store = createCanvasStore(doc([media('source'), target]));
+  const model = generationModelFixture(kind === 'video' ? 'ark-seedance' : 'openai-images');
+  if (model.capability.kind === 'image') {
+    model.capability.references.max = 1;
+    model.capability.count.max = 5;
+  }
+  model.label = kind === 'video' ? '视频模型' : '图片模型';
+  const config = { storageReady: true, models: [model] };
+  store.getState().setGenerationConfig(config);
+  const api = {
+    load: vi.fn(),
+    create: vi.fn<NonNullable<CanvasHost['generation']>['create']>(),
+    get: vi.fn(),
+    cancel: vi.fn(),
+    resubmit: vi.fn(),
+    subscribe: vi.fn(),
+  };
+  const registry = createBuiltinRegistry();
+  registry.setGenerationModels(config.models);
+  const upload = vi.fn<CanvasHost['media']['upload']>();
+  render(
+    <CanvasContext.Provider
+      value={{ store, registry, host: { media: { upload, url: (id) => id }, generation: api } }}
+    >
+      <Panel kind={kind} />
+    </CanvasContext.Provider>,
+  );
+  return {
+    store,
+    api,
+    registry,
+    model,
+    config,
+    upload,
+    data: () => store.getState().document.nodes[1].data as CanvasMediaData,
+  };
+}
+
+it('排序后的 role 与 order 一致，引用只转哈希而不改写编号', async () => {
+  const test = setupPanel({ prompt: '参考 @{source}' });
+  const model = structuredClone(test.model);
+  if (model.capability.kind !== 'image') throw new Error('图片夹具无效');
+  model.capability.references.max = 2;
   act(() => {
-    test.store.getState().setGenerationConfig({
-      storageReady: true,
-      models: [
-        {
-          id: modelId,
-          label: '图片模型',
-          kind: 'image',
-          profile: { ...profile, inputs: [{ ...profile.inputs[0], maxCount: 2 }] },
-        },
-      ],
-    });
+    test.store.getState().setGenerationConfig({ ...test.config, models: [model] });
     test.store.getState().apply((document) => ({
       ...document,
       nodes: [referenceSource('source'), document.nodes[1], referenceSource('other', 'b')],
@@ -243,731 +271,162 @@ it.each([
     key: 'ArrowRight',
     altKey: true,
   });
-  expect(test.data().inputOrder).toEqual(['e2', 'e1']);
-  expect(screen.getByRole('textbox').querySelector('[data-reference]')?.textContent).toBe('图2');
-  expect(screen.getByLabelText('提示词字数').textContent).toBe(`${expected.length} / 32000`);
-  test.api.create.mockResolvedValue(generationJob({ status: 'pending' }));
+  test.api.create.mockResolvedValue(generationJob({ status: 'pending', outputs: [] }));
   fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
-  await waitFor(() => expect(test.api.create).toHaveBeenCalled());
+  await waitFor(() => expect(test.api.create).toHaveBeenCalledOnce());
   expect(test.api.create.mock.calls[0][0]).toMatchObject({
-    prompt: expected,
-    inputs: [{ sha256: sha('b') }, { sha256: sha('a') }],
-  });
-  expect(test.data().prompt).toBe(prompt);
-});
-
-it('拖动排序后断开连线，标签失效并阻止提交', async () => {
-  const test = setupPanel({ prompt: '参考 @{source}' });
-  await act(() =>
-    test.store.getState().apply((document) => ({
-      ...document,
-      nodes: [referenceSource('source'), document.nodes[1], referenceSource('other', 'b')],
-      edges: [edge('e1', 'source', 'target'), edge('e2', 'other', 'target')],
-    })),
-  );
-  const dataTransfer = { setData: vi.fn() };
-  fireEvent.dragStart(screen.getByRole('button', { name: '参考 1，Alt 加方向键排序' }), {
-    dataTransfer,
-  });
-  fireEvent.drop(screen.getByRole('button', { name: '参考 2，Alt 加方向键排序' }), {
-    dataTransfer,
-  });
-  expect(test.data().inputOrder).toEqual(['e2', 'e1']);
-  await act(() =>
-    test.store.getState().apply((document) => deleteElements(document, new Set(), new Set(['e1']))),
-  );
-  expect(screen.getByText('失效参考')).toBeDefined();
-  expect(screen.getByText('引用的参考已断开')).toBeDefined();
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' }).disabled).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
-  expect(test.api.create).not.toHaveBeenCalled();
-});
-
-afterEach(() => {
-  cleanup();
-  vi.unstubAllGlobals();
-});
-
-const modelId = '22222222-2222-4222-8222-222222222222';
-const jobId = '33333333-3333-4333-8333-333333333333';
-const secondModelId = '44444444-4444-4444-8444-444444444444';
-const date = '2026-10-25T00:00:00.000Z';
-const profile = ModelProfile.parse({
-  id: 'openai-images-default',
-  name: '图片生成',
-  kind: 'image',
-  protocol: 'openai-images',
-  matchIds: ['image-model'],
-  generic: false,
-  modes: [
-    { id: 'text', name: '文生图' },
-    { id: 'reference', name: '参考图' },
-  ],
-  params: [],
-  constraints: [],
-  inputs: [
-    {
-      kind: 'image',
-      maxCount: 1,
-      maxBytes: 1_000_000,
-      mimeTypes: ['image/png'],
-      transport: 'inline',
-    },
-  ],
-  runtime: {
-    concurrency: 1,
-    pollInitialMs: 1000,
-    pollMaxMs: 5000,
-    timeoutMs: 10_000,
-    submitTimeoutMs: 1000,
-    supportsCancel: false,
-  },
-});
-const videoProfile = ModelProfile.parse({
-  ...profile,
-  id: 'video-profile',
-  name: '视频生成',
-  kind: 'video',
-  protocol: 'ark-video-tasks',
-  modes: [
-    { id: 'text', name: '文生视频' },
-    { id: 'frames', name: '首尾帧' },
-  ],
-  params: [{ key: 'resolution', name: '分辨率', type: 'enum', values: ['720p'], default: '720p' }],
-  inputs: [
-    {
-      ...profile.inputs[0],
-      maxCount: 2,
-    },
-  ],
-});
-
-function setupPanel(data: Partial<CanvasMediaData> = {}, kind: 'image' | 'video' = 'image') {
-  const target = media('target', kind);
-  target.data = { ...(target.data as CanvasMediaData), prompt: '暖光', ...data };
-  const store = createCanvasStore(doc([media('source'), target]));
-  store.getState().setGenerationConfig({
-    storageReady: true,
-    models: [
-      {
-        id: modelId,
-        label: kind === 'video' ? '视频模型' : '图片模型',
-        kind,
-        profile: kind === 'video' ? videoProfile : profile,
-      },
-      ...(kind === 'video'
-        ? [
-            {
-              id: secondModelId,
-              label: '精简视频模型',
-              kind,
-              profile: ModelProfile.parse({ ...videoProfile, id: 'video-profile-2', params: [] }),
-            },
-          ]
-        : []),
+    prompt: `参考 @{${sha('a')}}`,
+    inputs: [
+      { role: 'reference', kind: 'image', sha256: sha('b'), order: 0 },
+      { role: 'reference', sha256: sha('a'), order: 1 },
     ],
+    extras: {},
   });
-  const api = {
-    load: vi.fn(),
-    create: vi.fn<NonNullable<CanvasHost['generation']>['create']>(),
-    get: vi.fn(),
-    cancel: vi.fn(),
-    resubmit: vi.fn(),
-    subscribe: vi.fn(),
-  };
-  const registry = createBuiltinRegistry();
-  const upload = vi.fn<CanvasHost['media']['upload']>();
-  render(
-    <CanvasContext.Provider
-      value={{
-        store,
-        registry,
-        host: { media: { upload, url: (id) => id }, generation: api },
-      }}
-    >
-      <Panel kind={kind} />
-    </CanvasContext.Provider>,
-  );
-  return {
-    store,
-    api,
-    upload,
-    registry,
-    data: () => store.getState().document.nodes[1].data as CanvasMediaData,
-  };
-}
+  expect(test.data().prompt).toBe('参考 @{source}');
+});
 
-it('切换视频模型保留不兼容参数为待处理项并阻止提交', () => {
-  const test = setupPanel({}, 'video');
+it('附加参数按声明控件提交，数量由能力卡决定并拆成独立任务', async () => {
+  const test = setupPanel({ count: 5 });
+  const model = {
+    ...test.model,
+    extras: [
+      {
+        key: 'style',
+        label: '风格',
+        type: 'enum' as const,
+        values: ['film', 'plain'],
+        default: 'film',
+        path: 'style',
+      },
+    ],
+  };
+  act(() => test.store.getState().setGenerationConfig({ ...test.config, models: [model] }));
+  fireEvent.click(screen.getByRole('button', { name: '生成数量' }));
+  expect(screen.getByRole('button', { name: '×5' })).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
+  fireEvent.change(screen.getByLabelText('风格'), { target: { value: 'plain' } });
+  expect(test.data().extras).toEqual({ style: 'plain' });
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  const ids = Array.from({ length: 5 }, () => crypto.randomUUID());
+  ids.forEach((id) =>
+    test.api.create.mockResolvedValueOnce(generationJob({ id, status: 'pending', outputs: [] })),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
+  await waitFor(() => expect(test.data().pendingJobIds).toEqual(ids));
+  expect(test.api.create).toHaveBeenCalledTimes(5);
+  expect(test.api.create.mock.calls[0][0].extras).toEqual({ style: 'plain' });
+  expect(test.api.create.mock.calls[0][0].params).not.toHaveProperty('count');
+});
+
+it.each(['storage', 'count', 'empty', 'media', 'params'] as const)(
+  '共享校验阻止 %s，移除错误后可以生成',
+  async (reason) => {
+    const test = setupPanel();
+    const model = structuredClone(test.model);
+    if (model.capability.kind !== 'image') throw new Error('图片夹具无效');
+    if (reason === 'storage') model.transport.image = 'url';
+    if (reason === 'count') model.capability.references.max = 0;
+    if (reason === 'media') model.capability.references.maxBytes = 1;
+    act(() => {
+      test.store.getState().setGenerationConfig({ storageReady: false, models: [model] });
+      test.store.getState().apply((document) => ({
+        ...document,
+        nodes: [
+          reason === 'empty' ? media('source') : referenceSource('source'),
+          {
+            ...document.nodes[1],
+            data: {
+              ...test.data(),
+              ...(reason === 'params' ? { params: { quality: 'invented' } } : {}),
+            },
+          },
+        ],
+        edges: [edge('e', 'source', 'target')],
+      }));
+      if (reason === 'media')
+        test.store.getState().apply((document) => ({
+          ...document,
+          nodes: document.nodes.map((node) =>
+            node.id === 'source'
+              ? {
+                  ...node,
+                  data: {
+                    ...(node.data as CanvasMediaData),
+                    versions: [{ ...generationJob().outputs[0], bytes: 2 }],
+                  },
+                }
+              : node,
+          ),
+        }));
+    });
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
+    expect(test.api.create).not.toHaveBeenCalled();
+    await act(() =>
+      test.store.getState().apply((document) => ({
+        ...document,
+        edges: [],
+        nodes: document.nodes.map((node) =>
+          node.id === 'target' ? { ...node, data: { ...test.data(), params: {} } } : node,
+        ),
+      })),
+    );
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' }).disabled).toBe(
+      false,
+    );
+  },
+);
+
+it('模型切换保留兼容值，将不兼容值挂起并过滤 extras', () => {
+  const test = setupPanel({
+    params: { quality: 'high', aspectRatio: '1:1' },
+    extras: { keep: true, drop: true },
+  });
+  const model = structuredClone(test.model);
+  model.id = secondModelId;
+  model.label = '新模型';
+  if (model.capability.kind !== 'image') throw new Error('图片夹具无效');
+  model.capability.quality = { values: ['low'], default: 'low' };
+  model.extras = [{ key: 'keep', label: '保留', type: 'boolean', path: 'keep' }];
+  act(() =>
+    test.store.getState().setGenerationConfig({ ...test.config, models: [test.model, model] }),
+  );
   fireEvent.click(screen.getByRole('button', { name: '生成模型' }));
-  fireEvent.click(screen.getByRole('button', { name: /精简视频模型/ }));
-  expect(test.data().pendingParams).toEqual({ resolution: '720p' });
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成视频' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: /新模型/ }));
+  expect(test.data().params?.aspectRatio).toBe('1:1');
+  expect(test.data().pendingParams).toEqual({ quality: 'high' });
+  expect(test.data().extras).toEqual({ keep: true });
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' }).disabled).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
   fireEvent.click(screen.getByRole('button', { name: '清除待处理参数' }));
   expect(test.data().pendingParams).toEqual({});
 });
 
-it('文生视频没有空素材栏和添加入口，参数入口显示比例与时长', () => {
-  setupPanel({}, 'video');
-  expect(
-    screen.queryByRole('button', { name: /添加.*素材|添加首帧|添加尾帧|视频素材/ }),
-  ).toBeNull();
+it('文生没有素材栏，首尾帧有两个素材槽位且保持组字', () => {
+  setupPanel({ mode: 'first_last' }, 'video');
+  expect(screen.getByRole('button', { name: '添加首帧' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: '添加尾帧' })).toBeTruthy();
   expect(screen.getByRole('button', { name: '生成参数' }).textContent).toBe('比例 · 时长');
-  expect(
-    screen.getByRole('textbox', { name: '生成提示词' }).previousElementSibling?.className,
-  ).toContain('h-0');
 });
 
-it('首尾帧可先选尾帧，候选只含当前有效图片；替换沿用连线且一步撤销', () => {
-  const test = setupPanel({ mode: 'frames' }, 'video');
-  act(() => {
-    test.store.getState().setGenerationConfig({
-      storageReady: true,
-      models: [
-        {
-          id: modelId,
-          label: '视频模型',
-          kind: 'video',
-          profile: ModelProfile.parse({
-            ...videoProfile,
-            modes: [{ id: 'frames', name: '首尾帧', requiredRoles: ['first_frame'] }],
-          }),
-        },
-      ],
-    });
-    test.store.getState().apply((document) => ({
-      ...document,
-      nodes: [
-        referenceSource('source'),
-        document.nodes[1],
-        referenceSource('replacement', 'b'),
-        media('empty'),
-        { ...referenceSource('movie'), type: 'video' },
-      ],
-    }));
-  });
-  fireEvent.click(screen.getByRole('button', { name: '添加尾帧' }));
-  expect(screen.queryByRole('button', { name: '选择 empty' })).toBeNull();
-  expect(screen.queryByRole('button', { name: '选择 movie' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: '选择 source' }));
-  expect(test.store.getState().document.edges).toMatchObject([
-    { source: 'source', targetHandle: 'last_frame' },
-  ]);
-  fireEvent.click(screen.getByRole('button', { name: '替换尾帧' }));
-  fireEvent.click(screen.getByRole('button', { name: '选择 replacement' }));
-  expect(test.store.getState().document.edges).toMatchObject([
-    { source: 'replacement', targetHandle: 'last_frame' },
-  ]);
-  act(() => test.store.getState().undo());
-  expect(test.store.getState().document.edges).toMatchObject([
-    { source: 'source', targetHandle: 'last_frame' },
-  ]);
-  fireEvent.click(screen.getByRole('button', { name: '替换尾帧' }));
-  fireEvent.click(screen.getByRole('button', { name: '移除尾帧' }));
-  expect(test.store.getState().document.edges).toEqual([]);
-});
-
-it('视频时长沿用离散档案，比例约束仍禁用不可用选项', () => {
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
-  const test = setupPanel({}, 'video');
-  act(() =>
-    test.store.getState().setGenerationConfig({
-      storageReady: true,
-      models: [
-        {
-          id: modelId,
-          label: '视频模型',
-          kind: 'video',
-          profile: ModelProfile.parse({
-            ...videoProfile,
-            params: [
-              { key: 'duration', name: '时长', type: 'enum', values: [5, 10], default: 5 },
-              {
-                key: 'ratio',
-                name: '比例',
-                type: 'enum',
-                values: ['16:9', '9:16'],
-                default: '16:9',
-              },
-            ],
-            constraints: [
-              {
-                when: { mode: 'text' },
-                param: 'ratio',
-                allowed: ['16:9'],
-                message: '当前模式只允许横屏',
-              },
-            ],
-          }),
-        },
-      ],
-    }),
-  );
-  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
-  expect(screen.queryByText('更多')).toBeNull();
-  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '比例 9:16' }).disabled).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: '增加时长' }));
-  expect(test.data().params?.duration).toBe(10);
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: '增加时长' }).disabled).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: '减少时长' }));
-  expect(test.data().params?.duration).toBe(5);
-});
-
-it('本地音频和连线素材按同一顺序编号与提交，文件保存为节点引用', async () => {
-  const test = setupPanel({ mode: 'reference' }, 'video');
-  const audio = {
-    ...generationJob().outputs[0],
-    sha256: sha('c'),
-    mime: 'audio/wav',
-    width: null,
-    height: null,
-    durationMs: 3000,
-  };
-  test.upload.mockResolvedValue(audio);
-  test.api.create.mockResolvedValue(
-    generationJob({ status: 'running', kind: 'video', outputs: [] }),
-  );
-  act(() => {
-    test.store.getState().setGenerationConfig({
-      storageReady: true,
-      models: [
-        {
-          id: modelId,
-          label: '自定义视频',
-          kind: 'video',
-          profile: {
-            ...videoProfile,
-            id: 'imported-future-video',
-            modes: [{ id: 'reference', name: '多模态参考' }],
-            inputs: [
-              ...videoProfile.inputs,
-              { ...videoProfile.inputs[0], kind: 'audio', mimeTypes: ['audio/wav'] },
-            ],
-          },
-        },
-      ],
-    });
-    test.store.getState().apply((document) => ({
-      ...document,
-      nodes: [referenceSource('source'), document.nodes[1]],
-      edges: [edge('ref-edge', 'source', 'target')],
-    }));
-  });
-  fireEvent.click(screen.getByRole('button', { name: '视频素材' }));
-  fireEvent.click(screen.getByRole('button', { name: '上传参考素材' }));
-  fireEvent.change(screen.getByLabelText('上传视频参考素材'), {
-    target: { files: [new File(['audio'], '声音.wav', { type: 'audio/wav' })] },
-  });
-  await waitFor(() => expect(test.data().mediaReferences).toHaveLength(1));
-  fireEvent.click(screen.getByRole('button', { name: '素材 2 前移' }));
-  expect(test.data().inputOrder[1]).toBe('ref-edge');
-  fireEvent.keyDown(
-    screen.getByLabelText('视频素材', { selector: '[data-slot="popover-content"]' }),
-    { key: 'Escape' },
-  );
-  fireEvent.click(screen.getByRole('button', { name: '生成视频' }));
-  await waitFor(() => expect(test.api.create).toHaveBeenCalledTimes(1));
-  expect(test.api.create.mock.calls[0][0].inputs).toEqual([
-    { kind: 'audio', role: 'reference', sha256: sha('c') },
-    { kind: 'image', role: 'reference', sha256: sha('a') },
-  ]);
-});
-
-it('按数量连续创建任务，重复点击不会重复提交，部分创建失败保留已创建项', async () => {
-  const test = setupPanel({ count: 3 });
-  const first = generationJob({ status: 'pending' });
-  const second = generationJob({ id: jobId, status: 'pending' });
-  test.api.create
-    .mockResolvedValueOnce(first)
-    .mockResolvedValueOnce(second)
-    .mockRejectedValueOnce(new Error('第三张创建失败'));
-  const button = screen.getByRole('button', { name: '生成图片' });
-  fireEvent.click(button);
-  fireEvent.click(button);
-  await waitFor(() => expect(test.store.getState().notice?.text).toBe('第三张创建失败'));
-  expect(test.api.create).toHaveBeenCalledTimes(3);
-  expect(test.api.create.mock.calls[0][0].params).not.toHaveProperty('count');
-  expect(test.data().pendingJobIds).toEqual([first.id, second.id]);
-  expect(test.store.getState().generationSubmitting.size).toBe(0);
-});
-
-it('数量三张创建三个独立任务', async () => {
-  const test = setupPanel({ count: 3 });
-  const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
-  for (const id of ids)
-    test.api.create.mockResolvedValueOnce(generationJob({ id, status: 'pending' }));
-  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
-  await waitFor(() => expect(test.data().pendingJobIds).toEqual(ids));
-  expect(test.api.create).toHaveBeenCalledTimes(3);
-});
-
-it('数量弹层写入节点，参数按档案隐藏整组、置灰取值，显示摘要、角标和预计像素', () => {
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
-  const test = setupPanel();
-  act(() =>
-    test.store.getState().setGenerationConfig({
-      storageReady: true,
-      models: [
-        {
-          id: modelId,
-          label: '图片模型',
-          kind: 'image',
-          profile: {
-            ...profile,
-            params: [
-              {
-                key: 'aspectRatio',
-                name: '比例',
-                type: 'enum',
-                values: ['1:1', '3:2', '2:3'],
-                default: '1:1',
-                mapped: true,
-              },
-              {
-                key: 'quality',
-                name: '画质',
-                type: 'enum',
-                values: ['low', 'medium', 'high'],
-                default: 'medium',
-                mapped: true,
-                notes: { high: '预览' },
-              },
-              {
-                key: 'background',
-                name: '背景',
-                type: 'enum',
-                values: ['auto', 'opaque'],
-                default: 'auto',
-                mapped: true,
-              },
-            ],
-          },
-        },
-      ],
-    }),
-  );
-  expect(screen.getByRole('button', { name: '生成参数' }).textContent).toContain(
-    '1:1 · 中 · 自适应',
-  );
-  fireEvent.click(screen.getByRole('button', { name: '生成数量' }));
-  fireEvent.click(screen.getByRole('button', { name: '×4' }));
-  expect(test.data().count).toBe(4);
-  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
-  expect(screen.queryByRole('group', { name: '清晰度' })).toBeNull();
-  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '比例 16:9' }).disabled).toBe(true);
-  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '背景 透明' }).disabled).toBe(true);
-  expect(screen.getByLabelText('预计像素').textContent).toBe('≈ 1024×1024');
-  expect(screen.getByText('预览')).toBeDefined();
-  fireEvent.click(screen.getByRole('radio', { name: '比例 3:2' }));
-  expect(test.data().params?.aspectRatio).toBe('3:2');
-  expect(screen.getByLabelText('预计像素').textContent).toBe('≈ 1536×1024');
-  fireEvent.keyDown(screen.getByRole('slider', { name: '画质' }), { key: 'End' });
-  expect(test.data().params?.quality).toBe('high');
-});
-
-it('提示词为空时发送按钮提供可读禁用原因，展开和字数同步', () => {
-  const test = setupPanel({ prompt: '' });
-  const send = screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' });
-  expect(send.disabled).toBe(true);
-  expect(document.getElementById(send.getAttribute('aria-describedby')!)?.textContent).toBe(
-    '请填写提示词',
-  );
-  fireEvent.click(screen.getByRole('button', { name: '展开提示词' }));
-  expect(screen.getByRole('button', { name: '收起提示词' }).getAttribute('aria-expanded')).toBe(
-    'true',
-  );
-  const editor = screen.getByRole('textbox', { name: '生成提示词' });
-  editor.textContent = '暖光';
-  fireEvent.input(editor);
-  expect(test.data().prompt).toBe('暖光');
-  expect(screen.getByLabelText('提示词字数').textContent).toBe('2 / 32000');
-  expect(send.disabled).toBe(false);
-});
-
-it('Gemini 清晰度分段禁用未声明的档位，不出现画质背景与虚构像素', () => {
-  const test = setupPanel();
-  act(() =>
-    test.store.getState().setGenerationConfig({
-      storageReady: true,
-      models: [
-        {
-          id: modelId,
-          label: 'Gemini',
-          kind: 'image',
-          profile: {
-            ...profile,
-            protocol: 'gemini-image',
-            params: [
-              {
-                key: 'aspectRatio',
-                name: '比例',
-                type: 'enum',
-                values: ['1:1', '16:9'],
-                default: '1:1',
-                mapped: true,
-              },
-              {
-                key: 'resolution',
-                name: '清晰度',
-                type: 'enum',
-                values: ['2K', '4K'],
-                default: '2K',
-                mapped: true,
-                notes: { '4K': '实验' },
-              },
-            ],
-          },
-        },
-      ],
-    }),
-  );
-  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
-  expect(screen.getByRole<HTMLButtonElement>('radio', { name: '清晰度 1K' }).disabled).toBe(true);
-  expect(screen.queryByRole('group', { name: '画质' })).toBeNull();
-  expect(screen.queryByRole('group', { name: '背景' })).toBeNull();
-  expect(screen.queryByLabelText('预计像素')).toBeNull();
-  expect(screen.getByText('实验')).toBeDefined();
-  fireEvent.click(screen.getByRole('radio', { name: '清晰度 4K' }));
-  expect(test.data().params?.resolution).toBe('4K');
-});
-
-it('失败单张重试只替换对应 id，同步历史；重试失败保留引用，放弃后可再次生成', async () => {
-  const failed = generationJob({ status: 'failed', errorMessage: '供应商失败' });
-  const pending = generationJob({ id: jobId, status: 'running' });
-  const test = setupPanel({ pendingJobIds: [failed.id, pending.id] });
-  act(() => {
-    test.store.getState().setGenerationJob(failed);
-    test.store.getState().setGenerationJob(pending);
-  });
-  test.api.resubmit.mockRejectedValueOnce(new Error('重试失败'));
-  fireEvent.click(screen.getByRole('button', { name: '重试任务 1' }));
-  await waitFor(() => expect(test.store.getState().notice?.text).toBe('重试失败'));
-  expect(test.data().pendingJobIds).toEqual([failed.id, pending.id]);
-  const next = generationJob({ id: crypto.randomUUID(), status: 'pending' });
+it('成功任务写回版本，失败单张重试只替换对应任务', async () => {
+  const failed = generationJob({ status: 'failed', outputs: [], errorMessage: '失败' });
+  const test = setupPanel({ pendingJobIds: [failed.id] });
+  act(() => test.store.getState().setGenerationJob(failed));
+  const next = generationJob({ id: crypto.randomUUID(), status: 'pending', outputs: [] });
   test.api.resubmit.mockResolvedValueOnce(next);
-  await act(() =>
-    test.store.getState().apply((document) => ({
-      ...document,
-      nodes: document.nodes.map((node) => ({ ...node, title: '新标题' })),
-    })),
-  );
   fireEvent.click(screen.getByRole('button', { name: '重试任务 1' }));
-  await waitFor(() => expect(test.data().pendingJobIds).toEqual([next.id, pending.id]));
-  expect(test.api.resubmit).toHaveBeenLastCalledWith(failed.id);
-  expect(test.api.create).not.toHaveBeenCalled();
-  expect((test.store.getState().past[0].nodes[1].data as CanvasMediaData).pendingJobIds).toEqual([
-    next.id,
-    pending.id,
-  ]);
-  act(() => test.store.getState().setGenerationJob({ ...next, status: 'failed' }));
-  test.api.cancel.mockResolvedValueOnce({ ...next, status: 'failed' });
-  fireEvent.click(screen.getAllByRole('button', { name: '放弃任务' })[0]);
-  await waitFor(() => expect(test.data().pendingJobIds).toEqual([pending.id]));
-});
-
-it.each([true, false])('切换模型按目标档案是否支持 21:9（%s）保留或回退并提示', (supported) => {
-  const test = setupPanel({ params: { aspectRatio: '21:9' } });
-  const aspect = (values: string[]) => ({
-    key: 'aspectRatio',
-    name: '比例',
-    type: 'enum' as const,
-    values,
-    default: '1:1',
-    mapped: false,
-  });
-  const gemini = crypto.randomUUID();
+  await waitFor(() => expect(test.data().pendingJobIds).toEqual([next.id]));
   act(() =>
-    test.store.getState().setGenerationConfig({
-      storageReady: true,
-      models: [
-        {
-          id: modelId,
-          label: 'GPT',
-          kind: 'image',
-          profile: { ...profile, params: [aspect(['1:1', '21:9', '16:9'])] },
-        },
-        {
-          id: gemini,
-          label: 'Gemini 2.5',
-          kind: 'image',
-          profile: {
-            ...profile,
-            protocol: 'gemini-image',
-            params: [aspect(supported ? ['1:1', '16:9', '21:9'] : ['1:1', '16:9'])],
-          },
-        },
-      ],
-    }),
+    test.store.getState().applySystem((document) =>
+      writeGenerationJob(document, {
+        ...next,
+        status: 'succeeded',
+        outputs: generationJob().outputs,
+      }),
+    ),
   );
-  fireEvent.click(screen.getByRole('button', { name: '生成模型' }));
-  fireEvent.click(screen.getByRole('button', { name: /Gemini 2.5/ }));
-  expect(test.data().params).toEqual({ aspectRatio: supported ? '21:9' : '16:9' });
-  if (supported) expect(test.store.getState().notice).toBeNull();
-  else expect(test.store.getState().notice?.text).toContain('21:9 → 16:9');
+  expect(test.data().pendingJobIds).toEqual([]);
+  expect(test.data().versions[0].jobId).toBe(next.id);
 });
-
-it('提交连线参考并将成功任务写回为新版本', async () => {
-  const source = media('source');
-  source.data = {
-    ...(source.data as CanvasMediaData),
-    versions: [{ sha256: sha('a'), mime: 'image/png', width: 100, height: 100, createdAt: date }],
-  };
-  const target = media('target');
-  target.data = { ...(target.data as CanvasMediaData), prompt: '胶片上的暖光' };
-  const store = createCanvasStore(doc([source, target], [edge('edge', 'source', 'target')]));
-  store.getState().setGenerationConfig({
-    storageReady: false,
-    models: [{ id: modelId, label: '图片模型', kind: 'image', profile }],
-  });
-  const pending = GenerationJob.parse({
-    id: jobId,
-    kind: 'image',
-    channelModelId: modelId,
-    profileId: profile.id,
-    status: 'pending',
-    request: {
-      modelId,
-      mode: 'reference',
-      prompt: '胶片上的暖光',
-      params: {},
-      inputs: [{ kind: 'image', role: 'reference', sha256: sha('a') }],
-      source: 'canvas',
-    },
-    remoteTaskId: null,
-    remoteStatus: null,
-    attempts: 0,
-    nextPollAt: null,
-    errorCategory: null,
-    errorCode: null,
-    errorMessage: null,
-    outputs: [],
-    createdAt: date,
-    updatedAt: date,
-    finishedAt: null,
-  });
-  const create = vi
-    .fn<NonNullable<CanvasHost['generation']>['create']>()
-    .mockResolvedValue(pending);
-  const host: CanvasHost = {
-    media: { upload: vi.fn(), url: (hash) => hash },
-    generation: {
-      load: vi.fn(),
-      create,
-      get: vi.fn(),
-      cancel: vi.fn(),
-      resubmit: vi.fn(),
-      subscribe: vi.fn(),
-    },
-  };
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <CanvasContext.Provider value={{ store, registry: createBuiltinRegistry(), host }}>
-      {children}
-    </CanvasContext.Provider>
-  );
-  render(<Panel />, {
-    wrapper,
-  });
-
-  fireEvent.click(screen.getByRole('button', { name: '生成图片' }));
-  await waitFor(() => expect(create).toHaveBeenCalledWith(pending.request));
-  expect((store.getState().document.nodes[1].data as CanvasMediaData).pendingJobIds).toEqual([
-    jobId,
-  ]);
-
-  const completed = GenerationJob.parse({
-    ...pending,
-    status: 'succeeded',
-    outputs: [
-      {
-        sha256: sha('b'),
-        mime: 'image/png',
-        bytes: 100,
-        width: 200,
-        height: 100,
-        durationMs: null,
-        createdAt: date,
-      },
-    ],
-    finishedAt: date,
-  });
-  act(() => store.getState().applySystem((document) => writeGenerationJob(document, completed)));
-  const data = store.getState().document.nodes[1].data as CanvasMediaData;
-  expect(data.pendingJobIds).toEqual([]);
-  expect(data.versions).toHaveLength(1);
-  expect(data.versions[0]).toMatchObject({ sha256: sha('b'), jobId });
-});
-
-it.each(['storage', 'count', 'empty'] as const)(
-  '第三层校验阻止 %s 参考输入，移除连线后可恢复生成',
-  async (reason) => {
-    const source = media('source');
-    source.data = {
-      ...(source.data as CanvasMediaData),
-      versions:
-        reason === 'empty'
-          ? []
-          : [{ sha256: sha('a'), mime: 'image/png', width: 100, height: 100, createdAt: date }],
-    };
-    const target = media('target');
-    target.data = { ...(target.data as CanvasMediaData), prompt: '胶片上的暖光' };
-    const store = createCanvasStore(doc([source, target], [edge('edge', 'source', 'target')]));
-    store.getState().setGenerationConfig({
-      storageReady: false,
-      models: [
-        {
-          id: modelId,
-          label: '图片模型',
-          kind: 'image',
-          profile: {
-            ...profile,
-            inputs: [
-              {
-                ...profile.inputs[0],
-                transport: reason === 'storage' ? 'url' : 'inline',
-                maxCount: reason === 'count' ? 0 : 1,
-              },
-            ],
-          },
-        },
-      ],
-    });
-    const create = vi.fn();
-    const host: CanvasHost = {
-      media: { upload: vi.fn(), url: (hash) => hash },
-      generation: {
-        load: vi.fn(),
-        create,
-        get: vi.fn(),
-        cancel: vi.fn(),
-        resubmit: vi.fn(),
-        subscribe: vi.fn(),
-      },
-    };
-    render(
-      <CanvasContext.Provider value={{ store, registry: createBuiltinRegistry(), host }}>
-        <Panel />
-      </CanvasContext.Provider>,
-    );
-    const button = screen.getByRole<HTMLButtonElement>('button', { name: '生成图片' });
-    expect(button.disabled).toBe(true);
-    fireEvent.click(button);
-    expect(create).not.toHaveBeenCalled();
-    await act(() => store.getState().apply((document) => ({ ...document, edges: [] })));
-    await waitFor(() => expect(button.disabled).toBe(false));
-  },
-);

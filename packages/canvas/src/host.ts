@@ -6,20 +6,25 @@ import type {
   CanvasRecord,
   CanvasView,
   GenerationJob,
-  GenerationRequest,
+  SemanticRequest,
   MediaFile,
   ProjectTag,
   ProjectTagCreateRequest,
   ProjectTagUpdateRequest,
-  ModelProfile,
+  Capability,
+  ProtocolDescriptor,
+  MediaKind,
+  ExtraParam,
 } from '@frame-loom/contracts';
 
 export interface CanvasGenerationModel {
   id: string;
   label: string;
-  kind: 'image' | 'video';
-  profile: ModelProfile | null;
-  upload?: 'inline' | 'url' | 'file' | 'provider-file';
+  kind: 'image' | 'video' | 'tts';
+  capability: Capability;
+  protocol: ProtocolDescriptor;
+  transport: Record<MediaKind, 'inline' | 'url'>;
+  extras: ExtraParam[];
 }
 
 export interface CanvasGenerationConfig {
@@ -31,7 +36,7 @@ export interface CanvasGenerationConfig {
 export interface CanvasGenerationHost {
   Panel?: ComponentType<{ nodeId: string; kind: 'image' | 'video'; data: CanvasMediaData }>;
   load(signal: AbortSignal): Promise<CanvasGenerationConfig>;
-  create(request: GenerationRequest): Promise<GenerationJob>;
+  create(request: SemanticRequest): Promise<GenerationJob>;
   get(id: string, signal: AbortSignal): Promise<GenerationJob>;
   cancel(id: string): Promise<GenerationJob>;
   cancelRemote?(id: string): Promise<GenerationJob>;

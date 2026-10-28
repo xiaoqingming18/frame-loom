@@ -1,5 +1,6 @@
 import { useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
-import { parseImageReferences, type ModelProfile } from '@frame-loom/contracts';
+import { parsePromptReferences } from '@frame-loom/contracts';
+import type { CanvasGenerationModel } from '../host';
 import { useCanvas, useCanvasState } from '../context';
 import { insertImageReference } from '../commands/commands';
 import { checkConnection } from '../registry/connections';
@@ -52,7 +53,7 @@ export function ImagePromptEditor({
   value,
   disabled,
   expanded,
-  profile,
+  model,
   onChange,
   ref,
 }: {
@@ -60,7 +61,7 @@ export function ImagePromptEditor({
   value: string;
   disabled: boolean;
   expanded: boolean;
-  profile: ModelProfile | undefined;
+  model: CanvasGenerationModel | undefined;
   onChange: (value: string) => void;
   ref: Ref<{ open: () => void }>;
 }) {
@@ -74,9 +75,7 @@ export function ImagePromptEditor({
   const [menu, setMenu] = useState<{ start: number; end: number; query: string } | null>(null);
   const [active, setActive] = useState(0);
   const references = generationReferences(canvas, nodeId);
-  const max = profile?.modes.some((mode) => mode.id === 'reference')
-    ? (profile.inputs.find((input) => input.kind === 'image')?.maxCount ?? 0)
-    : 0;
+  const max = model?.capability.kind === 'image' ? (model.capability.references.max ?? 50) : 0;
   const candidates = (
     !menu
       ? []
@@ -108,7 +107,7 @@ export function ImagePromptEditor({
       const reason =
         index >= 0
           ? undefined
-          : !profile
+          : !model
             ? '请先选择生成模型'
             : canvas.edges.filter((edge) => edge.target === nodeId).length >= max
               ? `当前模型最多 ${max} 张参考`
@@ -160,7 +159,7 @@ export function ImagePromptEditor({
     nextCaret.current = null;
     const children: Node[] = [];
     let start = 0;
-    for (const reference of parseImageReferences(value)) {
+    for (const reference of parsePromptReferences(value)) {
       children.push(document.createTextNode(value.slice(start, reference.start)));
       const index = references.findIndex((item) => item.node.id === reference.nodeId);
       const tag = document.createElement('span');
@@ -311,7 +310,7 @@ export function ImagePromptEditor({
             const selection = window.getSelection();
             if (!selection?.isCollapsed) return;
             const offset = caretOffset(editor.current!);
-            const reference = parseImageReferences(value).find((reference) =>
+            const reference = parsePromptReferences(value).find((reference) =>
               event.key === 'Backspace' ? reference.end === offset : reference.start === offset,
             );
             if (reference) {

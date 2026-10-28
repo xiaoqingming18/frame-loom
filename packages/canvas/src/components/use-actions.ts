@@ -251,7 +251,7 @@ export function useCanvasActions() {
             const node = createNode(registry, picked.kind, at);
             node.title = picked.name;
             node.data = appendVersion(
-              emptyMedia(picked.kind === 'video' ? 'text' : undefined),
+              emptyMedia(picked.kind === 'video' ? 't2v' : undefined),
               picked.version,
             );
             node.size = fitMediaSize(picked.version.width, picked.version.height, node.size);
