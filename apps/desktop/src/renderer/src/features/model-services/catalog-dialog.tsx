@@ -6,7 +6,7 @@ import {
   ModelWrite,
   type Channel,
   type ModelKind,
-} from '@frame-loom/contracts/model-service';
+} from '@frame-loom/contracts';
 import { emptyCapability, getProtocol, resolveCatalogUrl } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Input } from '@frame-loom/ui/components/input';

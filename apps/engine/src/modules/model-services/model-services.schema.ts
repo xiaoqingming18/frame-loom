@@ -8,7 +8,7 @@ import type {
   MediaTransport,
   ModelCheck,
   ModelKind,
-} from '@frame-loom/contracts/model-service';
+} from '@frame-loom/contracts';
 
 export const channels = sqliteTable('channels', {
   id: text('id').primaryKey(),

@@ -2,7 +2,7 @@
 
 基于 **Electron + React** 的多模态 AI 智能影视工作台桌面 PC 应用。
 
-当前已完成仓库流程工具、pnpm workspace、共享契约、NestJS engine、Electron／React 桌面壳及 Windows x64 NSIS 打包。窗口包含明暗主题、标题栏菜单、可折叠侧栏、静态创作首页和项目库空状态；设置中心提供外观、本地引擎与关于页，见[基础设施计划](.agents/plans/2026-10-24-foundation/plan.md)。创作业务、Agent、代码签名与自动更新尚未实现。
+当前包含 pnpm workspace、共享契约、NestJS engine、Electron／React 桌面壳、项目库与项目画布。模型服务使用渠道＋模型配置、15 个代码协议和用户能力卡；画布支持图像、视频、TTS 音频及图片编辑。模型调用通过本地模拟验证，真实服务、Agent、代码签名与自动更新尚未验收或实现。支持与验证边界见[模型服务验收](docs/model-service-acceptance.md)。已有 Windows x64 NSIS 打包基础，本轮重构未重新执行打包验收。
 
 ## 准备环境
 

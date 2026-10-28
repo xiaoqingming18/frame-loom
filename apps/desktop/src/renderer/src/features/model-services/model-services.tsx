@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Channel, type Model } from '@frame-loom/contracts/model-service';
+import { Channel, type Model } from '@frame-loom/contracts';
 import type { EngineClient } from '@/lib/engine-client';
 import { channelsQuery, modelsQuery } from '@/lib/model-queries';
 import { ChannelList } from './channel-list';

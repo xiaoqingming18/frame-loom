@@ -141,7 +141,7 @@ FastAIToken 具体型号依据其[视频文档目录](https://docs.fastaitoken.c
 ### 相关笔记当场审计
 
 - [模型管理与调用](../../proposed/architecture/2026-10-24-model-management.md)：部分重叠。本篇细化并拟调整地址、完整协议、幂等例外与任务快照，保留其加密、调度、存储和未完成的整体供应商验收；不归档、不宣称旧计划完成。
-- [渠道中心设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)：部分重叠。保留目录拉取语义和事务保存，新增模型接入模板与覆盖；模板不恢复旧渠道 preset 的隐式分派。
+- [渠道中心设置](../../archived/feature/2026-10-25-channel-centric-model-settings.md)：部分重叠。保留目录拉取语义和事务保存，新增模型接入模板与覆盖；模板不恢复旧渠道 preset 的隐式分派。
 - [画布图片能力](../../implemented/feature/2026-10-26-canvas-image-node.md)：部分重叠。保留语义参数和多任务行为，拟收紧前缀推断在中转站能力上的使用；旧实现事实不重写。
 - [无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)、[项目库](../../implemented/feature/2026-10-26-project-library.md)、[输入框修复](../../implemented/bug-fix/2026-10-26-canvas-composer-input.md)：相邻业务，不持有本次接入决定；不改其交互或已验收结论。
 - [Agent 选型](../../proposed/architecture/2026-10-24-agent-runtime-pi.md)、[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)、[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)、[进程模型](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)、[主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)：检索命中基础边界，未被替代，继续遵守。提交规范与笔记流程的关键词命中属于流程说明，无接入决定冲突。

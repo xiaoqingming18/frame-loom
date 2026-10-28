@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { getProtocol } from '@frame-loom/contracts';
-import { ModelWrite } from '@frame-loom/contracts/model-service';
+import { ModelWrite } from '@frame-loom/contracts';
 import { testEngine } from '../../testing/test-engine.js';
 import { ModelServicesRepository } from './model-services.repository.js';
 import { VoicesService } from './voices.service.js';

@@ -1,4 +1,4 @@
-import type { ModelKind } from '@frame-loom/contracts/model-service';
+import type { ModelKind } from '@frame-loom/contracts';
 
 export const kindLabels: Record<ModelKind, string> = {
   chat: '文本',

@@ -25,7 +25,11 @@ Status: implemented
 
 该改动不需要 fetch／Blob 生命周期，不改变 publicDir、资源内容或 WASM 路径，也不增加 CSP 中的 `blob:`／远端脚本许可。清理 query 只是兼容处理，避免 Vite 再次注入的关键是完整 URL。本次真实开发检测已返回 faces 数组，不只依靠字符串或资源 HTTP 200。
 
-### 模型能力：服务端归一化，界面与提交使用同一结果
+### 当前模型能力来源
+
+[模型服务配置层重构](../architecture/2026-10-28-model-service-rebuild.md)已删除旧目录升级与 effectiveProfile。当前由用户 ImageCap、协议上限及共享 imageEditSupport 判断编辑、参考数量与蒙版，画布与 engine 使用同一结果。旧兼容补齐不再运行；以下归一化与迁移说明保留为原缺陷的历史处理依据，WASM 同源加载决定仍有效。
+
+### 历史模型能力修复（旧目录兼容已移除）
 
 能力计算留在现有 engine 模型定义／有效档案边界，desktop 继续消费 `effectiveProfile`；不在三个面板中分别猜模型名，也不从 `/model-profiles` 给画布私自合并能力。该接口可用于诊断内置与持久档案差异，但不能覆盖绑定、接入和用户限制。
 
@@ -49,7 +53,7 @@ loader 改动只需一个 URL 边界测试，覆盖当前根路径、完整开�
 | 笔记 | 归属处理 |
 | --- | --- |
 | [图片编辑实现](../../implemented/feature/2026-10-28-canvas-image-edit-tools.md) | 部分重叠；新增互链，保留功能决定和当时验收事实，旧验收不替代本次真实运行时证据。 |
-| [模型服务与能力演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md) | 部分重叠；补互链，沿用定义／接入交集、升级确认与历史任务冻结约定，本篇不接管其余未完成验收。2026-10-28 该篇已转 rejected，编辑能力来源改由[模型服务配置层重构](../../proposed/architecture/2026-10-28-model-service-rebuild.md)的能力卡与协议上限持有。 |
+| [模型服务与能力演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md) | 部分重叠；补互链，沿用定义／接入交集、升级确认与历史任务冻结约定，本篇不接管其余未完成验收。2026-10-28 该篇已转 rejected，编辑能力来源改由[模型服务配置层重构](../architecture/2026-10-28-model-service-rebuild.md)的能力卡与协议上限持有。 |
 | [主题与应用外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md) | 相邻约束；本修复不扩大 CSP，不改变主题系统，无需重写其历史决定。 |
 | [图片节点语义参数](../../implemented/feature/2026-10-26-canvas-image-node.md) | 相邻实现；比例、清晰度、普通多图和引用语法保持原义，不吸收或归档。 |
 

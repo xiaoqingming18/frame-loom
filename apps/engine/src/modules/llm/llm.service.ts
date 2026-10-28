@@ -8,7 +8,7 @@ import {
   type LlmEvent,
   type TestChatRequest,
 } from '@frame-loom/contracts';
-import type { ModelCheck } from '@frame-loom/contracts/model-service';
+import type { ModelCheck } from '@frame-loom/contracts';
 import { ModelServicesRepository } from '../model-services/model-services.repository.js';
 import { CatalogService } from '../model-services/catalog.service.js';
 import { connectionError, providerError } from '../generation/protocols/http.js';

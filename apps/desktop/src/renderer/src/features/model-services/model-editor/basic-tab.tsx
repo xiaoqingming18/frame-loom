@@ -5,7 +5,7 @@ import {
   validateModel,
   type CapabilityIssue,
 } from '@frame-loom/contracts';
-import { ModelKind, type Channel, type ModelWrite } from '@frame-loom/contracts/model-service';
+import { ModelKind, type Channel, type ModelWrite } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Input } from '@frame-loom/ui/components/input';
 import { NativeSelect } from '@frame-loom/ui/components/native-select';

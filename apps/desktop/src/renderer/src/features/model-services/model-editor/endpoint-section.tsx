@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getProtocol, resolveEndpoints } from '@frame-loom/contracts';
-import type { Channel, ModelWrite, Operation } from '@frame-loom/contracts/model-service';
+import type { Channel, ModelWrite, Operation } from '@frame-loom/contracts';
 import { Input } from '@frame-loom/ui/components/input';
 import { Checkbox } from '@frame-loom/ui/components/checkbox';
 import { Field } from '../form-fields';

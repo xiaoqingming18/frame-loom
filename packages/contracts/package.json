@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./model-service": {
-      "types": "./dist/model-service.d.ts",
-      "default": "./dist/model-service.js"
-    },
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"

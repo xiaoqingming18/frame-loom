@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import { ExtraParam, type ModelWrite } from '@frame-loom/contracts/model-service';
+import { ExtraParam, type ModelWrite } from '@frame-loom/contracts';
 import { Input } from '@frame-loom/ui/components/input';
 import { Button } from '@frame-loom/ui/components/button';
 import { Textarea } from '@frame-loom/ui/components/textarea';

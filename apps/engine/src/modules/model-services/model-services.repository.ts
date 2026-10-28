@@ -11,7 +11,7 @@ import {
   type ModelCheck,
   ModelDefaults,
   type ModelKind,
-} from '@frame-loom/contracts/model-service';
+} from '@frame-loom/contracts';
 import { DatabaseService } from '../../core/database/database.service.js';
 import { SecretCipher } from '../../core/crypto/secret-cipher.js';
 import { DomainError } from '../../core/http/domain-error.js';

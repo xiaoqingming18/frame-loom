@@ -6,7 +6,7 @@ import {
   type ProjectSummary,
   type ProjectPageSummary,
 } from '@frame-loom/contracts';
-import { ModelWrite } from '@frame-loom/contracts/model-service';
+import { ModelWrite } from '@frame-loom/contracts';
 import { testEngine } from '../../testing/test-engine.js';
 import { mockUpstream, type MockRoute } from '../../testing/mock-upstream.js';
 import { fakeProtocol } from '../../testing/fake-protocol.js';

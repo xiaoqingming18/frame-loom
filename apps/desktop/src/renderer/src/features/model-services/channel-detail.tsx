@@ -1,13 +1,7 @@
 import { useRef, useState } from 'react';
 import { z } from 'zod';
 import { ArrowLeft, Plus, Download, Upload } from 'lucide-react';
-import {
-  Channel,
-  Model,
-  ModelExport,
-  ModelWrite,
-  type ModelKind,
-} from '@frame-loom/contracts/model-service';
+import { Channel, Model, ModelExport, ModelWrite, type ModelKind } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Switch } from '@frame-loom/ui/components/switch';
 import { Input } from '@frame-loom/ui/components/input';

@@ -40,7 +40,7 @@ Frame Loom 要做多模态 AI 影视工作台：剧本、角色和场景资产�
 | 本地服务 engine | NestJS 12 加 Express，整体 ESM，运行在 `utilityProcess` 中 | 领域服务和 Agent 模块 |
 | 数据库 | SQLite WAL、better-sqlite3 13.0.3、Drizzle，生成的迁移入库 | 业务表和任务恢复 |
 | 媒体 | 图片、视频与参考素材落盘到 `<userData>/media/`，按 SHA-256 命名；用 `@ffprobe-installer/ffprobe@2.1.2` 读取视频元数据 | ffmpeg 转码/压缩、sharp 图像处理 |
-| AI 接入 | 渠道、协议适配器、能力档案、SQLite 生成任务、S3 兼容参考素材管线；详见[模型管理提案](../../proposed/architecture/2026-10-24-model-management.md) | TTS 与真实供应商整体验收仍在 05 阶段 |
+| AI 接入 | 渠道＋模型、15 个代码协议、用户能力卡、SQLite 任务、S3 参考素材；详见[模型服务配置层重构](2026-10-28-model-service-rebuild.md) | 图像／视频／TTS 音频由画布承接；真实服务未验证 |
 | 共享契约 | zod schema 和类型，renderer 与 engine 共用 | 业务契约随能力扩展 |
 | 打包和更新 | electron-builder 26.18.0，Windows x64 NSIS | 不接签名、发布、electron-updater 或自动更新 |
 | 测试 | Vitest 单元和契约测试；Playwright `_electron` 启动构建产物 | 加固 exe 与安装／卸载另行本地验证，未接入 CI 自动安装 |

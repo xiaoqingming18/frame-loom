@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { Channel, Model, ModelDefaults } from '@frame-loom/contracts/model-service';
+import { Channel, Model, ModelDefaults } from '@frame-loom/contracts';
 import type { EngineClient } from './engine-client';
 
 export const channelsQuery = (client: EngineClient) =>

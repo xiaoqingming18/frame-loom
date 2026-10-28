@@ -1,10 +1,10 @@
 # Agent Note: 模型服务配置层重构（渠道＋模型、协议适配器、用户能力卡）
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
-模型服务是画布生成、后续 Agent 与 TTS 的共同基建。现有实现经三轮演进（[模型管理](2026-10-24-model-management.md)、[接入路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)、[配置与模型演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)），留下以下结构性问题（2026-10-28 源码调查）：
+模型服务是画布生成、后续 Agent 与 TTS 的共同基建。现有实现经三轮演进（[模型管理](../../proposed/architecture/2026-10-24-model-management.md)、[接入路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)、[配置与模型演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)），留下以下结构性问题（2026-10-28 源码调查）：
 
 1. **同一事实三处保存**：`channel_models` 冗余保存 `kind/protocol/profile_id/connection_json`，又引用 `definition_id/connection_id`，`model_catalog` 另存整份目录 JSON。每次读模型都要重新解析目录，任何定义异常都让读取抛错。
 2. **新模型无法只靠数据接入**：导入定义必须是某个内置档案的子集（`model-catalog.service.ts` 的 `validateDefinition`），`MappingRule` 声明了却被服务端拒绝；内置档案按型号写死，`gpt-image-1`、Sora 已停服仍在默认档案中。
@@ -17,7 +17,7 @@ Status: proposed
 
 约束：项目尚未发布首版，用户明确不需要兼容任何旧模型配置与生成任务；产品只接第三方 API，不做本地模型。
 
-## Proposal
+## Decision
 
 ### 已确认的决定
 
@@ -75,9 +75,9 @@ Status: proposed
 | 视频 | `newapi-video` | new-api 统一视频 | `/v1` | `POST /video/generations`、`GET /video/generations/{id}` | bearer |
 | TTS | `openai-speech` | OpenAI Speech | `/v1` | `POST /audio/speech` | bearer |
 | TTS | `minimax-t2a` | MiniMax T2A v2 | `/v1` | `POST /t2a_v2`、`POST /get_voice` | bearer |
-| TTS | `elevenlabs` | ElevenLabs | `/v1` | `POST /text-to-speech/{voice_id}`、`GET /voices` | xi-api-key |
+| TTS | `elevenlabs` | ElevenLabs | （空） | `POST /v1/text-to-speech/{voice_id}`、`GET /v2/voices` | xi-api-key |
 
-文本协议的流式与工具调用继续由 pi-ai 执行（[Agent 内核选型](2026-10-24-agent-runtime-pi.md)的 import 边界不变），只把地址、凭据和采样参数白名单换成统一来源。
+文本协议的流式与工具调用继续由 pi-ai 执行（[Agent 内核选型](../../proposed/architecture/2026-10-24-agent-runtime-pi.md)的 import 边界不变），只把地址、凭据和采样参数白名单换成统一来源。
 
 ### 渠道与模型
 
@@ -154,23 +154,19 @@ deployPrefix  = baseUrl 路径去掉 channelPrefix 后的剩余部分（兼容 /
 - 画布节点类型版本提升，迁移时丢弃无法识别的旧参数；节点中指向已删除任务的待处理任务 ID 在查询 404 时清除。
 - 删除：`model-catalog.ts`、`service-routing.ts`、`generation-capabilities.ts` 与 `ModelProfile` 体系、`channels/model-catalog.service.ts`、`video-retirement.ts`、`generation/profiles/*`、`execution-contract.ts`、旧适配器与旧快照恢复分支、所有地址特例、设置页目录导入与升级报告、`docs/model-service-upgrade.md`、对应旧测试与 E2E。
 
-### 测试与验收策略
+### 测试与验收
 
-- 共享契约已落地于 `model-service.ts`、`capabilities.ts`、`semantic-request.ts`，统一地址、尺寸、能力校验与引用解析分别由 `endpoints.ts`、`image-size.ts`、`capability-check.ts`、`prompt-references.ts` 提供。当前阶段新增测试 82 例，contracts 全包 278 例通过；15 个协议描述仍为占位内容，不代表执行适配器已实现。
+共享契约覆盖 15 个唯一协议、模板、上限、空值语义、参数与素材规则、地址及尺寸解析。媒体适配器用 buildSubmit 精确断言请求，文本由 pi-ai 的实际本地模拟请求验证保留字段。官方来源与 2026-10-29 核对日期存入描述及 fixtures README。
 
-- engine 已完成 0015 清库迁移、新渠道／模型仓库、目录草稿读取、音色隔离基座与语义任务链；快照入库前冻结调用事实，素材用哈希占位。凭据 AES-GCM 加密、变化暂停、提交不明不重投、按渠道并发、取消回执和恢复路径由本地 mock 验证（21 文件、159 用例）。正式协议仍待 03 注册，旧设置页与画布待后续迁移，不能视为功能已验收。
-- 03 已接入首批 15 个协议：图像、视频、TTS 使用代码适配器，四文本由描述指定 pi-ai API 与 compat；官方来源和 2026-10-29 核对日期存入描述及 fixtures README。engine 29 文件、255 用例通过。MiniMax 按 content／ratio，Kling 按 contents／settings 映射；Kling voice 不接受本地音频 URL，能力卡不声明该输入。defaultExtras 提供协议预填的附加字段，开放容器允许非保留子路径。ElevenLabs 的 v1 提交与 v2 目录通过各操作完整路径统一解析；Gemini 按 MIME 接受 WAV 或包装 24kHz 单声道 PCM，多说话人由固定字段配置；未核实的 ElevenLabs 语速上下限不填模板。文本精确地址覆盖、音色账号／协议／上游 ID 隔离、签名产物失效只查询和三类项目产物写回均由本地 mock 验证；设置页、画布与整体验收尚未完成。
-- 不调用任何真实模型服务；所有上游行为用严格模拟服务器验证（只接受约定方法、路径和鉴权头，其余返回 404／401，并断言请求体）。
-- 设置页已迁移到新渠道／模型接口，移除旧目录导入和升级报告，四类能力编辑、音色、测试和默认模型可用。desktop 21 文件、214 用例，engine 29 文件、256 用例，contracts 19 文件、280 用例通过；模型管理 E2E 验证本地 Responses 与 Gemini TTS 播放、明暗和 800×800 布局及焦点锁。画布尚待迁移，设置页预览按实施顺序暂用本地控件，不能视为整体验收。
-- 只运行与重构相关的测试：受影响包的单元／集成测试（契约变更波及全部 workspace 包，因此全仓单元测试属于直接回归），以及模型服务、图片生成、视频生成、音频节点、图片编辑、画布节点与持久化相关的 E2E。项目库、项目标签、画布整理与外壳、项目资产、启动冒烟 E2E，打包、安装包与原生操作检查不在本需求内执行。
-- 06 音频节点已验证：canvas 145、desktop 214、engine 项目相关 31 用例通过；canvas-audio E2E 验证 PCM／WAV 播放、reference_audio、重启保留，明暗与 800×800 参数截图已查看。
-- 07 视频编辑续写已验证：contracts 237、engine 视频协议 39、canvas 147、desktop 214 用例通过；video-edit E2E 1 passed，严格本地模拟断言 edit／extend 三次提交、一次素材上传与版本写回。最终整体验收尚待完成。
-- 05 已完成图像／视频能力控件与任务契约迁移，设置页图像／视频预览复用同一控件。contracts 236、engine 256、canvas 140、desktop 214 用例通过；限定 E2E 6 通过、1 个目录包用例按范围跳过。图片引用、首尾帧、pendingParams、角度与真实 Worker 表情链路以及重启写回有证据；最新明暗参数截图已人工查看。音频节点、编辑续写与最终门禁仍待后续完成。
-- 每个协议以官方文档样例做请求体与响应解析契约测试；`resolveEndpoints` 预览与实际请求路径用同一模拟服务器断言一致。
+全仓 typecheck、lint、format:check、build、test 通过：contracts 237、canvas 147、desktop 214、engine 261，共 859 用例。限定桌面 E2E 整组 9 passed／1 skipped，包含设置管理、图像与视频、音频生成播放及 reference_audio、视频编辑续写、图片编辑与真实 Vite Worker、旧文档迁移和重启写回；跳过的加固目录包属于明确排除范围。设置、图像、视频与音频明暗及 800×800 截图已查看，独立参数弹层位于窗口内，固定 620px 输入框沿用既定平移查看规则。
+
+engine Vitest 全局 fetch 守卫只允许 127.0.0.1 并阻断自动重定向，守卫自身有拒绝外网／私网与本地 mock 的测试。严格模拟上游断言方法、路径、鉴权、请求体与次数，不调用真实模型或使用真实凭据；外网 URL 字面量仅用于解析／拒绝／签名断言，URL 素材 E2E 的示例公网存储在测试进程边界强制重写到本地。
+
+验收范围不含真实服务、第二批协议、无关项目／外壳 E2E、打包、安装包、原生窗口和输入法。具体协议矩阵与本次证据见[验收记录](../../../../docs/model-service-acceptance.md)。
 
 ### 调研依据
 
-以下为 2026-10-28 公开资料，实施协议时 must 再次核对官方文档：
+以下为 2026-10-28 调研资料；协议实现于 2026-10-29 再核对，具体来源与日期保存在描述及验收记录：
 
 | 主题 | 来源 | 结论 |
 | --- | --- | --- |
@@ -184,12 +180,12 @@ deployPrefix  = baseUrl 路径去掉 channelPrefix 后的剩余部分（兼容 /
 
 ### 相关笔记当场审计
 
-- [模型管理与调用](2026-10-24-model-management.md)：部分重叠。保留加密、pi-ai 边界、持久任务、媒体落盘与对象存储理由；渠道、档案、协议与地址的未来方向由本篇接管。互链，不拒绝。
+- [模型管理与调用](../../proposed/architecture/2026-10-24-model-management.md)：部分重叠。保留加密、pi-ai 边界、持久任务、媒体落盘与对象存储理由；渠道、档案、协议与地址的未来方向由本篇接管。互链，不拒绝。
 - [接入路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)：方向被本篇推翻（地址规则、站点模板、旧快照），转 rejected；H3 路由故障与外层任务 ID 的教训保留在该篇供防坑。
 - [配置与模型演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)：四层目录、七型号、有限映射、导入包与旧配置退出全部取消，转 rejected；平台中立（不内置站点模板、不按站名分派）由本篇继承。
-- [以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)：本篇实现后被完全取代（渠道 API 格式、档案下拉、渠道与模型一次保存）；草稿拉取不写库、不按域名猜鉴权由本篇继承。落地时归档并互链。
-- [画布图片节点](../../implemented/feature/2026-10-26-canvas-image-node.md)、[视频输入区](../../implemented/feature/2026-10-27-video-composer.md)、[图片编辑工具](../../implemented/feature/2026-10-28-canvas-image-edit-tools.md)、[图片编辑运行时修复](../../implemented/bug-fix/2026-10-28-canvas-image-edit-runtime.md)：部分重叠。保留语义参数、每张独立任务、@ 引用、素材槽位布局与编辑配方；能力来源改为能力卡与协议上限，落地时原地同步事实。
-- [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)、[进程模型](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)：设置页与 AI 接入的描述在落地时原地同步，不改决定。其余命中（engine 服务、基础设施、项目库、无限画布）为边界依赖，无冲突。
+- [以渠道为中心的模型设置](../../archived/feature/2026-10-25-channel-centric-model-settings.md)：已被本篇完全取代（渠道 API 格式、档案下拉、渠道与模型一次保存）；草稿拉取不写库、不按域名猜鉴权由本篇继承。通过归档脚本封印并保留互链。
+- [画布图片节点](../../implemented/feature/2026-10-26-canvas-image-node.md)、[视频输入区](../../implemented/feature/2026-10-27-video-composer.md)、[图片编辑工具](../../implemented/feature/2026-10-28-canvas-image-edit-tools.md)、[图片编辑运行时修复](../../implemented/bug-fix/2026-10-28-canvas-image-edit-runtime.md)：部分重叠。保留语义参数、每张独立任务、@ 引用、素材槽位布局与编辑配方；能力来源改为能力卡与协议上限，已原地同步能力来源与历史边界。
+- [主题与外壳](../../implemented/feature/2026-10-24-theme-and-app-shell.md)、[进程模型](../../implemented/architecture/2026-10-24-desktop-stack-and-process-model.md)：设置页与 AI 接入的描述已原地同步，不改决定。其余命中（engine 服务、基础设施、项目库、无限画布）为边界依赖，无冲突。
 
 ## Alternatives considered
 
@@ -202,7 +198,7 @@ deployPrefix  = baseUrl 路径去掉 channelPrefix 后的剩余部分（兼容 /
 - **每种视频方式单独配置比例、时长等参数** — 最强理由：可表达任意方式级约束。不选：与通用参数重复、难以理解；首批真实约束都来自协议，写成只读协议规则更准确。跨参数联动（如 Veo 1080p 只能 8 秒）出现真实需求时再扩展规则类型。
 - **保留旧数据并迁移** — 最强理由：开发者已有配置不用重填。不选：项目未发布，用户明确不需要兼容；迁移旧档案、接入与快照会保留大量即将删除的代码。
 
-## Acceptance criteria
+## Consequences
 
 - 用户只需理解渠道与模型；协议在模型上选择，图像／视频／TTS 未选协议时不能启用；读取模型不按名称猜测。
 - 设置页预览的每个操作地址与 engine 实际请求一致，覆盖本篇地址示例表全部情形；跨主机地址未确认不能启用；下载不外发凭据。
@@ -213,10 +209,12 @@ deployPrefix  = baseUrl 路径去掉 channelPrefix 后的剩余部分（兼容 /
 - 任务快照冻结完整调用事实；凭据变化暂停、提交不确定不重投、重启恢复只查询；旧数据清除迁移在临时旧库上验证备份、清表与项目数据保留。
 - 本篇删除清单中的代码、测试与文档已移除；全仓 typecheck、lint、format:check、build、单元／集成测试与限定范围的 E2E 通过；未执行任何真实模型服务调用。
 
-## Risks
+### 代价与边界
 
-- **改动面大**：跨 contracts、engine、desktop、canvas 与迁移，重构分支在设置页与画布完成前生成功能不可用。分支施工，按子计划逐段保持类型检查通过；回滚即放弃分支。
+- **改动面大**：跨 contracts、engine、desktop、canvas 与迁移，设置页与画布已完成同批契约迁移，跨包全量回归通过；回退需要匹配旧应用和备份数据库，不能混用新契约与旧任务。
 - **能力卡由用户填写**：填错会导致上游 400 或静默降级。由协议上限、协议规则、本地校验、上游错误回显和媒体测试兜底；协议模板附文档来源与核对日期。
 - **协议规则写死在代码**：中转站行为与官方不同时只能改代码，这是 D4 的代价；附加参数与固定字段只能补字段，不能改流程。
 - **文档会漂移**：首批协议的字段与模板在实施时按官方文档重新核对；未核实项（如 MiniMax H3 声音开关）在模板中标为「未确认」，不臆造支持。
 - **清库不可逆**：开发者本机旧配置与任务记录会被删除，迁移前自动备份保留可读副本；项目文件与资产不受影响。
+
+[历史快照：以渠道为中心的模型设置（API 格式取代渠道预设）](../../archived/feature/2026-10-25-channel-centric-model-settings.md)

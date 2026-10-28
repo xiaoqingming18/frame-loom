@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { resolveCatalogUrl } from '@frame-loom/contracts';
-import type { CatalogCandidate, CatalogRequest } from '@frame-loom/contracts/model-service';
+import type { CatalogCandidate, CatalogRequest } from '@frame-loom/contracts';
 import { ModelServicesRepository } from './model-services.repository.js';
 import { connectionError, providerError } from '../generation/protocols/http.js';
 import { DomainError } from '../../core/http/domain-error.js';

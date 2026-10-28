@@ -32,7 +32,7 @@ Parent: plan.md
 
 ## 进度
 
-- 2026-10-27：完成 T1～T6，新增 0012～0014，不改已分发迁移；提供 [升级与恢复指南](../../../docs/model-service-upgrade.md)。
+- 2026-10-27：完成 T1～T6，新增 0012～0014，不改已分发迁移；提供 [升级与恢复指南](../../../docs/model-service-acceptance.md)。
 
 ## 发现与偏差
 

@@ -15,7 +15,7 @@ import {
   resolvePromptReferences,
   type GenerationStatus,
 } from '@frame-loom/contracts';
-import { GenerationJob } from '@frame-loom/contracts/model-service';
+import { GenerationJob } from '@frame-loom/contracts';
 import { DatabaseService } from '../../core/database/database.service.js';
 import { DomainError } from '../../core/http/domain-error.js';
 import { EventBus } from '../../core/events/event-bus.js';

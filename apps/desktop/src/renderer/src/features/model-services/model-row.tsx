@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AudioLines, Image, MessageSquare, MoreHorizontal, Video } from 'lucide-react';
 import { getProtocol } from '@frame-loom/contracts';
-import type { Model } from '@frame-loom/contracts/model-service';
+import type { Model } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Switch } from '@frame-loom/ui/components/switch';
 import { Badge } from '@frame-loom/ui/components/badge';

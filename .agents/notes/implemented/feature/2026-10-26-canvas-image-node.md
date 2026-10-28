@@ -25,9 +25,13 @@ Status: implemented
 
 ## Decision
 
-### 已落地边界
+### 当前能力来源
 
-后续[多模态服务配置与模型演进重构](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)已获用户确认，拟拆分模型能力、接入和调度，动态化视频节点，并保留本篇图片语义参数、多任务和引用。能力匹配与普通配置入口的后续变化由新篇持有，尚未实现，不将本篇既有证据解释为新方案交付。2026-10-28 该篇已转 rejected，由[模型服务配置层重构](../../proposed/architecture/2026-10-28-model-service-rebuild.md)取代：图片档案与前缀匹配将被用户能力卡替换，语义参数、每张独立任务与 @ 引用保留。
+2026-10-29：[模型服务配置层重构](../architecture/2026-10-28-model-service-rebuild.md)已用用户完整能力卡与协议规则取代图片档案和前缀匹配，不再按型号推断。画布使用语义 tier、aspectRatio 等字段，尺寸统一经 resolveImageSize；切换模型将不兼容值放入 pendingParams，须显式选择或清除。每张独立任务、版本写回和 @ 引用继续成立。以下保留当时的调研、旧实现与验收证据，旧函数、档案表和回退策略已退出，不能当作当前代码入口。
+
+### 历史实现边界
+
+后续[多模态服务配置与模型演进重构](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)已获用户确认，拟拆分模型能力、接入和调度，动态化视频节点，并保留本篇图片语义参数、多任务和引用。能力匹配与普通配置入口的后续变化由新篇持有，尚未实现，不将本篇既有证据解释为新方案交付。2026-10-28 该篇已转 rejected，由[模型服务配置层重构](../architecture/2026-10-28-model-service-rebuild.md)取代：图片档案与前缀匹配将被用户能力卡替换，语义参数、每张独立任务与 @ 引用保留。
 
 共享契约、engine 档案与适配器、画布多任务运行时、节点与输入框界面及 @ 引用均已落地。engine 提供 8 个模型族与 3 个通用档案，图片统一入口 `mediaProfile()` 复用 `imageProfile()` 的最长前缀匹配，桌面宿主加载图片档案时使用相同匹配规则，视频与 TTS 保持精确匹配。原有三个 `*-default` ID 分别保留为 GPT Image 1、Gemini 2.5 Flash Image、Seedream 4.0，已保存的显式选择仍优先，不自动升档。
 
@@ -64,7 +68,7 @@ Status: implemented
 - 数量另存 `data.count`（1–4，默认 1），不进入请求 `params`。
 - 水印等供应商特有参数继续作为档案参数存在，在参数面板"更多"里显示，键名保持原样。
 
-### 档案：按模型族划分、前缀匹配
+### 历史档案：模型族与前缀匹配（已移除）
 
 - 继续使用 `packages/contracts/src/generation.ts` 的 `ModelProfile.params`（enum 白名单）与 `constraints`，`checkGenerationRequest` 原样复用。
 - `params` 增加可选 `notes: Record<string, string>`，为个别取值附标签（如 4K 的"实验"、透明的"预览"），不参与校验。
@@ -167,7 +171,7 @@ Status: implemented
 
 - [无限画布](../../implemented/feature/2026-10-25-infinite-canvas.md)：部分重叠。该篇"节点内生成"的生成区形态、`pendingJobId` 单任务与"切换模型清空参数"由本篇替换；节点即生成位、结果追加为版本、任务同步挂在编辑器根部等决定不变。该篇已原地同步事实并互链。
 - [模型管理](../../proposed/architecture/2026-10-24-model-management.md)：部分重叠。档案字段中 `matchIds` 由精确匹配改为前缀匹配；"不按名称关键词猜类别"不受影响（前缀只在用户已选定类别与协议后选择档案）。图片档案、多任务与引用界面的实现事实已原地同步。
-- [以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)：相关不重叠；设置页的档案下拉会出现新的档案名称，交互不变。
+- [以渠道为中心的模型设置](../../archived/feature/2026-10-25-channel-centric-model-settings.md)：相关不重叠；设置页的档案下拉会出现新的档案名称，交互不变。
 - [共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)：部分重叠，contracts 新增尺寸换算、参数回退与引用替换纯函数，约定不变。
 - 其余笔记无关。
 
@@ -206,13 +210,13 @@ Status: implemented
 
 ## Consequences
 
-- **后续提案**：[模型服务接入契约与路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)拟按中转接入和精确型号约束能力，将型号匹配用于推荐而非静默提高能力。本篇现有前缀匹配是实现事实，尚未改变；语义参数、显式档案、每张独立任务及任务档案快照继续保留。
+- **后续提案**：[模型服务接入契约与路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)拟按中转接入和精确型号约束能力，将型号匹配用于推荐而非静默提高能力。本篇当时的前缀匹配已由用户能力卡取代；语义参数、显式档案、每张独立任务及任务档案快照继续保留。
 
 - **收益与代价**：语义参数和共享换算让界面与供应商请求保持一致，模型切换保留兼容选择；代价是需要维护模型族能力随上游变化。轻量 @ 编辑器避免新增富文本依赖，但仍需在 Chromium 升级时回归选区、粘贴与原生组字。
 
 - **上游能力漂移**：gpt-image-2 透明背景、4K 与 Gemini 3.1 512 档来自文档且存在矛盾或预览标注；档案取值以真实供应商冒烟结果原地修正，冒烟归[模型管理](../../proposed/architecture/2026-10-24-model-management.md)的验收持有。
-- **中转站差异**：用户经 new-api 等中转配置的模型可能不接受任意 `WxH` 或 `imageConfig.imageSize`；此时用户可在模型设置中改选通用档案，错误按 `invalid_params` 提示。
-- **前缀误匹配**：前缀匹配可能把未来同前缀但能力不同的模型（如假设的 `gpt-image-2-mini`）归入 gpt-image-2；最长前缀与显式 `profileId` 可纠正，新模型出现时补档案。
+- **中转站差异**：用户经 new-api 等中转配置的模型可能不接受任意 `WxH` 或 `imageConfig.imageSize`；此时用户须在模型设置中收窄能力卡或选择合适协议，错误按 `invalid_params` 提示。
+- **前缀误匹配**：前缀匹配可能把未来同前缀但能力不同的模型（如假设的 `gpt-image-2-mini`）归入 gpt-image-2；该风险由移除所有型号与前缀匹配消除，新模型由用户填写能力卡。
 - **落盘格式**：`pendingJobIds` 与 `typeVersion` 2 一旦分发，旧版本应用打开新文档会把图片／视频节点降级为未知节点占位（数据保留）；回退时需要反向迁移。
 - **contentEditable 边界**：粘贴、撤销、输入法与选区在 Chromium 中有细节差异；组件测试与本机原生输入法验收覆盖当前边界，问题集中时再评估富文本库。
 - **成本**：N 个任务在并发上限为 1 时排队，4 张 4K 可能耗时数分钟；节点上显示进度"1/4"。

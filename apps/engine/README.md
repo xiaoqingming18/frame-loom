@@ -67,6 +67,14 @@ Invoke-RestMethod 'http://127.0.0.1:45678/health' -Headers @{ Authorization = "B
 - `POST /media/from-asset { path }` 仅导入图片、视频；`POST /assets/from-media { sha256, path, name }` 复制导出并自动改同名。上传写完并 fsync 后通过同卷硬链接发布，再清除临时链接；文件移动也先创建目标链接再移除源，防止覆盖外部刚创建的文件，因此需要支持硬链接的本地磁盘（已验证 Windows NTFS）。
 - `GET /files/media/:sha256` 与 `GET /files/assets?path=` 使用 `sendFile` 支持 Range，设置 `nosniff`；图片、视频、音频扩展白名单可内联，其余类型以 `application/octet-stream` 附件返回。资产删除由后续桌面主进程回收站实现。
 
+## 模型服务
+
+`modules/model-services` 管理渠道、模型、能力卡、默认模型和音色；协议挂在模型上，渠道保存默认地址、凭据、列表格式与并发。`POST /channels/catalog` 只返回模型草稿；批量添加用 `POST /channels/:id/models`，单模型用 `/models/:id`，不再提供旧档案或目录定义接口。
+
+共享 contracts 提供地址、尺寸、能力与素材校验。媒体协议位于 `modules/generation/protocols`；四文本协议由 `modules/llm` 接入 pi-ai。请求预览不读取凭据或联网，执行冻结调用快照，凭据变化暂停、提交不确定不自动重投。结果链接下载不携带渠道凭据。
+
+0015 开发期清库迁移在自动备份后重建模型服务与任务表，保留项目、媒体和对象存储；旧配置须重填。测试仅用本地 mock，Vitest 全局 fetch 守卫拒绝非 127.0.0.1 与自动重定向。协议矩阵和未验证项见[验收记录](../../docs/model-service-acceptance.md)。
+
 ## 主进程对接
 
 engine 不导入 Electron。存在 `process.parentPort` 时，通过 `postMessage({ type: 'ready', port })` 上报端口；主进程使用 `child.postMessage({ type: 'shutdown' })` 请求退出。普通 Node 则从 stdout 读取 ready。SIGTERM、SIGINT 与 shutdown 都关闭 HTTP 和数据库。utilityProcess 不会在清空 Node 句柄后自动退出，因此有 parentPort 时在完成资源关闭后显式结束进程，启动失败以 1 退出；普通 Node 维持自然退出。首次骨架不自动重启服务。

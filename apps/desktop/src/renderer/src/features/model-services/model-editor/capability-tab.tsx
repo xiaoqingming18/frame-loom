@@ -4,7 +4,7 @@ import {
   type CapabilityGroup,
   restoreCapabilityGroup,
 } from '@frame-loom/contracts';
-import type { ModelWrite } from '@frame-loom/contracts/model-service';
+import type { ModelWrite } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { CapabilityChat } from './capability-chat';
 import { CapabilityImage } from './capability-image';

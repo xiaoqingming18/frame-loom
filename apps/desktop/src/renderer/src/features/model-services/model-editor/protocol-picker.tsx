@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { protocolsForKind, getProtocol } from '@frame-loom/contracts';
-import type { ModelKind } from '@frame-loom/contracts/model-service';
+import type { ModelKind } from '@frame-loom/contracts';
 import { Input } from '@frame-loom/ui/components/input';
 
 export function ProtocolPicker({

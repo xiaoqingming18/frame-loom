@@ -111,7 +111,7 @@ export type ProtocolDescriptor = {
   };
 };
 
-// 03 核对官方文档后补全能力上限、模板、规则与来源。
+// 能力上限、模板与规则按 sources 所记日期核对官方文档。
 const chat: ChatCap = {
   kind: 'chat',
   inputModalities: [],

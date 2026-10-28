@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowLeft, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
-import { Channel, ChannelWrite, type CatalogFormat } from '@frame-loom/contracts/model-service';
+import { Channel, ChannelWrite, type CatalogFormat } from '@frame-loom/contracts';
 import { resolveCatalogUrl } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Input } from '@frame-loom/ui/components/input';

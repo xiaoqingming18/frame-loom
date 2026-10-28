@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ModelDefaults, ModelKind } from '@frame-loom/contracts/model-service';
+import { ModelDefaults, ModelKind } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { NativeSelect } from '@frame-loom/ui/components/native-select';
 import type { EngineClient } from '@/lib/engine-client';

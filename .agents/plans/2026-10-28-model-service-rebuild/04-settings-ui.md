@@ -210,8 +210,8 @@ Parent: plan.md
 - 补充 POST 请求体预览：媒体调用 buildSubmit；文本通过 pi-ai onPayload 在发送前截断。遍历全部协议模板验证零网络、无鉴权输出，未使用真实服务。
 - 首次选择协议采用完整模板且不把模板填充当作不兼容；后续切换保留兼容值并确认冲突。文本测试新增可选 steps，准确呈现连接与回复两步。
 - 设置页范围内旧字段扫描为空；全 desktop/src 尚有项目／画布测试夹具的 apiFormat、profileId，归属 05 迁移，避免本阶段提前改画布。
-- T6 的图像／视频预览已于 05 T9 接入真实 CapabilityPreview；desktop 21 文件 214 用例补跑通过。文本与 TTS 预览保留当前控件，TTS 在 06 同步。
+- T6 的图像／视频预览已于 05 T9 接入真实 CapabilityPreview；desktop 21 文件 214 用例补跑通过。文本预览使用文本控件，TTS 已于 06 接入共享能力控件。
 
 ## 交接
 
-05 从 `GET /models` 读取启用且无 blockedReason 的模型；设置页预览替换点为 model-editor/canvas-preview.tsx。全部上游仍仅本地模拟。
+无。

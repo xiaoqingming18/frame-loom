@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ModelWrite, ModelExport } from '@frame-loom/contracts/model-service';
+import { ModelWrite, ModelExport } from '@frame-loom/contracts';
 import { getProtocol, validateModel } from '@frame-loom/contracts';
 import { ModelServicesRepository } from './model-services.repository.js';
 

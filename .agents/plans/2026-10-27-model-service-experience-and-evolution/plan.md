@@ -52,7 +52,7 @@ Note: ../../notes/rejected/architecture/2026-10-27-model-service-experience-and-
 
 ## 发现与偏差
 
-- 2026-10-28：用户确认[模型服务配置层重构](../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md)：不内置模型库、清除旧数据、渠道与模型两层。本计划与 08 停止执行，相关笔记转 rejected；后续工作见[重构计划](../2026-10-28-model-service-rebuild/plan.md)。
+- 2026-10-28：用户确认[模型服务配置层重构](../../notes/implemented/architecture/2026-10-28-model-service-rebuild.md)：不内置模型库、清除旧数据、渠道与模型两层。本计划与 08 停止执行，相关笔记转 rejected；后续工作见[重构计划](../2026-10-28-model-service-rebuild/plan.md)。
 
 - 2026-10-27：08 新增视频、图片、TTS 定义导入到执行／归档／更新隔离／重启的集成证据；本轮全仓 697 项、最终完整 Electron E2E 18 项通过，目录版和 NSIS 构建成功。用户明确本轮不做真实收费联调，并以物理 Esc 停止 Computer Use；加固目录版已观察明亮设置和帮助 Portal，其余原生项目保留缺口。核对发现有限映射尚未执行、Kling/Wan 官方协议未对齐及部分模式／声音证据不足，详见[整体验收记录](../../../docs/model-service-acceptance.md)。08 与整个需求未完成，不提前将笔记转 implemented。
 

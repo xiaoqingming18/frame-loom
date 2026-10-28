@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { checkRequest, validateModel, type VideoCap } from '@frame-loom/contracts';
-import { ModelWrite } from '@frame-loom/contracts/model-service';
+import { ModelWrite } from '@frame-loom/contracts';
 import {
   protocolContext,
   semanticRequest,

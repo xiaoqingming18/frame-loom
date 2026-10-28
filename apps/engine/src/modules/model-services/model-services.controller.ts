@@ -11,7 +11,7 @@ import {
   ModelExport,
   ModelDefaultsPatch,
   type ModelDefaults,
-} from '@frame-loom/contracts/model-service';
+} from '@frame-loom/contracts';
 import { ZodValidationPipe } from '../../core/http/zod-validation.pipe.js';
 import { ModelServicesRepository } from './model-services.repository.js';
 import { ModelServicesService } from './model-services.service.js';

@@ -1,7 +1,7 @@
 # Plan: 模型服务配置层重构
 
-Status: active
-Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
+Status: done
+Note: ../../notes/implemented/architecture/2026-10-28-model-service-rebuild.md
 
 ## 目标
 
@@ -33,7 +33,7 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 | 05 | [画布图像与视频](05-canvas-media.md) | done | 01、02、03 | 宿主接口、能力卡驱动参数面板、视频方式与端口、图片编辑能力推导、节点数据迁移、E2E |
 | 06 | [画布音频节点](06-canvas-audio.md) | done | 03、05 | TTS 音频节点、音色、写回、连接视频参考音频、E2E |
 | 07 | [视频编辑与续写](07-video-edit-extend.md) | done | 03、05 | `edit`／`extend` 方式、待编辑视频端口、Seedance 与可灵承接、测试 |
-| 08 | [整体验收与收尾](08-acceptance.md) | draft | 01、02、03、04、05、06、07 | 残留扫描、全量门禁、限定范围 E2E、验收文档、笔记与计划生命周期收尾 |
+| 08 | [整体验收与收尾](08-acceptance.md) | done | 01、02、03、04、05、06、07 | 残留扫描、全量门禁、限定范围 E2E、验收文档、笔记与计划生命周期收尾 |
 
 ## 依赖与顺序
 
@@ -78,14 +78,14 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 
 ## 验收
 
-- [ ] 笔记 `## Acceptance criteria` 的每一条都有对应证据 — 证据：08 子计划的验收对照表。
-- [ ] 共享契约与地址解析有完整单测，预览与实际请求一致 — 证据：01、02、03 的测试与 08 汇总。
-- [ ] 首批 15 个协议契约测试与集成测试通过 — 证据：03。
-- [ ] 设置页与画布按能力卡工作，限定范围 E2E 通过并查看明暗截图 — 证据：04、05、06、07。
-- [ ] 删除清单完成，残留扫描为空 — 证据：08 的扫描命令输出。
-- [ ] `pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check`、`pnpm run build`、`pnpm run test`、限定 E2E、`pnpm run verify`、`git diff --check` 通过 — 证据：08 记录的实际命令与结果。
-- [ ] 全程无真实模型服务调用 — 证据：08 的网络断言与代码扫描。
-- [ ] 笔记移入 `implemented/architecture/`，`channel-centric-model-settings` 归档，计划全部 `done` — 证据：08 收尾提交与 `pnpm run verify`。
+- [x] 笔记 `## Acceptance criteria` 的每一条都有对应证据 — 证据：08 子计划的验收对照表。
+- [x] 共享契约与地址解析有完整单测，预览与实际请求一致 — 证据：01、02、03 的测试与 08 汇总。
+- [x] 首批 15 个协议契约测试与集成测试通过 — 证据：03。
+- [x] 设置页与画布按能力卡工作，限定范围 E2E 通过并查看明暗截图 — 证据：04、05、06、07。
+- [x] 删除清单完成，残留扫描为空 — 证据：08 的扫描命令输出。
+- [x] `pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check`、`pnpm run build`、`pnpm run test`、限定 E2E、`pnpm run verify`、`git diff --check` 通过 — 证据：08 记录的实际命令与结果。
+- [x] 全程无真实模型服务调用 — 证据：08 的网络断言与代码扫描。
+- [x] 笔记移入 `implemented/architecture/`，`channel-centric-model-settings` 归档，计划全部 `done` — 证据：08 收尾提交与 `pnpm run verify`。
 
 ## 发现与偏差
 
@@ -96,3 +96,7 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 - 03 文本运行时信息存入描述；媒体以 buildSubmit、文本以 pi-ai 实际请求验证保留字段。ElevenLabs 的混合版本操作路径、Gemini PCM／WAV 与既有安全测试 URL 扫描例外见 03 记录；全部上游仍为本地 mock。
 - 04 补齐请求体预览与文本测试 steps；设置页移除旧体系，项目／画布夹具的旧字段留给 05 同步迁移。能力预览暂为本地实现，05 T9 替换并回填 04 验证。详见 04 的发现与偏差。
 - 05 宿主模型额外携带已声明 `extras`，保证参数控件与共享校验有同一事实来源；文本流与用量 DTO 从旧模型文件迁到 `llm.ts` 保留。旧文档必须先结合连线迁移再解析，不能只在 registry 校验后迁移。素材仅总时长限制漏计问题在共享 `checkMedia` 修复并补回归。限定 E2E 保留目录包运行时用例，但默认跳过本计划排除的原生窗口／目录包验收。
+
+- 06 音频节点复用媒体生命周期；URL 素材测试通过仅测试启动器重写示例公网存储，生产公网校验不变，详见 06。
+- 07 官方核对确认 Seedance edit／extend 均 adaptive，仅 edit 固定 duration=-1 且输入至少 4 秒；Kling 未确认 extend，仅开放 edit。
+- 08 已移除过渡子路径；网络扫描仅保留安全／地址字符串断言和本地重定向的示例存储地址。全套门禁 859 用例、限定 E2E 9 passed／1 skipped；30 张明暗及 800 截图已查看。加固目录包、打包、原生及真实模型调用保持排除。

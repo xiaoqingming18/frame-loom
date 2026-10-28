@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getProtocol, emptyCapability, resolveEndpoints } from '@frame-loom/contracts';
-import { Channel, Model, ModelWrite } from '@frame-loom/contracts/model-service';
+import { Channel, Model, ModelWrite } from '@frame-loom/contracts';
 import { TooltipProvider } from '@frame-loom/ui/components/tooltip';
 import type { EngineClient } from '@/lib/engine-client';
 import { ModelServices } from './model-services/model-services';

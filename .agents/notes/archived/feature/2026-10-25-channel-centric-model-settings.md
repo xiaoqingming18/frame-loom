@@ -1,6 +1,7 @@
 # Agent Note: 以渠道为中心的模型设置（API 格式取代渠道预设）
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

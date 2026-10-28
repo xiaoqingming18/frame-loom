@@ -2,7 +2,7 @@ import { afterEach, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getProtocol, PROTOCOLS } from '@frame-loom/contracts';
-import { Channel, Model, ModelWrite } from '@frame-loom/contracts/model-service';
+import { Channel, Model, ModelWrite } from '@frame-loom/contracts';
 import { testEngine } from '../../testing/test-engine.js';
 import { mockUpstream } from '../../testing/mock-upstream.js';
 import { ModelServicesRepository } from './model-services.repository.js';

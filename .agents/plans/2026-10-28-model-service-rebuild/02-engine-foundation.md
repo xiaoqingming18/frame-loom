@@ -230,4 +230,4 @@ type OutputRef = { kind: 'url'; url: string; mime?: string } | { kind: 'data'; b
 
 ## 交接
 
-02 已完成。03 在 `modules/generation/protocols/` 下实现 15 个协议并替换占位描述；04 使用本文件的 HTTP 接口。
+无。

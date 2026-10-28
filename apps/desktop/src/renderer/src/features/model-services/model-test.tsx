@@ -9,7 +9,7 @@ import {
   type SemanticInput,
   type SemanticParams,
 } from '@frame-loom/contracts';
-import { ModelCheck, GenerationJob, type Model } from '@frame-loom/contracts/model-service';
+import { ModelCheck, GenerationJob, type Model } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Textarea } from '@frame-loom/ui/components/textarea';
 import { Input } from '@frame-loom/ui/components/input';

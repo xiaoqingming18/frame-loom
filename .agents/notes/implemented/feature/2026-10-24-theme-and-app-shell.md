@@ -115,7 +115,7 @@ Status: implemented
 - 使用 shadcn `Dialog` 加竖向 `Tabs`，共四个页签：
   - **外观**：用 `ToggleGroup` 选择跟随系统、明亮、暗黑，切换后立即生效。
   - **本地引擎**：显示连接状态、engine 版本、schema 版本、启动时间和「重新检查」按钮，内容来自 `features/engine-status`。
-  - **模型服务**：渠道列表与渠道编辑页（拉取后勾选模型、两步连通测试、渠道与模型一次保存），内容来自 `features/model-services`；读响应不含明文密钥和附加请求头值。见[以渠道为中心的模型设置](2026-10-25-channel-centric-model-settings.md)。
+  - **模型服务**：渠道列表、渠道详情与独立模型编辑弹窗（读取草稿后勾选、显式选协议、四类能力卡、请求预览与测试），内容来自 `features/model-services`；读响应不含明文密钥和附加请求头值。见[模型服务配置层重构](../architecture/2026-10-28-model-service-rebuild.md)。
   - **默认模型**：每个类别选择一个已启用模型，内容来自 `features/model-services/model-defaults.tsx`。
   - **关于**：显示 logo、应用名和版本号。版本号由 Vite `define` 在构建时从 `apps/desktop/package.json` 注入。
 - 弹窗开关和当前页签写在根路由的 search 参数里：`settings?: 'appearance' | 'engine' | 'models' | 'defaults' | 'storage' | 'about'`，由 zod 校验。engine 退出时页面不重载，弹窗保持打开并停在同一个页签上显示错误；手动重载时 hash 同样保留弹窗与页签。

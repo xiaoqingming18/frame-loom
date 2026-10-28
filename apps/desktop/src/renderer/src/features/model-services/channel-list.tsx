@@ -1,5 +1,5 @@
 import { Plus, Server } from 'lucide-react';
-import type { Channel, Model } from '@frame-loom/contracts/model-service';
+import type { Channel, Model } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Switch } from '@frame-loom/ui/components/switch';
 import { Badge } from '@frame-loom/ui/components/badge';

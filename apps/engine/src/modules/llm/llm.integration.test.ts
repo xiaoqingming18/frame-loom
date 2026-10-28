@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { getProtocol } from '@frame-loom/contracts';
-import { ModelWrite } from '@frame-loom/contracts/model-service';
+import { ModelWrite } from '@frame-loom/contracts';
 import { mockUpstream } from '../../testing/mock-upstream.js';
 import { testEngine } from '../../testing/test-engine.js';
 import { ModelServicesRepository } from '../model-services/model-services.repository.js';

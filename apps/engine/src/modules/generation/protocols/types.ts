@@ -7,7 +7,7 @@ import type {
   ProtocolDescriptor,
   SemanticRequest,
 } from '@frame-loom/contracts';
-import type { ExtraParam, FixedField, ModelKind } from '@frame-loom/contracts/model-service';
+import type { ExtraParam, FixedField, ModelKind } from '@frame-loom/contracts';
 
 export type JobSnapshot = {
   version: 1;

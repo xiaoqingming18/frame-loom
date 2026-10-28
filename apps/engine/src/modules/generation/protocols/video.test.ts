@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { checkRequest, type VideoCap, type SemanticInput } from '@frame-loom/contracts';
-import { ModelWrite } from '@frame-loom/contracts/model-service';
+import { ModelWrite } from '@frame-loom/contracts';
 import {
   protocolContext,
   semanticRequest,

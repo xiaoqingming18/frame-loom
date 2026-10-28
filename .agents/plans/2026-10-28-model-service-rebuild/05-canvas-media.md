@@ -107,4 +107,4 @@ Parent: plan.md
 
 ## 交接
 
-T1–T10 已完成。06 可复用 `nodes/params/` 与宿主 TTS 模型；07 在视频端口上增加 `base_video`。全部上游仅使用本地严格模拟。
+无。

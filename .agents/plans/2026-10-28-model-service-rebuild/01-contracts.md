@@ -340,4 +340,4 @@ Capability = z.discriminatedUnion('kind', [ChatCap, ImageCap, VideoCap, TtsCap])
 
 ## 交接
 
-无。02 需按父计划登记切换同名包入口；15 个描述仍为 01 要求的占位内容，03 补全。
+无。

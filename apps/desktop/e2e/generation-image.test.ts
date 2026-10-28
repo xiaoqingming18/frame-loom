@@ -99,6 +99,35 @@ test('能力卡驱动图片与首尾帧视频生成、引用与版本重启保�
     await page.getByRole('radio', { name: '档位 1K', exact: true }).click();
     await page.getByRole('radio', { name: '比例 1:1', exact: true }).click();
     await expect(page.getByLabel('预计像素')).toHaveText('1024×1024');
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+      await page.emulateMedia({ colorScheme: theme });
+      await expect(page.locator('body')).toHaveCSS(
+        'background-color',
+        theme === 'dark' ? 'rgb(13, 13, 15)' : 'rgb(246, 247, 249)',
+      );
+      await page.keyboard.press('Tab');
+      await page.screenshot({
+        path: info.outputPath(`image-params-${theme}.png`),
+        animations: 'disabled',
+      });
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: '折叠侧栏', exact: true }).click();
+      await page.setViewportSize({ width: 800, height: 800 });
+      await page.getByRole('button', { name: '生成参数', exact: true }).click();
+      const bounds = (await page.getByLabel('生成参数', { exact: true }).last().boundingBox())!;
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(800);
+      await page.keyboard.press('Tab');
+      await page.screenshot({
+        path: info.outputPath(`image-params-${theme}-800.png`),
+        animations: 'disabled',
+      });
+      await page.keyboard.press('Escape');
+      await page.setViewportSize({ width: 1500, height: 960 });
+      await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
+      await page.getByRole('button', { name: '生成参数', exact: true }).click();
+    }
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: '生成图片', exact: true }).click();
     await expect(page.locator('.react-flow__node-image img')).toBeVisible();
@@ -156,6 +185,22 @@ test('能力卡驱动图片与首尾帧视频生成、引用与版本重启保�
         path: info.outputPath(`video-params-${theme}.png`),
         animations: 'disabled',
       });
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: '折叠侧栏', exact: true }).click();
+      await page.setViewportSize({ width: 800, height: 800 });
+      await page.getByRole('button', { name: '生成参数', exact: true }).click();
+      const bounds = (await page.getByLabel('生成参数', { exact: true }).last().boundingBox())!;
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(800);
+      await page.keyboard.press('Tab');
+      await page.screenshot({
+        path: info.outputPath(`video-params-${theme}-800.png`),
+        animations: 'disabled',
+      });
+      await page.keyboard.press('Escape');
+      await page.setViewportSize({ width: 1500, height: 960 });
+      await page.getByRole('button', { name: '展开侧栏', exact: true }).click();
+      await page.getByRole('button', { name: '生成参数', exact: true }).click();
     }
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: '生成视频', exact: true }).click();

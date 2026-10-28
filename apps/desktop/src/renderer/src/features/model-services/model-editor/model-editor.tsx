@@ -6,7 +6,7 @@ import {
   validateModel,
   type CapabilityIssue,
 } from '@frame-loom/contracts';
-import { Model, ModelWrite, type Channel } from '@frame-loom/contracts/model-service';
+import { Model, ModelWrite, type Channel } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import {
   Dialog,

@@ -28,11 +28,11 @@ Status: proposed
 
 [模型服务接入契约、操作路由与任务恢复](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)已部分落地模型地址覆盖、操作路由、第四种视频适配器、供应商上传和调用快照，整体真实验收未闭合。2026-10-27 用户进一步确认[多模态服务配置与模型演进重构](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)，接管产品范围、配置分层、素材策略和后续验收；本篇保留原架构理由、已实现基础及历史验证，后文旧范围不再作为新的施工入口。新方案尚未实现，本篇不提前标为交付完成。
 
-2026-10-28 上述两篇已转 rejected，由[模型服务配置层重构](2026-10-28-model-service-rebuild.md)取代：清除旧数据，渠道与模型两层、代码协议适配器、用户能力卡。本篇的加密、pi-ai 边界、持久任务、媒体落盘与对象存储理由继续成立；渠道预设、能力档案、协议枚举与地址规则的后续事实以新篇为准。
+2026-10-28 上述两篇已转 rejected，由[模型服务配置层重构](../../implemented/architecture/2026-10-28-model-service-rebuild.md)取代：清除旧数据，渠道与模型两层、代码协议适配器、用户能力卡。本篇的加密、pi-ai 边界、持久任务、媒体落盘与对象存储理由继续成立；渠道预设、能力档案、协议枚举与地址规则的后续事实以新篇为准。
 
 ### 当前实现边界
 
-01 的写请求 CORS、主密钥与字段加密、日志脱敏、事件契约、SSE 和 renderer client 已落地；当前实现事实由[engine 服务](../../implemented/architecture/2026-10-24-engine-service.md)、[基础设施](../../implemented/architecture/2026-10-24-engine-and-renderer-foundation.md)、[桌面壳](../../implemented/architecture/2026-10-24-desktop-shell.md)和[共享契约](../../implemented/architecture/2026-10-24-shared-contracts.md)持有。02 已实现渠道与模型管理、默认模型和四种文本协议的两步测试。03 已实现图片档案与三种图片协议、持久化任务调度与恢复、sha256 媒体落盘和 `frame-media://`。04 已实现 ffprobe 预检、S3 兼容对象存储、三种视频协议和对象存储设置；Windows x64 新版 NSIS 安装后 ffprobe 实测通过。05 已实现 OpenAI Speech 与 MiniMax T2A 适配器和音频落盘。临时模型测试页已删除，图片／视频入口由画布承接，文本与 TTS 暂无业务界面。真实供应商冒烟、时间戳能力核对及 NSIS 人工验收仍待具备外部账号的环境执行，本篇保持 proposed。
+2026-10-29：[模型服务配置层重构](../../implemented/architecture/2026-10-28-model-service-rebuild.md)已实现渠道＋模型、15 个代码协议、四类用户能力卡、设置页及图像／视频／TTS 音频节点。旧档案、目录、接入、供应商上传与旧任务兼容层已删除，0015 清除开发期旧配置和任务，项目与媒体保留。加密、pi-ai 边界、持久任务、对象存储和本地媒体管线继续沿用本篇理由。下文保留最初提案及历史证据，不作为当前接口／能力清单；本篇原真实供应商与原生验收目标不因本地模拟通过而自动完成。
 
 ### 调研依据
 
@@ -86,7 +86,7 @@ SQLite 表，由 Drizzle 生成迁移，各领域模块拥有自己的 `*.schema
 - `model_defaults`：`kind 主键, channel_model_id → channel_models(on delete set null)`。
 - `generation_jobs`、`media_files`、`object_uploads`、`object_storage_config`：见后文。
 
-渠道最初设计了预设 `preset`；它实际还决定拉取模型列表的鉴权，已由渠道级 API 格式 `api_format` 取代，见[以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)。API 格式只决定拉取方式和新文本模型的默认协议，调用仍按模型协议分派。
+渠道最初设计了预设 `preset`；它实际还决定拉取模型列表的鉴权，已由渠道级 API 格式 `api_format` 取代，见[以渠道为中心的模型设置](../../archived/feature/2026-10-25-channel-centric-model-settings.md)。API 格式只决定拉取方式和新文本模型的默认协议，调用仍按模型协议分派。
 
 ### 文本模型
 
@@ -268,7 +268,7 @@ created_at, updated_at, finished_at
 ### 界面
 
 - **设置中心新增两个页签**：
-  - "模型服务"：列表只显示渠道；渠道编辑页包含密钥打码显示、测试、拉取后勾选模型，以及模型的类别、协议、档案、测试和覆盖项，渠道与模型一次保存。"默认模型"为独立页签。细节见[以渠道为中心的模型设置](../../implemented/feature/2026-10-25-channel-centric-model-settings.md)。
+  - "模型服务"：列表只显示渠道；渠道编辑页包含密钥打码显示、测试、拉取后勾选模型，以及模型的类别、协议、档案、测试和覆盖项，渠道与模型一次保存。"默认模型"为独立页签。细节见[以渠道为中心的模型设置](../../archived/feature/2026-10-25-channel-centric-model-settings.md)。
   - "对象存储"：配置表单、连接测试、生命周期规则建议和隐私说明。
   - 两个页签都扩展 `settings-search.ts` 的页签枚举。
 - **生成入口迁移到画布**：

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { getProtocol, type ProjectSummary, type ProjectPageSummary } from '@frame-loom/contracts';
-import { Channel, Model, ModelWrite, GenerationJob } from '@frame-loom/contracts/model-service';
+import { Channel, Model, ModelWrite, GenerationJob } from '@frame-loom/contracts';
 import { testEngine } from '../../testing/test-engine.js';
 import { mockUpstream, type MockRoute } from '../../testing/mock-upstream.js';
 import { png } from '../../testing/protocol-context.js';

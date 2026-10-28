@@ -6,7 +6,7 @@ import {
   restoreCapabilityGroup,
   type CapabilityGroup,
 } from '@frame-loom/contracts';
-import { ModelWrite, type Model } from '@frame-loom/contracts/model-service';
+import { ModelWrite, type Model } from '@frame-loom/contracts';
 
 export function modelWrite(model: Model): ModelWrite {
   return ModelWrite.parse(
