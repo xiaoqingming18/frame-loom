@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ModelDefaults, ModelKind } from '@frame-loom/contracts';
+import { ModelDefaults, ModelKind } from '@frame-loom/contracts/model-service';
 import { Button } from '@frame-loom/ui/components/button';
 import { NativeSelect } from '@frame-loom/ui/components/native-select';
 import type { EngineClient } from '@/lib/engine-client';
@@ -26,6 +26,7 @@ export function ModelDefaultsSettings({
     models.data?.filter(
       (model) =>
         model.enabled &&
+        !model.blockedReason &&
         channels.data?.some((channel) => channel.id === model.channelId && channel.enabled),
     ) ?? [];
   const error = channels.error ?? models.error ?? defaults.error ?? save.error;

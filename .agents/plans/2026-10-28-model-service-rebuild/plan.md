@@ -29,7 +29,7 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 | 01 | [共享契约](01-contracts.md) | done | — | 渠道／模型 schema、协议描述、地址解析、四类能力卡、语义请求、共享校验与尺寸计算及单测 |
 | 02 | [engine 基座](02-engine-foundation.md) | done | 01 | 清库迁移、新表与仓库、模型服务 HTTP 接口、协议注册表、执行链与快照、读取模型、旧 engine 代码删除 |
 | 03 | [首批协议适配器](03-protocol-adapters.md) | done | 01、02 | 15 个协议描述＋适配器、文本经 pi-ai 接入统一地址、契约测试与集成测试 |
-| 04 | [设置页重写](04-settings-ui.md) | draft | 01、02 | 渠道列表与表单、渠道详情、读取模型、模型编辑三个标签、测试、默认模型页、组件测试与 E2E |
+| 04 | [设置页重写](04-settings-ui.md) | done | 01、02 | 渠道列表与表单、渠道详情、读取模型、模型编辑三个标签、测试、默认模型页、组件测试与 E2E |
 | 05 | [画布图像与视频](05-canvas-media.md) | draft | 01、02、03 | 宿主接口、能力卡驱动参数面板、视频方式与端口、图片编辑能力推导、节点数据迁移、E2E |
 | 06 | [画布音频节点](06-canvas-audio.md) | draft | 03、05 | TTS 音频节点、音色、写回、连接视频参考音频、E2E |
 | 07 | [视频编辑与续写](07-video-edit-extend.md) | draft | 03、05 | `edit`／`extend` 方式、待编辑视频端口、Seedance 与可灵承接、测试 |
@@ -94,3 +94,4 @@ Note: ../../notes/proposed/architecture/2026-10-28-model-service-rebuild.md
 - 02 为满足每阶段全仓 typecheck，新契约暂由 `@frame-loom/contracts/model-service` 子路径供 engine 使用；旧 renderer 保留根入口到 04／05 完成迁移，08 删除过渡入口。此安排仅影响编译入口，不保留旧 HTTP 或数据兼容行为。
 - 03 核对官方正文后使用 MiniMax content／ratio 与可灵 contents；可灵未开放本地音频，voice_id 不能由文件 URL 替代。协议扩展默认附加字段、视频尺寸映射与开放容器描述，详见 03 发现与偏差。
 - 03 文本运行时信息存入描述；媒体以 buildSubmit、文本以 pi-ai 实际请求验证保留字段。ElevenLabs 的混合版本操作路径、Gemini PCM／WAV 与既有安全测试 URL 扫描例外见 03 记录；全部上游仍为本地 mock。
+- 04 补齐请求体预览与文本测试 steps；设置页移除旧体系，项目／画布夹具的旧字段留给 05 同步迁移。能力预览暂为本地实现，05 T9 替换并回填 04 验证。详见 04 的发现与偏差。

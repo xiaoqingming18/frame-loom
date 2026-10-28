@@ -340,6 +340,36 @@ describe('配置保存和协议变更', () => {
     expect(effectiveCapability(video, d).modes).toHaveLength(1);
     expect(video.modes).toHaveLength(8);
   });
+  it('首次选择协议填完整模板，文本输入分组恢复不影响长度', () => {
+    const d = getProtocol('openai-chat')!;
+    const empty = ModelWrite.parse({
+      kind: 'chat',
+      upstreamModelId: 'new',
+      displayName: '新模型',
+      enabled: false,
+      protocolId: null,
+      capability: {
+        kind: 'chat',
+        inputModalities: [],
+        tools: false,
+        streaming: false,
+        reasoningLevels: [],
+        samplingParams: [],
+      },
+    });
+    expect(changeProtocol(empty, d.id).model.capability).toEqual(d.templates.chat);
+    const cap = {
+      ...structuredClone(d.templates.chat!),
+      contextWindow: 321,
+      tools: false,
+      streaming: false,
+      inputModalities: [],
+    };
+    expect(restoreCapabilityGroup(cap, d, 'references')).toEqual({
+      ...d.templates.chat,
+      contextWindow: 321,
+    });
+  });
   it.each([0, 1, 2, 3, undefined])('编辑工具参考图边界 %s', (max) => {
     const d = structuredClone(getProtocol('openai-images')!);
     d.ceiling.image!.edit = true;

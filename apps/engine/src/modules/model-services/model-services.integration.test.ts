@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { getProtocol } from '@frame-loom/contracts';
+import { getProtocol, PROTOCOLS } from '@frame-loom/contracts';
 import { Channel, Model, ModelWrite } from '@frame-loom/contracts/model-service';
 import { testEngine } from '../../testing/test-engine.js';
 import { mockUpstream } from '../../testing/mock-upstream.js';
@@ -28,6 +28,42 @@ function write(id = 'model') {
     enabled: true,
   });
 }
+it('全部协议的请求体预览复用实际构造链且不联网、不读取或返回凭据', async () => {
+  const s = await setup();
+  const upstream = await mockUpstream([]);
+  cleanups.push(() => upstream.close());
+  const repo = s.app.get(ModelServicesRepository);
+  const channel = repo.saveChannel({
+    name: '预览',
+    baseUrl: upstream.origin,
+    apiKey: secret,
+    headers: { 'x-private': 'preview-secret-header' },
+    enabled: true,
+  });
+  for (const descriptor of PROTOCOLS) {
+    for (const [kind, capability] of Object.entries(descriptor.templates)) {
+      const [model] = repo.saveModels(channel.id, [
+        ModelWrite.parse({
+          kind,
+          capability,
+          protocolId: descriptor.id,
+          upstreamModelId: `${descriptor.id}-${kind}`,
+          displayName: '预览',
+          enabled: false,
+        }),
+      ]);
+      const response = await s.request(`/models/${model.id}/preview-request`, 'POST');
+      const preview: unknown = await response.json();
+      expect(response.status, JSON.stringify(preview)).toBe(201);
+      expect(preview).toHaveProperty('method', 'POST');
+      expect(preview).toHaveProperty('body');
+      expect(JSON.stringify(preview)).not.toMatch(
+        /test-only-api-secret|preview-secret-header|Authorization|x-api-key/,
+      );
+    }
+  }
+  expect(upstream.requests).toHaveLength(0);
+});
 it('渠道 CRUD 密钥缺省保留、显式清除，读取与数据库 WAL 均不泄露凭据', async () => {
   const s = await setup();
   const created = Channel.parse(

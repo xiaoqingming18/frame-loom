@@ -1,26 +1,16 @@
 import { queryOptions } from '@tanstack/react-query';
-import {
-  ChannelList,
-  ChannelModelList,
-  ModelDefaults,
-  ModelImportPackage,
-} from '@frame-loom/contracts';
+import { Channel, Model, ModelDefaults } from '@frame-loom/contracts/model-service';
 import type { EngineClient } from './engine-client';
-export const catalogQuery = (client: EngineClient) =>
-  queryOptions({
-    queryKey: ['models', 'catalog'],
-    queryFn: ({ signal }) => client.request('/model-catalog', ModelImportPackage, { signal }),
-  });
 
 export const channelsQuery = (client: EngineClient) =>
   queryOptions({
     queryKey: ['models', 'channels'],
-    queryFn: ({ signal }) => client.request('/channels', ChannelList, { signal }),
+    queryFn: ({ signal }) => client.request('/channels', Channel.array(), { signal }),
   });
 export const modelsQuery = (client: EngineClient) =>
   queryOptions({
     queryKey: ['models', 'list'],
-    queryFn: ({ signal }) => client.request('/channel-models', ChannelModelList, { signal }),
+    queryFn: ({ signal }) => client.request('/models', Model.array(), { signal }),
   });
 export const defaultsQuery = (client: EngineClient) =>
   queryOptions({

@@ -107,7 +107,10 @@ export function SettingsDialog({
             value="models"
             className="min-w-0 overflow-y-auto rounded-2xl bg-card px-6 py-8 lg:px-9"
           >
-            <ModelServices engineClient={engineClient} />
+            <ModelServices
+              engineClient={engineClient}
+              onOpenStorage={() => onTabChange('storage')}
+            />
           </TabsContent>
           <TabsContent
             value="defaults"

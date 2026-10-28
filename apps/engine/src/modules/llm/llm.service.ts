@@ -54,11 +54,13 @@ export class LlmService {
   async validateChat(id: string) {
     await this.prepare(id);
   }
-  private async prepare(id: string) {
+  private async prepare(id: string, preview = false) {
     const row = this.repository.getModel(id);
     const channel = this.repository.getChannel(row.channelId);
-    const credentials = this.repository.credentials(row.channelId);
-    if (!channel.enabled || !row.enabled || row.blockedReason)
+    const credentials = preview
+      ? { apiKey: 'preview', secretKey: '', headers: {} }
+      : this.repository.credentials(row.channelId);
+    if (!preview && (!channel.enabled || !row.enabled || row.blockedReason))
       throw new DomainError('MODEL_DISABLED', 422, row.blockedReason ?? '渠道或模型已禁用');
     if (row.kind !== 'chat' || row.capability.kind !== 'chat' || !row.protocolId)
       throw new DomainError('NOT_CHAT_MODEL', 422, '请选择文本模型');
@@ -108,11 +110,38 @@ export class LlmService {
     );
     return { models, model, row, cap, endpoint: submit.url };
   }
-  private async *run(id: string, context: Context, signal: AbortSignal) {
-    const { models, model, cap, endpoint } = await this.prepare(id);
+  async preview(id: string) {
+    let body: unknown;
+    const signal = new AbortController().signal;
+    try {
+      for await (const event of this.run(
+        id,
+        {
+          messages: [{ role: 'user', content: '示例提示词', timestamp: 0 }],
+        },
+        signal,
+        (payload) => {
+          body = payload;
+        },
+      ))
+        void event;
+    } catch (error) {
+      if (body === undefined) throw error;
+    }
+    if (body === undefined) throw new DomainError('PREVIEW_FAILED', 422, '无法生成请求体预览');
+    const { endpoint } = await this.prepare(id, true);
+    return { method: 'POST', url: endpoint, body };
+  }
+  private async *run(
+    id: string,
+    context: Context,
+    signal: AbortSignal,
+    preview?: (body: unknown) => void,
+  ) {
+    const { models, model, cap, endpoint } = await this.prepare(id, !!preview);
     let status = 0;
     const transport =
-      model.api === 'google-generative-ai'
+      model.api === 'google-generative-ai' && !preview
         ? await googleTransport(endpoint, signal, (value) => {
             status = value;
           })
@@ -129,6 +158,7 @@ export class LlmService {
           ? {}
           : {
               fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+                if (preview) throw new Error('预览禁止网络请求');
                 void input;
                 const response = await fetch(endpoint, { ...init, redirect: 'error' });
                 status = response.status;
@@ -154,7 +184,16 @@ export class LlmService {
             for (const key of Object.keys(sampling))
               if (!cap.samplingParams.includes(key as keyof typeof sampling))
                 delete (config as Record<string, unknown>)[key];
-            return { ...value, config };
+            const result = { ...value, config };
+            if (preview) {
+              preview(result);
+              throw new Error('预览已完成');
+            }
+            return result;
+          }
+          if (preview) {
+            preview(value);
+            throw new Error('预览已完成');
           }
           return value;
         },
@@ -194,6 +233,7 @@ export class LlmService {
       configHash: row.configHash,
       code: null,
       message: '',
+      steps: { connection: null, reply: null },
     };
     try {
       const channel = this.repository.getChannel(row.channelId);
@@ -202,6 +242,7 @@ export class LlmService {
           { channelId: channel.id, baseUrl: channel.baseUrl, catalogFormat: channel.catalogFormat },
           signal,
         );
+        check.steps!.connection = true;
       } catch (error) {
         if (!(error instanceof DomainError) || error.code !== 'UPSTREAM_ERROR') throw error;
       }
@@ -216,12 +257,16 @@ export class LlmService {
         if (event.type === 'done') complete = true;
       }
       check.ok = complete && text;
+      check.steps!.connection = true;
+      check.steps!.reply = check.ok;
       check.code = check.ok ? null : 'INCOMPLETE_STREAM';
       check.message = check.ok ? '连接与文本回复测试通过' : '响应不完整';
     } catch (error) {
       const domain = connectionError(error, signal);
       check.code = domain.code;
       check.message = domain.message;
+      if (check.steps!.connection === null) check.steps!.connection = false;
+      else check.steps!.reply = false;
     }
     this.repository.recordCheck(id, check);
     return check;

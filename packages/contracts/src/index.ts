@@ -22,6 +22,7 @@ export {
   VideoCap,
   TtsCap,
   Capability,
+  emptyCapability,
   MediaLimit,
   SamplingParam,
   Range,

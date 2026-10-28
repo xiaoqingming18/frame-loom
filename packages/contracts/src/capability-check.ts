@@ -495,8 +495,12 @@ export function changeProtocol(write: ModelWrite, nextId: string) {
   if (!descriptor || !template) throw new Error('协议不支持当前模型类别');
   const model = structuredClone(write);
   model.protocolId = nextId;
-  model.capability = effectiveCapability(write.capability, descriptor);
-  const incompatible = differences(write.capability, model.capability, 'capability');
+  model.capability = write.protocolId
+    ? effectiveCapability(write.capability, descriptor)
+    : structuredClone(template);
+  const incompatible = write.protocolId
+    ? differences(write.capability, model.capability, 'capability')
+    : [];
   const keepField = (group: string, item: { path: string }) => {
     if (
       !reserved(item.path, descriptor) &&
@@ -565,7 +569,16 @@ export function restoreCapabilityGroup<T extends Capability>(
   const template = descriptor.templates[cap.kind];
   if (!template) throw new Error('协议缺少能力模板');
   const fields: Record<CapabilityGroup, string[]> = {
-    references: ['references', 'mask'],
+    references: [
+      'references',
+      'mask',
+      'inputModalities',
+      'tools',
+      'streaming',
+      'reasoningLevels',
+      'samplingParams',
+      'promptRef',
+    ],
     size: ['size'],
     quality: ['quality', 'background'],
     output: [
@@ -583,7 +596,16 @@ export function restoreCapabilityGroup<T extends Capability>(
     audio: ['audio', 'watermark'],
     voices: ['voices'],
     style: ['instructions', 'speed', 'pitch', 'volume'],
-    limits: ['contextWindow', 'maxOutput', 'promptMaxChars', 'maxChars', 'count', 'multiSpeaker'],
+    limits: [
+      'contextWindow',
+      'maxOutput',
+      'promptMaxChars',
+      'maxChars',
+      'count',
+      'multiSpeaker',
+      'seed',
+      'negativePrompt',
+    ],
   };
   const result = structuredClone(cap) as T & Record<string, unknown>;
   const source = template as unknown as Record<string, unknown>;

@@ -177,6 +177,7 @@
   --color-ring: var(--brand);
   --color-dot: var(--dot);
   --color-destructive: var(--destructive);
+  --color-warning: var(--tag-yellow);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-overlay: var(--overlay);
   --shadow-panel: var(--panel-shadow);

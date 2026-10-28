@@ -6,6 +6,7 @@ import { CatalogService } from './catalog.service.js';
 import { VoicesService } from './voices.service.js';
 import { ProtocolRegistry } from '../generation/protocols/registry.js';
 import { LlmService } from '../llm/llm.service.js';
+import { RequestPreviewService } from './request-preview.service.js';
 
 @Module({
   controllers: [ModelServicesController],
@@ -16,6 +17,7 @@ import { LlmService } from '../llm/llm.service.js';
     VoicesService,
     ProtocolRegistry,
     LlmService,
+    RequestPreviewService,
   ],
   exports: [ModelServicesRepository, ProtocolRegistry],
 })

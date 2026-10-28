@@ -22,7 +22,7 @@ export function VoicePicker({
   const directory = useQuery({
     queryKey,
     queryFn: ({ signal }) =>
-      client.request(`/channel-models/${modelId}/voices`, VoiceDirectory, { signal }),
+      client.request(`/models/${modelId}/voices`, VoiceDirectory, { signal }),
   });
   const [remote, setRemote] = useState<VoiceDirectory>();
   const [name, setName] = useState('');
@@ -32,11 +32,11 @@ export function VoicePicker({
     setBusy(true);
     setError('');
     try {
-      const result = await client.request(`/channel-models/${modelId}/${path}`, VoiceDirectory, {
+      const result = await client.request(`/models/${modelId}/${path}`, VoiceDirectory, {
         method,
         body,
       });
-      if (path === 'voice-catalog') setRemote(result);
+      if (path === 'voices/remote') setRemote(result);
       else await queryClient.invalidateQueries({ queryKey });
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '音色操作失败');
@@ -80,7 +80,7 @@ export function VoicePicker({
           size="sm"
           variant="outline"
           disabled={busy}
-          onClick={() => void perform('voice-catalog', 'POST')}
+          onClick={() => void perform('voices/remote', 'POST')}
         >
           拉取供应商音色
         </Button>

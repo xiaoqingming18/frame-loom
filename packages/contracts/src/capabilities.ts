@@ -14,6 +14,7 @@ export type SamplingParam = z.infer<typeof SamplingParam>;
 export const Range = z
   .strictObject({ min: z.number(), max: z.number(), default: z.number() })
   .refine((v) => v.min <= v.default && v.default <= v.max, '默认值必须在范围内');
+export type Range = z.infer<typeof Range>;
 export const ChatCap = z.strictObject({
   kind: z.literal('chat'),
   contextWindow: Count,
@@ -158,6 +159,50 @@ export const TtsCap = z.strictObject({
 export type TtsCap = z.infer<typeof TtsCap>;
 export const Capability = z.discriminatedUnion('kind', [ChatCap, ImageCap, VideoCap, TtsCap]);
 export type Capability = z.infer<typeof Capability>;
+export function emptyCapability(kind: Capability['kind']): Capability {
+  switch (kind) {
+    case 'chat':
+      return {
+        kind,
+        inputModalities: [],
+        tools: false,
+        streaming: true,
+        reasoningLevels: [],
+        samplingParams: [],
+      };
+    case 'image':
+      return {
+        kind,
+        references: { max: 0, formats: [] },
+        count: { max: 1 },
+        size: { wire: 'none', tiers: [], default: {} },
+        outputFormats: [],
+        seed: false,
+        negativePrompt: false,
+      };
+    case 'video':
+      return {
+        kind,
+        modes: [],
+        defaultMode: 't2v',
+        references: {},
+        duration: { kind: 'auto' },
+        aspectRatios: [],
+        resolutions: [],
+        audio: { mode: 'unknown' },
+        seed: false,
+        promptRef: { syntax: 'ordinal', base: 1 },
+      };
+    case 'tts':
+      return {
+        kind,
+        voices: { sources: ['manual'], presets: [] },
+        instructions: false,
+        formats: [],
+        sampleRates: [],
+      };
+  }
+}
 export const VIDEO_MODE_LABELS: Record<VideoModeId, string> = {
   t2v: '文生视频',
   first: '首帧生视频',

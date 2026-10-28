@@ -186,6 +186,9 @@ export const ModelCheck = z.strictObject({
   configHash: z.string(),
   mode: z.string().optional(),
   jobId: z.uuid().optional(),
+  steps: z
+    .strictObject({ connection: z.boolean().nullable(), reply: z.boolean().nullable() })
+    .optional(),
   code: z.string().nullable(),
   message: z.string(),
 });

@@ -18,6 +18,7 @@ import { ModelServicesService } from './model-services.service.js';
 import { CatalogService } from './catalog.service.js';
 import { VoicesService } from './voices.service.js';
 import { LlmService } from '../llm/llm.service.js';
+import { RequestPreviewService } from './request-preview.service.js';
 
 @Controller()
 export class ModelServicesController {
@@ -27,6 +28,7 @@ export class ModelServicesController {
     private readonly catalog: CatalogService,
     private readonly voices: VoicesService,
     private readonly llm: LlmService,
+    private readonly requestPreview: RequestPreviewService,
   ) {}
   @Get('channels') channels() {
     return this.repository.listChannels();
@@ -77,6 +79,9 @@ export class ModelServicesController {
   }
   @Post('models/:id/check') check(@Param('id') id: string) {
     return this.llm.test(id);
+  }
+  @Post('models/:id/preview-request') previewRequest(@Param('id') id: string) {
+    return this.requestPreview.preview(id);
   }
   @Get('models/:id/export') export(@Param('id') id: string) {
     return this.services.export(id);

@@ -1,6 +1,6 @@
 # Plan: 设置页重写
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -167,10 +167,10 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 改造 `lib/model-queries.ts` 和 `engine-client` 调用，删除 `catalog-import.tsx`、`model-upgrade-report.tsx` 和旧的 `model-services.tsx` 实现 — 验证：`pnpm --filter @frame-loom/desktop typecheck`
-- [ ] T2 实现视图 1、视图 2（含预设和高级设置）— 验证：组件测试覆盖空状态、预设只填地址、地址校验错误、Key 与请求头留空保留、清除勾选、保存请求体，以及「保存并读取模型」的跳转
-- [ ] T3 实现视图 3、视图 4、模型行与「⋯」菜单（含导出与导入）— 验证：组件测试覆盖类别筛选与搜索、待选协议徽标、启用开关的禁用原因、读取候选的类别推断与「已添加」、未选类别不能勾选、批量添加请求体、删除确认文案、导出文件不含凭据
-- [ ] T4 实现视图 5 外壳、基本信息、协议目录、地址预览与覆盖、素材传输 — 验证：组件测试覆盖以下场景：
+- [x] T1 改造 `lib/model-queries.ts` 和 `engine-client` 调用，删除 `catalog-import.tsx`、`model-upgrade-report.tsx` 和旧的 `model-services.tsx` 实现 — 验证：`pnpm --filter @frame-loom/desktop typecheck`
+- [x] T2 实现视图 1、视图 2（含预设和高级设置）— 验证：组件测试覆盖空状态、预设只填地址、地址校验错误、Key 与请求头留空保留、清除勾选、保存请求体，以及「保存并读取模型」的跳转
+- [x] T3 实现视图 3、视图 4、模型行与「⋯」菜单（含导出与导入）— 验证：组件测试覆盖类别筛选与搜索、待选协议徽标、启用开关的禁用原因、读取候选的类别推断与「已添加」、未选类别不能勾选、批量添加请求体、删除确认文案、导出文件不含凭据
+- [x] T4 实现视图 5 外壳、基本信息、协议目录、地址预览与覆盖、素材传输 — 验证：组件测试覆盖以下场景：
   - 切换类别的确认。
   - 协议目录按类别过滤和搜索。
   - 切换协议时弹出不兼容清单。
@@ -179,7 +179,7 @@ Parent: plan.md
   - 外部主机警告：确认前不能启用。
   - 选「链接」时的对象存储提示与跳转。
   - 放弃修改的确认。
-- [ ] T5 实现四类能力表单与档位编辑器 — 验证：组件测试覆盖以下场景：
+- [x] T5 实现四类能力表单与档位编辑器 — 验证：组件测试覆盖以下场景：
   - 超出协议上限的开关不渲染。
   - 留空显示「不限」，保存时数值字段缺省；输入 0 时保存为 0。
   - 已修改标记。
@@ -187,18 +187,18 @@ Parent: plan.md
   - 档位：启用、勾选、手改像素、添加比例、添加档位、`provider` 规则显示文案。
   - 视频：方式展开项、协议规则信息条、参考素材限制表、时长三种模式。
   - TTS：预置音色增删。
-- [ ] T6 实现画布参数预览（05 完成前先用占位；05 完成后接入真实控件，并在本子计划补一次验证）和附加参数标签（含请求体预览）— 验证：组件测试覆盖预览随草稿变化（关闭档位后按钮消失、勾选「可同时带参考素材」后出现参考行、规则锁定置灰）、保留字段冲突报错、请求体预览不含鉴权信息
-- [ ] T7 实现生成测试和默认模型页，改造 `voice-picker.tsx` — 验证：组件测试覆盖文本两步结果、媒体测试的计费确认、未保存时禁用、测试过期显示、默认模型只列已启用且类别匹配的模型、TTS 音色手填与拉取失败时保留手填
-- [ ] T8 重写 `apps/desktop/e2e/model-management.test.ts`；删除 `model-routing.test.ts`、`model-upgrade.test.ts`、`e2e/fixtures/legacy-models.mjs`。E2E 用 `node:http` 模拟上游（`/v1/models` 返回带 `supported_endpoint_types` 的候选；`/v1/responses` 用于文本测试；`/v1beta/models/...:generateContent` 用于 TTS 测试）— 验证：E2E 覆盖以下流程并截图：
+- [x] T6 实现画布参数预览（05 完成前先用占位；05 完成后接入真实控件，并在本子计划补一次验证）和附加参数标签（含请求体预览）— 验证：组件测试覆盖预览随草稿变化（关闭档位后按钮消失、勾选「可同时带参考素材」后出现参考行、规则锁定置灰）、保留字段冲突报错、请求体预览不含鉴权信息
+- [x] T7 实现生成测试和默认模型页，改造 `voice-picker.tsx` — 验证：组件测试覆盖文本两步结果、媒体测试的计费确认、未保存时禁用、测试过期显示、默认模型只列已启用且类别匹配的模型、TTS 音色手填与拉取失败时保留手填
+- [x] T8 重写 `apps/desktop/e2e/model-management.test.ts`；删除 `model-routing.test.ts`、`model-upgrade.test.ts`、`e2e/fixtures/legacy-models.mjs`。E2E 用 `node:http` 模拟上游（`/v1/models` 返回带 `supported_endpoint_types` 的候选；`/v1/responses` 用于文本测试；`/v1beta/models/...:generateContent` 用于 TTS 测试）— 验证：E2E 覆盖以下流程并截图：
   - 添加渠道 → 读取模型 → 选类别与协议 → 编辑能力卡 → 覆盖 MiniMax 地址并检查预览 → 保存 → 文本测试成功 → TTS 测试（计费确认后成功播放）→ 设置默认模型。
   - 在明亮、暗黑两种模式以及 800×800 窗口下截取渠道详情、模型编辑三个标签。人工查看截图后记录结论。
   - 命令：`pnpm --filter @frame-loom/desktop test:e2e -- model-management`
-- [ ] T9 更新 `features/model-management.test.tsx`：删除旧用例，保留与新界面对应的用例，或拆分到新文件；运行 desktop 单测 — 验证：`pnpm --filter @frame-loom/desktop test`、`pnpm run lint`
+- [x] T9 更新 `features/model-management.test.tsx`：删除旧用例，保留与新界面对应的用例，或拆分到新文件；运行 desktop 单测 — 验证：`pnpm --filter @frame-loom/desktop test`、`pnpm run lint`
 
 ## 验证
 
 - 预期：desktop 单测和 `model-management` E2E 通过；明暗两种模式和 800×800 截图经人工查看；键盘 Tab 能在弹窗内循环，Esc 关闭最上层弹窗；`rg -n "apiFormat|profileId|definitionId|connectionId|catalog-import|upgrade-report" apps/desktop/src` 结果为空。
-- 实际：未执行。
+- 实际（2026-10-29）：desktop 21 文件、214 用例通过（设置页 27 用例）；contracts 19 文件、280 用例与 engine 29 文件、256 用例通过。模型管理 E2E 1/1 通过，严格本地上游仅收到 1 次文本生成与 1 次 TTS 生成，鉴权／路径违规为零；TTS readyState≥2 且 play() 成功。明暗 × 1280/800 宽度的渠道详情和编辑三标签共 16 张截图已查看；800×800 下内容滚动、底栏可见、无横向溢出，Tab 保持编辑弹窗内、Esc 只关最上层。截图关闭动画避免过渡态。全仓 typecheck、lint、format:check、verify 与 git diff --check 结果见收尾门禁。
 
 ## 进度
 
@@ -206,8 +206,12 @@ Parent: plan.md
 
 ## 发现与偏差
 
-无。
+- 新增 shadcn switch、checkbox、table、badge，清理 cn 依赖并复用语义 token；warning 映射既有明暗 tag-yellow。
+- 补充 POST 请求体预览：媒体调用 buildSubmit；文本通过 pi-ai onPayload 在发送前截断。遍历全部协议模板验证零网络、无鉴权输出，未使用真实服务。
+- 首次选择协议采用完整模板且不把模板填充当作不兼容；后续切换保留兼容值并确认冲突。文本测试新增可选 steps，准确呈现连接与回复两步。
+- 设置页范围内旧字段扫描为空；全 desktop/src 尚有项目／画布测试夹具的 apiFormat、profileId，归属 05 迁移，避免本阶段提前改画布。
+- T6 当前使用计划允许的本地预览；05 T9 接入真实 CapabilityPreview 后补跑并更新本文件。
 
 ## 交接
 
-尚未开始。完成后，画布宿主（05）可以从 `GET /models` 读取启用的模型。
+05 从 `GET /models` 读取启用且无 blockedReason 的模型；设置页预览替换点为 model-editor/canvas-preview.tsx。全部上游仍仅本地模拟。
