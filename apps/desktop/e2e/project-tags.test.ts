@@ -39,6 +39,7 @@ async function api(page: Page, path: string, method = 'GET', body?: unknown) {
 async function openPage(page: Page, name: string) {
   await page.getByRole('link', { name: '项目库', exact: true }).first().click();
   await page.getByRole('link', { name: '打开项目 验收项目', exact: true }).click();
+  await page.getByRole('tab', { name: '创作页', exact: true }).click();
   await page.getByRole('heading', { name, exact: true }).click();
   await expect(page.getByRole('region', { name: '画布编辑区' })).toBeVisible();
   await expect(page.getByRole('status', { name: '画布保存状态' })).toHaveText('已保存');

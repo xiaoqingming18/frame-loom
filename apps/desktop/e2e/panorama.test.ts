@@ -179,6 +179,7 @@ test('全景模拟生成、比例诊断、真实纹理与当前／四向截图',
     })) as { id: string };
     await page.getByRole('link', { name: '项目库', exact: true }).first().click();
     await page.getByRole('link', { name: '打开项目 全景验收', exact: true }).click();
+    await page.getByRole('tab', { name: '创作页', exact: true }).click();
     await page.getByRole('heading', { name: '全景创作', exact: true }).click();
     await page
       .getByLabel('上传图片或视频', { exact: true })

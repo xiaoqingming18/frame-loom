@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { queryOptions } from '@tanstack/react-query';
 import {
   ProjectList,
+  EpisodeListResult,
+  ScriptResult,
+  StoryResult,
   ProjectManifest,
   ProjectTag,
   ProjectTagCreateRequest,
@@ -14,6 +17,24 @@ import {
 } from '@frame-loom/contracts';
 import { getPreferences } from './desktop-bridge';
 import type { EngineClient } from './engine-client';
+
+export const episodesQuery = (client: EngineClient, id: string) =>
+  queryOptions({
+    queryKey: ['projects', id, 'episodes'],
+    queryFn: ({ signal }) =>
+      client.request(`/projects/${id}/episodes`, EpisodeListResult, { signal }),
+  });
+export const scriptQuery = (client: EngineClient, id: string, episodeId: string) =>
+  queryOptions({
+    queryKey: ['projects', id, 'episodes', episodeId, 'script'],
+    queryFn: ({ signal }) =>
+      client.request(`/projects/${id}/episodes/${episodeId}/script`, ScriptResult, { signal }),
+  });
+export const storyQuery = (client: EngineClient, id: string) =>
+  queryOptions({
+    queryKey: ['projects', id, 'story'],
+    queryFn: ({ signal }) => client.request(`/projects/${id}/story`, StoryResult, { signal }),
+  });
 
 export const projectTagsQuery = (client: EngineClient, id: string) =>
   queryOptions({

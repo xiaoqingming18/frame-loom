@@ -10,6 +10,7 @@ import {
   Search,
 } from 'lucide-react';
 import type { ProjectSort, ProjectSummary } from '@frame-loom/contracts';
+import { formatProfile } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Input } from '@frame-loom/ui/components/input';
 import {
@@ -157,7 +158,7 @@ function ProjectCard({
   return (
     <article
       aria-label={project.name}
-      className="group relative h-[210px] min-w-0 rounded-[20px] bg-muted transition-shadow hover:shadow-panel"
+      className="group relative h-[240px] min-w-0 rounded-[20px] bg-muted transition-shadow hover:shadow-panel"
     >
       <div
         aria-hidden
@@ -169,7 +170,7 @@ function ProjectCard({
         <Link
           to="/projects/$projectId"
           params={{ projectId: project.id }}
-          search={{ tab: 'pages', path: '' }}
+          search={{ tab: 'episodes', path: '' }}
           className="absolute inset-0 rounded-[20px] focus-visible:outline-2 focus-visible:outline-ring"
         >
           <span className="sr-only">打开项目 {project.name}</span>
@@ -182,6 +183,12 @@ function ProjectCard({
             ? `修改于 ${new Date(project.updatedAt).toLocaleDateString('zh-CN')}`
             : projectStatusLabels[project.status]}
         </p>
+        <p
+          className="mt-1 truncate text-xs text-muted-foreground"
+          title={formatProfile(project.profile)}
+        >
+          {formatProfile(project.profile) || '未设置项目设定'}
+        </p>
       </div>
       <div className="absolute right-3 bottom-4">
         <DropdownMenu>
@@ -193,6 +200,13 @@ function ProjectCard({
           <DropdownMenuContent align="end">
             {available ? (
               <>
+                <DropdownMenuItem
+                  onSelect={() =>
+                    onAction({ kind: 'profile', projectId: project.id, profile: project.profile })
+                  }
+                >
+                  项目设定
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onAction({ kind: 'rename', project })}>
                   重命名
                 </DropdownMenuItem>

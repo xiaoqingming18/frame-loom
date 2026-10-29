@@ -4,7 +4,7 @@ import { AssetDirectoryPath } from '@frame-loom/contracts';
 import { ProjectDetail } from '@/features/projects/project-detail';
 
 export const projectSearch = z.object({
-  tab: z.enum(['pages', 'assets']).catch('pages'),
+  tab: z.enum(['episodes', 'pages', 'story', 'assets']).catch('episodes'),
   path: AssetDirectoryPath.catch(''),
 });
 export const Route = createFileRoute('/projects_/$projectId')({

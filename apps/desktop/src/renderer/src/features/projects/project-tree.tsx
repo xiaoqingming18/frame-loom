@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouteContext } from '@tanstack/react-router';
 import { ChevronRight, FileImage, Folder, Plus } from 'lucide-react';
-import type { ProjectSummary } from '@frame-loom/contracts';
+import {
+  episodeLabel,
+  type ProjectSummary,
+  type EpisodeSummary,
+  type ProjectPageSummary,
+} from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { cn } from '@frame-loom/ui/lib/utils';
 import {
@@ -72,7 +77,7 @@ function ProjectBranch({ project }: { project: ProjectSummary }) {
         <Link
           to="/projects/$projectId"
           params={{ projectId: project.id }}
-          search={{ tab: 'pages', path: '' }}
+          search={{ tab: 'episodes', path: '' }}
           activeProps={{ className: 'bg-accent-active', 'aria-current': 'page' }}
           className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 hover:bg-accent"
         >
@@ -89,23 +94,90 @@ function ProjectBranch({ project }: { project: ProjectSummary }) {
             <Button variant="ghost" size="sm" onClick={() => void manifest.refetch()}>
               重试
             </Button>
-          ) : manifest.data?.pages.length ? (
-            manifest.data.pages.map((page) => (
-              <Link
-                key={page.id}
-                to="/projects/$projectId/pages/$pageId"
-                params={{ projectId: project.id, pageId: page.id }}
-                search={{}}
-                activeProps={{ className: 'bg-accent-active', 'aria-current': 'page' }}
-                className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-accent"
-              >
-                <FileImage aria-hidden className="size-3.5 shrink-0" />
-                <span className="truncate">{page.name}</span>
-              </Link>
-            ))
+          ) : manifest.data?.pages.length || manifest.data?.episodes?.length ? (
+            <>
+              {[...(manifest.data.episodes ?? [])]
+                .sort((a, b) => a.number - b.number)
+                .map((episode) => (
+                  <EpisodeBranch
+                    key={episode.id}
+                    projectId={project.id}
+                    episode={episode}
+                    pages={manifest.data.pages.filter((page) => page.episodeId === episode.id)}
+                  />
+                ))}
+              {manifest.data.pages
+                .filter(
+                  (page) =>
+                    !manifest.data.episodes?.some((episode) => episode.id === page.episodeId),
+                )
+                .map((page) => (
+                  <Link
+                    key={page.id}
+                    to="/projects/$projectId/pages/$pageId"
+                    params={{ projectId: project.id, pageId: page.id }}
+                    search={{}}
+                    activeProps={{ className: 'bg-accent-active', 'aria-current': 'page' }}
+                    className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-accent"
+                  >
+                    <FileImage aria-hidden className="size-3.5 shrink-0" />
+                    <span className="truncate">{page.name}</span>
+                  </Link>
+                ))}
+            </>
           ) : (
-            <p className="p-2 text-xs text-muted-foreground">无创作页</p>
+            <p className="p-2 text-xs text-muted-foreground">无内容</p>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EpisodeBranch({
+  projectId,
+  episode,
+  pages,
+}: {
+  projectId: string;
+  episode: EpisodeSummary;
+  pages: ProjectPageSummary[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div>
+      <Button
+        variant="ghost"
+        className="w-full justify-start text-left"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <ChevronRight aria-hidden className={cn('size-3 shrink-0', expanded && 'rotate-90')} />
+        <span className="truncate">{episodeLabel(episode)}</span>
+      </Button>
+      {expanded && (
+        <div className="ml-3 border-l pl-2">
+          <Link
+            to="/projects/$projectId/episodes/$episodeId"
+            params={{ projectId, episodeId: episode.id }}
+            search={{}}
+            activeProps={{ className: 'bg-accent-active', 'aria-current': 'page' }}
+            className="block rounded-lg px-2 py-2 hover:bg-accent"
+          >
+            剧本
+          </Link>
+          {pages.map((page) => (
+            <Link
+              key={page.id}
+              to="/projects/$projectId/pages/$pageId"
+              params={{ projectId, pageId: page.id }}
+              search={{}}
+              activeProps={{ className: 'bg-accent-active', 'aria-current': 'page' }}
+              className="block truncate rounded-lg px-2 py-2 hover:bg-accent"
+            >
+              {page.name}
+            </Link>
+          ))}
         </div>
       )}
     </div>

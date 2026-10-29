@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects_.$projectId'
+import { Route as ProjectsProjectIdEpisodesEpisodeIdRouteImport } from './routes/projects_.$projectId_.episodes.$episodeId'
 import { Route as ProjectsProjectIdPagesPageIdRouteImport } from './routes/projects_.$projectId_.pages.$pageId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,12 @@ const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
   path: '/projects/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsProjectIdEpisodesEpisodeIdRoute =
+  ProjectsProjectIdEpisodesEpisodeIdRouteImport.update({
+    id: '/projects_/$projectId_/episodes/$episodeId',
+    path: '/projects/$projectId/episodes/$episodeId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProjectsProjectIdPagesPageIdRoute =
   ProjectsProjectIdPagesPageIdRouteImport.update({
     id: '/projects_/$projectId_/pages/$pageId',
@@ -40,12 +47,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/projects': typeof ProjectsRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/projects/$projectId/episodes/$episodeId': typeof ProjectsProjectIdEpisodesEpisodeIdRoute
   '/projects/$projectId/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/projects': typeof ProjectsRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/projects/$projectId/episodes/$episodeId': typeof ProjectsProjectIdEpisodesEpisodeIdRoute
   '/projects/$projectId/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
 }
 export interface FileRoutesById {
@@ -53,6 +62,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/projects': typeof ProjectsRoute
   '/projects_/$projectId': typeof ProjectsProjectIdRoute
+  '/projects_/$projectId_/episodes/$episodeId': typeof ProjectsProjectIdEpisodesEpisodeIdRoute
   '/projects_/$projectId_/pages/$pageId': typeof ProjectsProjectIdPagesPageIdRoute
 }
 export interface FileRouteTypes {
@@ -61,18 +71,21 @@ export interface FileRouteTypes {
     | '/'
     | '/projects'
     | '/projects/$projectId'
+    | '/projects/$projectId/episodes/$episodeId'
     | '/projects/$projectId/pages/$pageId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/projects'
     | '/projects/$projectId'
+    | '/projects/$projectId/episodes/$episodeId'
     | '/projects/$projectId/pages/$pageId'
   id:
     | '__root__'
     | '/'
     | '/projects'
     | '/projects_/$projectId'
+    | '/projects_/$projectId_/episodes/$episodeId'
     | '/projects_/$projectId_/pages/$pageId'
   fileRoutesById: FileRoutesById
 }
@@ -80,6 +93,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProjectsRoute: typeof ProjectsRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
+  ProjectsProjectIdEpisodesEpisodeIdRoute: typeof ProjectsProjectIdEpisodesEpisodeIdRoute
   ProjectsProjectIdPagesPageIdRoute: typeof ProjectsProjectIdPagesPageIdRoute
 }
 
@@ -106,6 +120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects_/$projectId_/episodes/$episodeId': {
+      id: '/projects_/$projectId_/episodes/$episodeId'
+      path: '/projects/$projectId/episodes/$episodeId'
+      fullPath: '/projects/$projectId/episodes/$episodeId'
+      preLoaderRoute: typeof ProjectsProjectIdEpisodesEpisodeIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects_/$projectId_/pages/$pageId': {
       id: '/projects_/$projectId_/pages/$pageId'
       path: '/projects/$projectId/pages/$pageId'
@@ -120,6 +141,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProjectsRoute: ProjectsRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
+  ProjectsProjectIdEpisodesEpisodeIdRoute:
+    ProjectsProjectIdEpisodesEpisodeIdRoute,
   ProjectsProjectIdPagesPageIdRoute: ProjectsProjectIdPagesPageIdRoute,
 }
 export const routeTree = rootRouteImport

@@ -44,6 +44,7 @@ export async function openProjectCanvas(page: Page, app: ElectronApplication) {
   }, location);
   await page.getByRole('link', { name: '项目库', exact: true }).first().click();
   await page.getByRole('link', { name: '打开项目 验收项目', exact: true }).click();
+  await page.getByRole('tab', { name: '创作页', exact: true }).click();
   await page.getByRole('heading', { name: '验收创作页', exact: true }).click();
   await expect(page.getByRole('region', { name: '画布编辑区' })).toBeVisible();
   return target;

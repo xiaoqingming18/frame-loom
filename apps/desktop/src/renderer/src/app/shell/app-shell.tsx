@@ -23,7 +23,8 @@ export function AppShell() {
   const health = useQuery(healthQueryOptions(engineClient));
   const queryClient = useQueryClient();
   const fullBleed = useRouterState({
-    select: (state) => /^\/projects\/[^/]+\/pages\/[^/]+\/?$/.test(state.location.pathname),
+    select: (state) =>
+      /^\/projects\/[^/]+\/(?:pages|episodes)\/[^/]+\/?$/.test(state.location.pathname),
   });
   useEffect(
     () =>

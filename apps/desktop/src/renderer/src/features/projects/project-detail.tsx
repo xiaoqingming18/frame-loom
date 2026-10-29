@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useRouteContext } from '@tanstack/react-router';
-import { FileImage, Info, MoreHorizontal, Plus } from 'lucide-react';
+import { FileImage, Info, MoreHorizontal, Plus, Settings } from 'lucide-react';
+import { episodeLabel } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import {
   DropdownMenu,
@@ -11,7 +12,9 @@ import {
 } from '@frame-loom/ui/components/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@frame-loom/ui/components/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@frame-loom/ui/components/tooltip';
-import { projectQuery } from '@/lib/project-queries';
+import { projectQuery, episodesQuery } from '@/lib/project-queries';
+import { EpisodeDialog, type EpisodeAction } from './episodes/episode-dialog';
+import { EpisodeList } from './episodes/episode-list';
 import { ProjectDialog, type ProjectAction } from './project-dialog';
 import { ProjectAssets } from './project-assets';
 
@@ -21,13 +24,15 @@ export function ProjectDetail({
   path,
 }: {
   projectId: string;
-  tab: 'pages' | 'assets';
+  tab: 'episodes' | 'pages' | 'story' | 'assets';
   path: string;
 }) {
   const { engineClient } = useRouteContext({ from: '__root__' });
   const project = useQuery(projectQuery(engineClient, projectId));
   const navigate = useNavigate();
   const [action, setAction] = useState<ProjectAction | null>(null);
+  const [episodeAction, setEpisodeAction] = useState<EpisodeAction | null>(null);
+  const episodes = useQuery(episodesQuery(engineClient, projectId));
   return (
     <section className="mx-auto max-w-6xl p-6 lg:p-10">
       <nav
@@ -54,6 +59,25 @@ export function ProjectDetail({
           <>
             <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <h1 className="min-w-0 truncate text-2xl font-semibold">{project.data.name}</h1>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="项目设定"
+                onClick={() =>
+                  setAction({ kind: 'profile', projectId, profile: project.data.profile })
+                }
+              >
+                <Settings aria-hidden />
+              </Button>
+              {tab === 'episodes' && (
+                <Button
+                  className="ml-auto rounded-full"
+                  onClick={() => setEpisodeAction({ kind: 'create' })}
+                >
+                  <Plus aria-hidden />
+                  新建剧集
+                </Button>
+              )}
               {tab === 'pages' && (
                 <Button
                   className="rounded-full"
@@ -70,13 +94,15 @@ export function ProjectDetail({
                 void navigate({
                   to: '/projects/$projectId',
                   params: { projectId },
-                  search: (previous) => ({ ...previous, tab: value as 'pages' | 'assets', path }),
+                  search: (previous) => ({ ...previous, tab: value as typeof tab, path }),
                 })
               }
             >
               <div className="mb-6 flex items-center gap-2 border-b">
                 <TabsList variant="line">
+                  <TabsTrigger value="episodes">剧集</TabsTrigger>
                   <TabsTrigger value="pages">创作页</TabsTrigger>
+                  <TabsTrigger value="story">设定库</TabsTrigger>
                   <TabsTrigger value="assets">项目资产</TabsTrigger>
                 </TabsList>
                 <Tooltip>
@@ -88,6 +114,23 @@ export function ProjectDetail({
                   <TooltipContent>创作页是独立画布，项目资产是本地文件夹中的素材。</TooltipContent>
                 </Tooltip>
               </div>
+              <TabsContent value="episodes">
+                {episodes.error ? (
+                  <p role="alert">{episodes.error.message}</p>
+                ) : episodes.isPending ? (
+                  <p role="status">正在读取剧集…</p>
+                ) : (
+                  <EpisodeList
+                    projectId={projectId}
+                    episodes={episodes.data}
+                    onAction={setEpisodeAction}
+                    onCreatePage={(episodeId) =>
+                      setAction({ kind: 'create-page', projectId, episodeId })
+                    }
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="story">设定库即将可用</TabsContent>
               <TabsContent value="pages">
                 {project.data.pages.length === 0 ? (
                   <div className="grid min-h-60 place-content-center gap-3 text-center">
@@ -121,6 +164,17 @@ export function ProjectDetail({
                           </div>
                           <div className="p-4 pr-12">
                             <h2 className="truncate font-medium">{page.name}</h2>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                              {project.data.episodes?.find(
+                                (episode) => episode.id === page.episodeId,
+                              )
+                                ? episodeLabel(
+                                    project.data.episodes.find(
+                                      (episode) => episode.id === page.episodeId,
+                                    )!,
+                                  )
+                                : '未分集'}
+                            </p>
                             <p className="mt-1 text-xs text-muted-foreground">
                               {new Date(page.createdAt).toLocaleDateString('zh-CN')}
                             </p>
@@ -176,6 +230,14 @@ export function ProjectDetail({
         )
       )}
       {action && <ProjectDialog action={action} onClose={() => setAction(null)} />}
+      {episodeAction && (
+        <EpisodeDialog
+          projectId={projectId}
+          episodes={episodes.data ?? []}
+          action={episodeAction}
+          onClose={() => setEpisodeAction(null)}
+        />
+      )}
     </section>
   );
 }

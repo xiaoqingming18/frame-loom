@@ -24,6 +24,19 @@ vi.mock('@/lib/desktop-bridge', () => ({
 const id = '00000000-0000-4000-8000-000000000001';
 const pageId = '00000000-0000-4000-8000-000000000002';
 const time = '2026-10-26T00:00:00Z';
+const episodeId = '00000000-0000-4000-8000-000000000004';
+const episode = {
+  id: episodeId,
+  number: 3,
+  title: '重逢',
+  createdAt: time,
+  updatedAt: time,
+  scenes: 0,
+  chars: 0,
+  draft: false,
+  conversion: null,
+  pending: 0,
+};
 const project = {
   id,
   name: '项目 2',
@@ -83,6 +96,7 @@ async function mount(
       return { status: 'ok', engineVersion: '0.1.0', schemaVersion: '3', startedAt: time };
     if (path === '/projects') return [project];
     if (path === `/projects/${id}`) return manifest;
+    if (path === `/projects/${id}/episodes`) return [];
     if (path.includes('/assets?')) return [];
     if (path === '/generation-jobs') return [];
     throw new Error(`未模拟 ${path}`);
@@ -111,6 +125,157 @@ async function mount(
 function openMenu(name = '项目 2') {
   fireEvent.keyDown(screen.getByRole('button', { name: `${name} 的菜单` }), { key: 'Enter' });
 }
+
+it('项目设定可选，题材限制五个并支持自定义，卡片菜单保存使用 PUT', async () => {
+  const profile = { form: 'short', medium: 'live', genres: ['都市'], aspect: '9:16' };
+  const { request } = await mount('/projects', (path, init) =>
+    path === `/projects/${id}/profile` && init?.method === 'PUT'
+      ? { ...manifest, profile: init.body }
+      : undefined,
+  );
+  await screen.findByText('未设置项目设定');
+  openMenu();
+  fireEvent.click(await screen.findByRole('menuitem', { name: '项目设定' }));
+  const dialog = within(await screen.findByRole('dialog'));
+  fireEvent.click(dialog.getByRole('radio', { name: '短剧' }));
+  fireEvent.click(dialog.getByRole('radio', { name: '真人实拍' }));
+  for (const name of ['都市', '古装', '悬疑', '爱情', '喜剧', '科幻'])
+    fireEvent.click(dialog.getByRole('button', { name }));
+  await dialog.findByText('最多选择 5 个题材');
+  for (const name of ['古装', '悬疑', '爱情', '喜剧'])
+    fireEvent.click(dialog.getByRole('button', { name }));
+  fireEvent.click(dialog.getByRole('button', { name: '+ 自定义' }));
+  fireEvent.change(dialog.getByLabelText('自定义题材'), { target: { value: '公路' } });
+  fireEvent.keyDown(dialog.getByLabelText('自定义题材'), { key: 'Enter' });
+  fireEvent.click(dialog.getByRole('button', { name: '删除题材 公路' }));
+  fireEvent.click(dialog.getByRole('radio', { name: '9:16' }));
+  fireEvent.click(dialog.getByRole('button', { name: '确认' }));
+  await vi.waitFor(() =>
+    expect(request).toHaveBeenCalledWith(
+      `/projects/${id}/profile`,
+      expect.objectContaining({ method: 'PUT', body: profile }),
+    ),
+  );
+});
+
+it('新建项目填写设定后携带 profile，收起时默认不携带', async () => {
+  const { request } = await mount('/projects', (path, init) =>
+    path === '/projects' && init?.method === 'POST' ? project : undefined,
+  );
+  fireEvent.click(screen.getAllByRole('button', { name: '新建项目' }).at(-1)!);
+  const dialog = within(await screen.findByRole('dialog'));
+  fireEvent.change(dialog.getByLabelText('项目名称'), { target: { value: '新项目' } });
+  const details = dialog.getByText('项目设定（可选）').closest('details')!;
+  details.open = true;
+  fireEvent.click(dialog.getByRole('radio', { name: '短剧' }));
+  fireEvent.click(dialog.getByRole('radio', { name: '真人实拍' }));
+  fireEvent.click(dialog.getByRole('button', { name: '都市' }));
+  fireEvent.click(dialog.getByRole('button', { name: '创建项目' }));
+  await vi.waitFor(() =>
+    expect(request).toHaveBeenCalledWith(
+      '/projects',
+      expect.objectContaining({
+        body: {
+          name: '新项目',
+          location: prefs.projectLocation,
+          profile: { form: 'short', medium: 'live', genres: ['都市'], aspect: null },
+        },
+      }),
+    ),
+  );
+});
+
+it('剧集默认集号递增，重复错误展示并可创建后进入剧本', async () => {
+  let conflict = true;
+  const { router } = await mount(`/projects/${id}`, (path, init) => {
+    if (path === `/projects/${id}/episodes`) {
+      if (init?.method === 'POST') {
+        if (conflict) throw new EngineRequestError(409, 'EPISODE_NUMBER_CONFLICT', '集号已存在');
+        return {
+          id: episode.id,
+          number: 4,
+          title: '',
+          createdAt: time,
+          updatedAt: time,
+          scenes: 0,
+          chars: 0,
+          draft: false,
+        };
+      }
+      return [episode];
+    }
+    if (path === `/projects/${id}/episodes/${episodeId}/script`)
+      return {
+        format: 'frame-loom-script',
+        formatVersion: 1,
+        id: episodeId,
+        revision: 1,
+        source: null,
+        pendingImport: null,
+        convertedAt: null,
+        document: { schemaVersion: 1, blocks: [] },
+        conversion: null,
+      };
+    return undefined;
+  });
+  fireEvent.click(await screen.findByRole('button', { name: '新建剧集' }));
+  const dialog = within(await screen.findByRole('dialog'));
+  expect(dialog.getByRole<HTMLInputElement>('spinbutton', { name: '集号' }).value).toBe('4');
+  fireEvent.click(dialog.getByRole('button', { name: '确认' }));
+  await dialog.findByText('集号已存在');
+  conflict = false;
+  fireEvent.click(dialog.getByRole('button', { name: '确认' }));
+  await vi.waitFor(() =>
+    expect(router.state.location.pathname).toBe(`/projects/${id}/episodes/${episodeId}`),
+  );
+});
+
+it('创作页只修改所属剧集时提交 episodeId，并在侧栏按剧集分组', async () => {
+  const page = { id: pageId, name: '画布', createdAt: time, updatedAt: time, coverSha256: null };
+  const { request } = await mount(`/projects/${id}?tab=pages`, (path, init) => {
+    if (path === `/projects/${id}`)
+      return {
+        ...manifest,
+        episodes: [
+          {
+            id: episode.id,
+            number: episode.number,
+            title: episode.title,
+            createdAt: time,
+            updatedAt: time,
+            scenes: 0,
+            chars: 0,
+            draft: false,
+          },
+        ],
+        pages: [page],
+      };
+    if (path === `/projects/${id}/episodes`) return [episode];
+    if (path === `/projects/${id}/pages/${pageId}` && init?.method === 'PATCH')
+      return { ...page, episodeId };
+    return undefined;
+  });
+  await screen.findByRole('heading', { name: '画布' });
+  openMenu('画布');
+  fireEvent.click(await screen.findByRole('menuitem', { name: '重命名' }));
+  const dialog = within(await screen.findByRole('dialog'));
+  await vi.waitFor(() =>
+    expect(dialog.getByRole<HTMLSelectElement>('combobox').disabled).toBe(false),
+  );
+  fireEvent.change(dialog.getByRole('combobox'), { target: { value: episodeId } });
+  fireEvent.click(dialog.getByRole('button', { name: '确认' }));
+  await vi.waitFor(() =>
+    expect(request).toHaveBeenCalledWith(
+      `/projects/${id}/pages/${pageId}`,
+      expect.objectContaining({ method: 'PATCH', body: { episodeId } }),
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '展开 项目 2' }));
+  fireEvent.click(await screen.findByRole('button', { name: '第 3 集 重逢' }));
+  expect(screen.getByRole('link', { name: '剧本' }).getAttribute('href')).toContain(
+    `/episodes/${episodeId}`,
+  );
+});
 
 it('删除提示未结束任务，勾选后先放弃任务再移到回收站', async () => {
   const job = {
@@ -292,7 +457,7 @@ it('文件夹拖放被跳过，上传未结束时离开确认，确认离开中�
   const assetsTab = screen.getByRole('tab', { name: '项目资产' });
   assetsTab.focus();
   fireEvent.keyDown(assetsTab, { key: 'ArrowLeft' });
-  await vi.waitFor(() => expect(router.state.location.search.tab).toBe('pages'));
+  await vi.waitFor(() => expect(router.state.location.search.tab).toBe('story'));
   expect(uploadSignal!.aborted).toBe(false);
   fireEvent.click(screen.getAllByRole('link', { name: '项目库' })[0]);
   await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
@@ -453,10 +618,12 @@ it('详情非法 search 回退、侧栏展开空项目；新建创作页跳转�
     path === `/projects/${id}/pages` && init?.method === 'POST' ? page : undefined,
   );
   await screen.findByRole('heading', { name: '项目 2' });
-  expect(router.state.location.search).toMatchObject({ tab: 'pages', path: '' });
+  expect(router.state.location.search).toMatchObject({ tab: 'episodes', path: '' });
   fireEvent.click(screen.getByRole('button', { name: '展开 项目 2' }));
-  await screen.findByText('无创作页');
-  fireEvent.click(screen.getByRole('button', { name: '新建创作页' }));
+  await screen.findByText('无内容');
+  screen.getByRole('tab', { name: '剧集' }).focus();
+  fireEvent.keyDown(screen.getByRole('tab', { name: '剧集' }), { key: 'ArrowRight' });
+  fireEvent.click(await screen.findByRole('button', { name: '新建创作页' }));
   const dialog = within(await screen.findByRole('dialog'));
   fireEvent.change(dialog.getByRole('textbox', { name: '创作页名称' }), {
     target: { value: '第一集' },
@@ -475,7 +642,7 @@ it('详情封面与纯色卡片、侧栏页面高亮，Tab 支持键盘导航', 
     updatedAt: time,
     coverSha256: 'a'.repeat(64),
   };
-  const { router } = await mount(`/projects/${id}`, (path) =>
+  const { router } = await mount(`/projects/${id}?tab=pages`, (path) =>
     path === `/projects/${id}`
       ? {
           ...manifest,
@@ -501,7 +668,8 @@ it('详情封面与纯色卡片、侧栏页面高亮，Tab 支持键盘导航', 
   const pagesTab = screen.getByRole('tab', { name: '创作页' });
   pagesTab.focus();
   fireEvent.keyDown(pagesTab, { key: 'ArrowRight' });
-  await vi.waitFor(() => expect(router.state.location.search.tab).toBe('assets'));
+  await vi.waitFor(() => expect(router.state.location.search.tab).toBe('story'));
+  fireEvent.click(screen.getByRole('tab', { name: '项目资产' }));
   expect(screen.getByLabelText('项目资产内容')).toBeDefined();
   fireEvent.click(tree.getByRole('link', { name: '第一集' }));
   await vi.waitFor(() =>

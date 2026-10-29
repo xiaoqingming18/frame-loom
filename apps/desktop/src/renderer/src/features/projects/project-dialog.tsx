@@ -11,6 +11,7 @@ import {
   ProjectName,
   ProjectPageSummary,
   ProjectSummary,
+  type ProjectProfile,
   type ProjectSummary as Summary,
 } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
@@ -24,12 +25,17 @@ import {
   DialogTitle,
 } from '@frame-loom/ui/components/dialog';
 import { pickDirectory, setPreferences, trashProject } from '@/lib/desktop-bridge';
-import { preferencesQuery } from '@/lib/project-queries';
+import { preferencesQuery, episodesQuery } from '@/lib/project-queries';
+import { NativeSelect } from '@frame-loom/ui/components/native-select';
+import { ProfileFields } from './profile-fields';
+import { emptyProfile } from './profile';
+import { episodeLabel } from '@frame-loom/contracts';
 
 export type ProjectAction =
   | { kind: 'create' | 'open' }
   | { kind: 'rename' | 'delete' | 'cleanup' | 'relocate'; project: Summary }
-  | { kind: 'create-page'; projectId: string }
+  | { kind: 'profile'; projectId: string; profile?: ProjectProfile }
+  | { kind: 'create-page'; projectId: string; episodeId?: string }
   | { kind: 'rename-page' | 'delete-page'; projectId: string; page: ProjectPageSummary };
 const titles = {
   create: '新建本地项目',
@@ -38,6 +44,7 @@ const titles = {
   delete: '删除项目',
   cleanup: '清理未使用媒体',
   relocate: '重新定位项目',
+  profile: '项目设定',
   'create-page': '新建创作页',
   'rename-page': '重命名创作页',
   'delete-page': '删除创作页',
@@ -49,6 +56,20 @@ export function ProjectDialog({ action, onClose }: { action: ProjectAction; onCl
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const preferences = useQuery(preferencesQuery());
+  const [profile, setProfile] = useState<ProjectProfile>(
+    action.kind === 'profile' ? (action.profile ?? emptyProfile()) : emptyProfile(),
+  );
+  const [episodeId, setEpisodeId] = useState(
+    action.kind === 'create-page'
+      ? (action.episodeId ?? '')
+      : 'page' in action
+        ? (action.page.episodeId ?? '')
+        : '',
+  );
+  const episodes = useQuery({
+    ...episodesQuery(engineClient, 'projectId' in action ? action.projectId : ''),
+    enabled: action.kind === 'create-page' || action.kind === 'rename-page',
+  });
   const [name, setName] = useState(
     'project' in action ? action.project.name : 'page' in action ? action.page.name : '',
   );
@@ -98,10 +119,22 @@ export function ProjectDialog({ action, onClose }: { action: ProjectAction; onCl
       const id =
         'project' in action ? action.project.id : 'projectId' in action ? action.projectId : '';
       switch (action.kind) {
+        case 'profile':
+          await engineClient.request(`/projects/${id}/profile`, ProjectManifest, {
+            method: 'PUT',
+            body: profile,
+          });
+          break;
         case 'create': {
           const project = await engineClient.request('/projects', ProjectSummary, {
             method: 'POST',
-            body: { name, location: root },
+            body: {
+              name,
+              location: root,
+              ...(profile.form || profile.medium || profile.genres.length || profile.aspect
+                ? { profile }
+                : {}),
+            },
           });
           try {
             const value = await setPreferences({ projectLocation: root });
@@ -157,7 +190,7 @@ export function ProjectDialog({ action, onClose }: { action: ProjectAction; onCl
         case 'create-page': {
           const page = await engineClient.request(`/projects/${id}/pages`, ProjectPageSummary, {
             method: 'POST',
-            body: { name },
+            body: { name, ...(episodeId ? { episodeId } : {}) },
           });
           await navigate({
             to: '/projects/$projectId/pages/$pageId',
@@ -170,7 +203,15 @@ export function ProjectDialog({ action, onClose }: { action: ProjectAction; onCl
           await engineClient.request(
             `/projects/${id}/pages/${action.page.id}`,
             ProjectPageSummary,
-            { method: 'PATCH', body: { name } },
+            {
+              method: 'PATCH',
+              body: {
+                ...(name !== action.page.name ? { name } : {}),
+                ...(episodeId !== (action.page.episodeId ?? '')
+                  ? { episodeId: episodeId || null }
+                  : {}),
+              },
+            },
           );
           break;
         case 'delete-page':
@@ -189,7 +230,7 @@ export function ProjectDialog({ action, onClose }: { action: ProjectAction; onCl
         await navigate({
           to: '/projects/$projectId',
           params: { projectId },
-          search: { tab: 'pages', path: '' },
+          search: { tab: 'episodes', path: '' },
         });
       onClose();
     },
@@ -302,6 +343,37 @@ export function ProjectDialog({ action, onClose }: { action: ProjectAction; onCl
                 </Button>
               </div>
             </div>
+          )}
+          {action.kind === 'create' && (
+            <details className="rounded-xl border p-3">
+              <summary className="cursor-pointer text-sm font-medium">项目设定（可选）</summary>
+              <div className="mt-4">
+                <ProfileFields value={profile} onChange={setProfile} disabled={busy} />
+                <p className="mt-3 text-xs text-muted-foreground">
+                  设定用于剧本识别与后续出图风格，可随时在项目设定中修改；未填写时会在首次导入剧本时询问。
+                </p>
+              </div>
+            </details>
+          )}
+          {action.kind === 'profile' && (
+            <ProfileFields value={profile} onChange={setProfile} disabled={busy} />
+          )}
+          {(action.kind === 'create-page' || action.kind === 'rename-page') && (
+            <label className="grid gap-2 text-sm">
+              所属剧集
+              <NativeSelect
+                value={episodeId}
+                disabled={busy || episodes.isPending}
+                onChange={(event) => setEpisodeId(event.target.value)}
+              >
+                <option value="">不属于任何剧集</option>
+                {episodes.data?.map((episode) => (
+                  <option key={episode.id} value={episode.id}>
+                    {episodeLabel(episode)}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
           )}
           {action.kind === 'create' && (
             <p className="flex gap-2 rounded-xl bg-muted p-3 text-xs text-muted-foreground">

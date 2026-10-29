@@ -64,6 +64,7 @@ test('项目库与创作页生命周期、偏好重启保留及明暗最小窗�
       );
       expect(width).toBe(256);
     }
+    await page.getByRole('tab', { name: '创作页', exact: true }).click();
     await page.getByRole('button', { name: '新建创作页' }).click();
     dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: '创作页名称' }).fill('第一集');
@@ -94,9 +95,11 @@ test('项目库与创作页生命周期、偏好重启保留及明暗最小窗�
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true);
-      const tabs = page.getByRole('tab', { name: '创作页', exact: true });
+      const tabs = page.getByRole('tab', { name: '剧集', exact: true });
       await tabs.focus();
       await page.keyboard.press('ArrowRight');
+      await expect(page.getByRole('button', { name: '新建创作页' })).toBeVisible();
+      await page.getByRole('tab', { name: '项目资产', exact: true }).click();
       await expect(page.getByLabel('项目资产内容')).toBeVisible();
       await page.keyboard.press('ArrowLeft');
       await page.getByRole('link', { name: '项目库', exact: true }).first().click();
