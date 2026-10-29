@@ -1,6 +1,6 @@
 # Agent Note: 画布图片节点转 720° 全景图
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
@@ -33,9 +33,9 @@ Frame Loom 的图片节点已有多角度、重打光和表情编辑（[图片�
 
 同类产品的价值主要在生成之后：在球面查看器里拖动取景，截图成为新的场景／分镜参考图（小云雀、ComfyTV 的 Current View／Multi-View，[ComfyTV 指南](https://comfytv.org/zh/guides/panorama)），或把全景导入导演台作为环境球（LibTV、BeefTV 导演台）。BeefTV 的全景节点用 three.js 的反向球体渲染，支持拖动、方向键、全屏滚轮调 FOV、截图和前右后左四宫格导出（`web/src/components/canvas/nodes/panorama-node.tsx`）。
 
-## Proposal
+## Decision
 
-2026-10-29 用户确认：首期只用通用图像编辑模型，专门全景协议待有账号后另立项；Gemini 等无 2:1 的模板默认不可用，由用户在能力卡显式加入；截图与生成同期交付，导演台、接缝二次重绘、超分不在本期。
+全景生成使用通用图像编辑模型；Gemini 等无 2:1 的模板默认不可用，由用户在能力卡显式加入；生成、查看和本地截图共同交付。专门全景协议待有账号后另立项；导演台、接缝二次重绘、超分不在本期。
 
 ### 产品行为
 
@@ -64,7 +64,7 @@ Frame Loom 的图片节点已有多角度、重打光和表情编辑（[图片�
 - 创建任务时，`panorama` 分支覆盖前端传入的尺寸参数，写入 `geometry.expected = { ratio: 2, width, height }`，与角度分支一样冻结到任务请求。
 - 下载后处理复用表情的中间图／最终图机制（`snapshot.imageEditPostProcess`），重试只做本地处理，不重发供应商请求：
   1. 输出比例在 2:1 ±1% 内：执行接缝颜色校正，最终图作为唯一输出。
-  2. 比例不符：中间图原样作为输出，写诊断「输出不是 2:1，不能作为全景查看」，任务仍成功；用户已付费，结果仍可当普通图片使用。
+  2. 比例不符：中间图原样作为输出，写诊断「输出不是 2:1，不能作为全景查看」，任务仍成功；用户已付费，结果仍可当普通图片使用。画布节点也按活动版本比例显示该提示，不依赖已结束任务的内存引用，因此重新打开项目后仍可见。
 - 接缝颜色校正（sharp，确定性）：带宽 `b = max(8, round(W × 2%))`；逐行取左右各 3 列的均值差 `d`，沿纵向做 9 行盒式平滑，在左带内减去 `d/2 × (1 − x/b)`、右带内加上对称值。带外像素逐字节不变。校正前后的边缘差值写入诊断。这一步只消除亮度和色差断层，结构错位仍需重新生成。
 - 媒体清理已按快照保护中间图和最终图哈希，源图由配方保护；`project-media.service.ts` 不需要新增分支，实施时用测试确认。
 
@@ -74,7 +74,7 @@ Frame Loom 的图片节点已有多角度、重打光和表情编辑（[图片�
 - 查看器使用已有依赖 `three@0.185.1`，在对话框打开时按需加载，同一时间只有一个 WebGL 上下文：`texture.mapping = EquirectangularReflectionMapping`，作为 `scene.background`，`colorSpace = SRGBColorSpace`。纹理边长超过 `renderer.capabilities.maxTextureSize` 时先用 `createImageBitmap` 等比缩小。关闭时 `dispose` 并 `forceContextLoss`。
 - 截图渲染到离屏 `WebGLRenderTarget`，用 `readRenderTargetPixels` 读出后经 2D canvas 编码为 PNG，不开启 `preserveDrawingBuffer`。视角到相机朝向的换算放在纯函数里，单测不依赖 WebGL。
 - 截图节点经 `host.media.upload` 入库，用一步撤销命令批量创建子节点和连线（与 `createImageEditChild` 同一套布局与连线规则）。
-- 纹理从 `frame-media://` 加载；`media-protocol.ts` 已返回 `Access-Control-Allow-Origin`，WebGL 读取同源纹理不需要放宽 CSP，实施时在开发模式和目录包里都要实测。
+- 纹理调用 `host.media.url`：项目画布返回 `frame-project://<projectId>/media/<sha256>`，全局模型测试使用 `frame-media://`。两条协议都返回 `Access-Control-Allow-Origin`，无需放宽 CSP。开发模式与加固目录包 E2E 覆盖项目查看器及全局纹理上传 WebGL。ImageBitmap 解码显式 `flipY`，截图目标使用 sRGB，避免上下颠倒与导出颜色变暗。
 
 ## Alternatives considered
 
@@ -85,7 +85,7 @@ Frame Loom 的图片节点已有多角度、重打光和表情编辑（[图片�
 - **接缝只在查看器的着色器里遮盖，不改存储的图片**：最强理由是 engine 无需新增后处理。不选：下载的全景、截图和导入其他工具的全景仍然带接缝；engine 已有可恢复的后处理机制，接缝颜色校正的代码量小，并且结果确定。
 - **接缝平移到中央后再调用一次模型重绘**：最强理由是能修结构错位，社区 360 LoRA 工作流都这样做。不选首期：每张全景多一次收费请求，并且需要蒙版能力；先看颜色校正和提示词约束能否满足实际使用。
 
-## Acceptance criteria
+## Testing
 
 - `planPanoramaSize` 对 OpenAI、Seedream、Gemini 默认模板，以及手工加入 2:1 的 tier／ratio 能力卡，给出满足全部能力卡限制的严格 2:1 尺寸或明确的不可用原因；前端预检与 engine 结果一致。
 - 「全景」只对有效图片节点显示；不兼容模型要求显式选择；提交后创建子节点和连线并可一步撤销；配方保存源 SHA-256，任务冻结 `expected` 尺寸。
@@ -95,7 +95,11 @@ Frame Loom 的图片节点已有多角度、重打光和表情编辑（[图片�
 - 本地模拟服务 E2E 覆盖：OpenAI 模板返回 2:1 PNG → 子节点可查看 → 截图生成新节点；返回 1:1 PNG → 诊断、无角标。明暗主题截图已检查。
 - 全仓 typecheck、lint、format:check、build、test 与 `pnpm run verify` 通过。真实模型的全景质量需要用户另行授权费用后单独验收，不在本期声明。
 
-## Risks
+验证证据：contracts 模板与配方测试；engine `image-panorama.test.ts`、`image-edit-geometry.integration.test.ts`、`project-content.integration.test.ts`；canvas 提示词／面板、查看器生命周期、视角和批量撤销测试；desktop `e2e/panorama.test.ts`。模拟服务严格限制为本地 OpenAI 编辑端点，断言两次提交以及 2880×1440；截图像素断言中心方向、地面朝向与 sRGB 色值，五张 PNG 均为 1536×864，四向一次撤销。明暗主题与 720×560 布局截图已检查。关闭查看器释放纹理、位图和 WebGL 上下文由 mock 单测证明；真实渲染由 Electron E2E 证明。
+
+目录包首次在线构建因 Electron 下载网络超时失败；通过 `electron-builder --win --x64 --dir --publish never --config.electronDist=../../node_modules/.pnpm/electron@45.0.0_supports-color@7.2.0/node_modules/electron/dist` 复用当前安装的同版本运行时，正常执行 asar 完整性与 fuses 加固，并通过目录包 E2E。该路径是本次环境的构建参数，不是新增仓库配置。
+
+## Consequences
 
 - 通用模型的全景质量不稳定：可能出现地平线弯曲、极点条纹、接缝结构错位，或者没画成 ERP。颜色校正只修色差。缓解：提示词约束、比例校验诊断、可重新生成；质量不够时转向专门的全景协议。
 - 中转站可能改写或拒绝 2:1 尺寸，此时会命中比例诊断，用户要按服务商实际支持调整能力卡。
@@ -108,6 +112,6 @@ Frame Loom 的图片节点已有多角度、重打光和表情编辑（[图片�
 
 | 笔记 | 关系 |
 | --- | --- |
-| [图片编辑工具](../../implemented/feature/2026-10-28-canvas-image-edit-tools.md) | 部分重叠：沿用「不覆盖源节点、子节点连线、配方冻结、engine 后处理可恢复」的约定，本篇为配方新增 `panorama` 分支。实施完成后需原地补一行关联。 |
+| [图片编辑工具](2026-10-28-canvas-image-edit-tools.md) | 部分重叠：沿用「不覆盖源节点、子节点连线、配方冻结、engine 后处理可恢复」的约定，本篇为配方新增 `panorama` 分支。 |
 | [图片编辑输出几何](../../implemented/bug-fix/2026-10-29-image-edit-geometry.md) | 部分重叠：沿用 `geometry.expected` 和「不两轴独立缩放」，新增 2:1 目标尺寸规划；不改变已有三项编辑的规划规则。 |
 | [模型服务配置层重构](../../implemented/architecture/2026-10-28-model-service-rebuild.md) | 相邻：只读取能力卡与协议上限，不修改能力卡格式；新增专门全景协议时回到该篇的协议规则。 |

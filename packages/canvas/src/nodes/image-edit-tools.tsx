@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Camera, ScanFace, Sun } from 'lucide-react';
+import { Camera, ScanFace, Sun, Globe } from 'lucide-react';
 import { Button } from '@frame-loom/ui/components/button';
 import { Dialog, DialogContent, DialogTitle } from '@frame-loom/ui/components/dialog';
 import {
   ImageEditRecipe,
   imageEditSupport,
   planEditGeometry,
+  planPanoramaSize,
   type CanvasMediaData,
 } from '@frame-loom/contracts';
 import { useCanvas, useCanvasState } from '../context';
@@ -30,7 +31,9 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
   const { host, registry, store } = useCanvas();
   const version = activeVersion(data);
   const config = useCanvasState((state) => state.generationConfig);
-  const [tool, setTool] = useState<'angle' | 'lighting' | 'emotion' | null>(null);
+  const [tool, setTool] = useState<'angle' | 'lighting' | 'emotion' | 'panorama' | null>(null);
+  const [sceneHint, setSceneHint] = useState('');
+  const [panoramaTier, setPanoramaTier] = useState('');
   const [angle, setAngle] = useState<AngleParameters>(defaultAngleParameters);
   const [lighting, setLighting] = useState<LightingParameters>(defaultLightingParameters);
   const [smartDescription, setSmartDescription] = useState('');
@@ -40,16 +43,30 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
   if (!version) return null;
   const models = (config?.models ?? []).filter((model) => model.capability.kind === 'image');
   const model = models.find((item) => item.id === modelId);
+  const panoramaPlan =
+    model?.capability.kind === 'image'
+      ? planPanoramaSize(model.capability, panoramaTier || undefined)
+      : undefined;
   let geometry: ReturnType<typeof planEditGeometry> | undefined;
   let geometryIssue: string | undefined;
   if (model?.capability.kind === 'image') {
     try {
-      geometry = planEditGeometry(model.capability, {
+      const crop = {
         x: 0,
         y: 0,
         width: version.width ?? 0,
         height: version.height ?? 0,
-      });
+      };
+      if (tool === 'panorama') {
+        geometryIssue = panoramaPlan?.issue;
+        if (crop.width <= 0 || crop.height <= 0) geometryIssue = '源图片尺寸无效';
+        geometry = {
+          crop,
+          pad: { left: 0, right: 0, top: 0, bottom: 0 },
+          expected: panoramaPlan?.expected ?? {},
+          request: panoramaPlan?.request ?? {},
+        };
+      } else geometry = planEditGeometry(model.capability, crop);
     } catch (error) {
       geometryIssue = error instanceof Error ? error.message : '无法规划图片尺寸';
     }
@@ -80,13 +97,21 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
       </>
     );
   const source = { nodeId, sha256: version.sha256 };
-  const recipe = (operation: 'angle' | 'lighting') =>
+  const recipe = (operation: 'angle' | 'lighting' | 'panorama') =>
     ImageEditRecipe.parse(
-      operation === 'angle'
-        ? { version: 1, source, operation, ...angle }
-        : { version: 1, source, operation, ...lighting },
+      operation === 'panorama'
+        ? {
+            version: 1,
+            source,
+            operation,
+            sceneHint,
+            ...(panoramaTier ? { tier: panoramaTier } : {}),
+          }
+        : operation === 'angle'
+          ? { version: 1, source, operation, ...angle }
+          : { version: 1, source, operation, ...lighting },
     );
-  const createChild = (operation: 'angle' | 'lighting') => {
+  const createChild = (operation: 'angle' | 'lighting' | 'panorama') => {
     const selectedModel = model;
     if (selectedModel?.capability.kind !== 'image') {
       store.getState().notify('请选择图片编辑模型');
@@ -120,7 +145,7 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
       return;
     const child = store.getState().document.nodes[before];
     store.getState().select([child.id]);
-    if (operation === 'angle') {
+    if (operation === 'angle' || operation === 'panorama') {
       setTool(null);
       if (!host.generation) return;
       void host.generation
@@ -145,7 +170,7 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
           }));
         })
         .catch((error: unknown) =>
-          store.getState().notify(error instanceof Error ? error.message : '提交角度编辑失败'),
+          store.getState().notify(error instanceof Error ? error.message : '提交图片编辑失败'),
         );
     } else setTool(null);
   };
@@ -186,6 +211,19 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
         <ScanFace aria-hidden="true" className="size-3.5" />
         表情
       </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="转全景"
+        onClick={() => {
+          setSceneHint('');
+          setPanoramaTier('');
+          setTool('panorama');
+        }}
+      >
+        <Globe aria-hidden="true" className="size-3.5" />
+        全景
+      </Button>
       {tool && (
         <Dialog open onOpenChange={(open) => !open && setTool(null)}>
           <DialogContent
@@ -195,7 +233,11 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
           >
             <header className="flex items-center justify-between">
               <DialogTitle className="text-sm font-medium">
-                {tool === 'angle' ? '多角度编辑' : '重打光编辑'}
+                {tool === 'panorama'
+                  ? '转 720° 全景图'
+                  : tool === 'angle'
+                    ? '多角度编辑'
+                    : '重打光编辑'}
               </DialogTitle>
               <Button
                 size="icon"
@@ -212,7 +254,10 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
                 aria-label="编辑模型"
                 className="h-8 rounded-md border bg-background px-2"
                 value={model?.id ?? ''}
-                onChange={(event) => setModelId(event.target.value)}
+                onChange={(event) => {
+                  setModelId(event.target.value);
+                  setPanoramaTier('');
+                }}
               >
                 <option value="">选择图片编辑模型</option>
                 {models.map((item) => (
@@ -222,7 +267,45 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
                 ))}
               </select>
             </label>
-            {tool === 'angle' ? (
+            {tool === 'panorama' ? (
+              <>
+                <label className="grid gap-1 text-xs">
+                  四周环境补充描述
+                  <textarea
+                    aria-label="四周环境补充描述"
+                    maxLength={500}
+                    className="min-h-20 rounded-md border bg-background p-2"
+                    value={sceneHint}
+                    onChange={(event) => setSceneHint(event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-1 text-xs">
+                  清晰度
+                  <select
+                    aria-label="全景清晰度"
+                    className="h-8 rounded-md border bg-background px-2"
+                    value={panoramaTier}
+                    onChange={(event) => setPanoramaTier(event.target.value)}
+                  >
+                    <option value="">默认</option>
+                    {panoramaPlan?.choices.map((choice) => (
+                      <option key={choice.tier} value={choice.tier}>
+                        {choice.tier}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {panoramaPlan && !panoramaPlan.issue && (
+                  <p className="text-xs text-muted-foreground">
+                    输出尺寸：
+                    {panoramaPlan.expected.width
+                      ? `${panoramaPlan.expected.width}×${panoramaPlan.expected.height}`
+                      : `${panoramaPlan.request.tier ?? ''} · 2:1`}
+                    ，固定单张。通用模型可能出现接缝结构错位。
+                  </p>
+                )}
+              </>
+            ) : tool === 'angle' ? (
               <>
                 <div className="flex flex-wrap gap-1">
                   {anglePresets.map((preset) => (
@@ -414,9 +497,11 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
               <Button
                 variant="outline"
                 onClick={() =>
-                  tool === 'angle'
-                    ? setAngle(defaultAngleParameters)
-                    : setLighting(defaultLightingParameters)
+                  tool === 'panorama'
+                    ? (setSceneHint(''), setPanoramaTier(''))
+                    : tool === 'angle'
+                      ? setAngle(defaultAngleParameters)
+                      : setLighting(defaultLightingParameters)
                 }
               >
                 重置参数

@@ -5,6 +5,13 @@ import { buildLightingPrompt, defaultLightingParameters } from './image-edit-par
 import { buildEmotionPrompt } from './image-emotion';
 
 const source = { nodeId: 'source', sha256: 'a'.repeat(64) };
+it('全景提示词固定投影、方位与禁止项，并追加环境描述', () => {
+  expect(
+    buildImageEditPrompt({ version: 1, operation: 'panorama', source, sceneHint: '四周为竹林' }),
+  ).toBe(
+    '将参考图转成严格 2:1 等距柱状投影（equirectangular）全景，水平 360°、垂直 180°。地平线位于画面纵向中线；以源图为正前方视角并放在画面中央。补全左右、后方、天空或天花板、地面或地板，左右边缘连续无缝。保持源图的风格、材质、光线和时代特征。禁止拼贴、分格、边框、文字、水印、拍摄设备。四周环境补充描述：四周为竹林',
+  );
+});
 it('集中提示词保持角度、打光原文，表情坐标计入补边', () => {
   const angle = ImageEditRecipe.parse({
     version: 1,

@@ -11,6 +11,49 @@ import { AudioNodeView } from './audio-view';
 
 const zoom = vi.hoisted(() => ({ value: 1 }));
 
+it('全景角标和查看入口只取当前活动版本的比例', () => {
+  const versions = [
+    generationJob().outputs[0],
+    { ...generationJob().outputs[0], sha256: sha('b'), width: 200, height: 100 },
+  ];
+  const node = media('panorama', 'image', {
+    data: {
+      versions,
+      activeVersion: 1,
+      prompt: '',
+      inputOrder: [],
+      imageEdit: {
+        version: 1,
+        operation: 'panorama',
+        sceneHint: '',
+        source: { nodeId: 'source', sha256: sha('a') },
+      },
+    },
+  });
+  const store = createCanvasStore(doc([node]));
+  const view = (active: number) => (
+    <CanvasContext.Provider
+      value={{
+        store,
+        registry: createBuiltinRegistry(),
+        host: { media: { upload: vi.fn(), url: (hash) => hash } },
+      }}
+    >
+      <ImageNodeView
+        node={{ ...node, data: { ...(node.data as CanvasMediaData), activeVersion: active } }}
+        selected
+      />
+    </CanvasContext.Provider>
+  );
+  const { rerender } = render(view(1));
+  expect(screen.getByText('720°')).toBeDefined();
+  expect(screen.getByRole('button', { name: '查看全景' })).toBeDefined();
+  rerender(view(0));
+  expect(screen.queryByText('720°')).toBeNull();
+  expect(screen.queryByRole('button', { name: '查看全景' })).toBeNull();
+  expect(screen.getByText('输出不是 2:1，不能作为全景查看')).toBeDefined();
+});
+
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id, isConnectable }: { id: string; isConnectable?: boolean }) => (
     <button aria-label={id} disabled={isConnectable === false} />

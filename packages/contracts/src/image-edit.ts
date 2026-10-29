@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ImageCap } from './capabilities.js';
 import type { ProtocolDescriptor } from './protocols.js';
+import { planPanoramaSize } from './edit-geometry.js';
 
 const Sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const FaceBox = z.strictObject({
@@ -26,6 +27,12 @@ const Geometry = z.strictObject({
 const Common = { version: z.literal(1), source: Source, geometry: Geometry.optional() };
 
 const ImageEditRecipeUnion = z.discriminatedUnion('operation', [
+  z.strictObject({
+    ...Common,
+    operation: z.literal('panorama'),
+    sceneHint: z.string().max(500),
+    tier: z.string().min(1).max(64).optional(),
+  }),
   z.strictObject({
     ...Common,
     operation: z.literal('angle'),
@@ -78,6 +85,7 @@ export type ImageEditRecipe = z.infer<typeof ImageEditRecipe>;
 export function imageEditSupport(cap: ImageCap, descriptor: ProtocolDescriptor) {
   const max = cap.references.max ?? Infinity;
   const available = max >= 1;
+  const panorama = planPanoramaSize(cap);
   const emotion = !!descriptor.ceiling.image?.edit && max >= 2;
   const mask =
     emotion &&
@@ -85,6 +93,15 @@ export function imageEditSupport(cap: ImageCap, descriptor: ProtocolDescriptor) 
     !!cap.mask &&
     !!descriptor.ceiling.image?.mask.includes(cap.mask.semantics);
   return {
+    panorama: {
+      available: available && !panorama.issue,
+      mask: false,
+      ...(!available
+        ? { reason: '至少需要一个参考图' }
+        : panorama.issue
+          ? { reason: panorama.issue }
+          : {}),
+    },
     angle: { available, mask: false, ...(!available ? { reason: '至少需要一个参考图' } : {}) },
     lighting: { available, mask: false, ...(!available ? { reason: '至少需要一个参考图' } : {}) },
     emotion: {

@@ -1,8 +1,38 @@
 import { expect, it } from 'vitest';
-import { planEditGeometry } from './edit-geometry.js';
+import { planEditGeometry, planPanoramaSize } from './edit-geometry.js';
 import { getProtocol } from './protocols.js';
 import { resolveImageSize } from './image-size.js';
 import { ImageEditRecipe } from './image-edit.js';
+
+it('全景候选遵守模板、参考图限制与显式清晰度', () => {
+  const openai = structuredClone(getProtocol('openai-images')!.templates.image!);
+  expect(planPanoramaSize(openai).request).toEqual({ width: 2880, height: 1440 });
+  for (const id of ['openai-images', 'ark-seedream']) {
+    const cap = getProtocol(id)?.templates.image;
+    if (!cap) throw new Error(`缺少模板 ${id}`);
+    const plan = planPanoramaSize(cap);
+    expect(plan.issue).toBeUndefined();
+    for (const choice of plan.choices) {
+      expect(resolveImageSize(cap, choice.request, true).issue).toBeUndefined();
+      expect(choice.width! / choice.height!).toBe(2);
+    }
+    if (id === 'ark-seedream') expect(plan.choices.some((c) => c.width === 2048)).toBe(false);
+  }
+  expect(planPanoramaSize(getProtocol('gemini-generate')!.templates.image!).issue).toContain('2:1');
+  for (const wire of ['pixels', 'tier', 'ratio'] as const) {
+    openai.size = {
+      wire,
+      tiers: [{ name: '2K', enabled: true, ratios: [{ ratio: '2:1', pixels: '2048x1024' }] }],
+      default: { auto: true },
+    };
+    expect(planPanoramaSize(openai).request).toEqual({ tier: '2K', aspectRatio: '2:1' });
+    expect(planPanoramaSize(openai, '不存在').issue).toBeDefined();
+    openai.size.tiers[0].enabled = false;
+    expect(planPanoramaSize(openai).issue).toContain('2:1');
+  }
+  openai.size.wire = 'none';
+  expect(planPanoramaSize(openai).issue).toContain('2:1');
+});
 
 it.each([0.75, 1.6, 0.2, 0.7, 1, 3, 8])('自定义像素规划遵守全部限制：%s', (aspect) => {
   const cap = structuredClone(getProtocol('openai-images')!.templates.image!);

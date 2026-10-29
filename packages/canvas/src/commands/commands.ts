@@ -4,6 +4,7 @@ import type {
   CanvasGroupColor,
   CanvasNode,
   CanvasMediaData,
+  CanvasMediaVersion,
 } from '@frame-loom/contracts';
 import type { ImageEditRecipe } from '@frame-loom/contracts';
 import { CANVAS_LIMITS, TAGGABLE_NODE_TYPES } from '@frame-loom/contracts';
@@ -162,6 +163,46 @@ export function createImageEditChild(
     target: child.id,
     targetHandle: 'reference',
   });
+}
+
+export function createPanoramaCaptures(
+  registry: NodeRegistry,
+  document: CanvasDocument,
+  sourceId: string,
+  sourceHash: string,
+  captures: { version: CanvasMediaVersion; title: string }[],
+): CanvasDocument {
+  const source = document.nodes.find((node) => node.id === sourceId);
+  const data = source?.data as CanvasMediaData | undefined;
+  if (
+    !source ||
+    source.type !== 'image' ||
+    data?.versions[data.activeVersion]?.sha256 !== sourceHash
+  )
+    throw new CanvasCommandError('源图片版本已变化，请重新打开全景');
+  if (isNodeLocked(document, source)) throw new CanvasCommandError('源节点已锁定');
+  const position = absolutePosition(document, source);
+  const nodes = captures.map((capture, index) => {
+    const node = createNode(
+      registry,
+      'image',
+      {
+        x: position.x + source.size.width + 200,
+        y: position.y + source.size.height / 2 + index * 280,
+      },
+      { versions: [capture.version], activeVersion: 0, prompt: '', inputOrder: [] },
+    );
+    return { ...node, title: capture.title };
+  });
+  let next = addNodes(document, nodes);
+  for (const node of nodes)
+    next = connect(registry, next, {
+      source: sourceId,
+      sourceHandle: 'out',
+      target: node.id,
+      targetHandle: 'reference',
+    });
+  return next;
 }
 
 export function updateNode(

@@ -20,6 +20,22 @@ const emotion = {
 };
 
 describe('ImageEditRecipe', () => {
+  it('全景配方严格校验与能力原因', () => {
+    const recipe = { version: 1, source, operation: 'panorama', sceneHint: '室内' };
+    expect(ImageEditRecipe.parse(recipe)).toEqual(recipe);
+    expect(ImageEditRecipe.safeParse({ ...recipe, sceneHint: '长'.repeat(501) }).success).toBe(
+      false,
+    );
+    expect(ImageEditRecipe.safeParse({ ...recipe, extra: true }).success).toBe(false);
+    const protocol = getProtocol('openai-images')!;
+    const cap = structuredClone(protocol.templates.image!);
+    expect(imageEditSupport(cap, protocol).panorama.available).toBe(true);
+    cap.references.max = 0;
+    expect(imageEditSupport(cap, protocol).panorama.reason).toContain('参考图');
+    cap.references.max = 1;
+    cap.size.wire = 'none';
+    expect(imageEditSupport(cap, protocol).panorama.reason).toContain('2:1');
+  });
   it('accepts bounded edits and rejects unknown fields and invalid geometry', () => {
     expect(ImageEditRecipe.parse(emotion)).toMatchObject({ postProcess: 'pending' });
     expect(() => ImageEditRecipe.parse({ ...emotion, extra: true })).toThrow();

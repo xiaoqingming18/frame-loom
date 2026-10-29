@@ -18,9 +18,51 @@ import {
   ungroup,
   insertImageReference,
   createImageEditChild,
+  createPanoramaCaptures,
 } from './commands';
 
 const registry = createBuiltinRegistry();
+
+it('四向截图创建连线、使用分组绝对坐标、一步撤销并拒绝过期源图', () => {
+  const version = {
+    sha256: 'a'.repeat(64),
+    mime: 'image/png',
+    width: 1536,
+    height: 864,
+    createdAt: new Date().toISOString(),
+  };
+  const source = media('source', 'image', {
+    parentId: 'group',
+    position: { x: 20, y: 30 },
+    data: { versions: [version], activeVersion: 0, prompt: '', inputOrder: [] },
+  });
+  const store = createCanvasStore(doc([group('group', { position: { x: 500, y: 600 } }), source]));
+  const before = store.getState().document;
+  const captures = [0, 90, 180, 270].map((yaw) => ({ title: `${yaw}°`, version }));
+  expect(
+    store
+      .getState()
+      .apply((document) =>
+        createPanoramaCaptures(registry, document, 'source', version.sha256, captures),
+      ),
+  ).toBe(true);
+  expect(store.getState().document.nodes).toHaveLength(6);
+  expect(store.getState().document.edges).toHaveLength(4);
+  expect(store.getState().document.nodes[2].position.x).toBeGreaterThan(520);
+  expect(
+    new Set(
+      store
+        .getState()
+        .document.nodes.slice(2)
+        .map((node) => node.position.y),
+    ).size,
+  ).toBe(4);
+  store.getState().undo();
+  expect(store.getState().document).toEqual(before);
+  expect(() =>
+    createPanoramaCaptures(registry, before, 'source', 'b'.repeat(64), captures),
+  ).toThrow('版本已变化');
+});
 
 it('参考连线与标签一步撤销；参考上限、成环、锁定错误不留下部分修改', () => {
   const source = media('source');

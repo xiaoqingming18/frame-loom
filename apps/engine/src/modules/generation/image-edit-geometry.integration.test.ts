@@ -75,6 +75,68 @@ async function setup(wrong = false) {
   };
 }
 
+it.each([false, true])('全景冻结尺寸，比例错误保留原图，重启仅恢复后处理：%s', async (wrong) => {
+  const t = await setup(wrong);
+  const media = t.engine.app.get(MediaService);
+  const source = await media.saveStream([
+    await sharp({
+      create: {
+        width: 128,
+        height: 128,
+        channels: 4,
+        background: '#304050',
+      },
+    })
+      .png()
+      .toBuffer(),
+  ]);
+  const service = t.engine.app.get(GenerationService);
+  const job = await service.create(
+    SemanticRequest.parse({
+      modelId: t.model.id,
+      prompt: '全景',
+      source: 'canvas',
+      inputs: [],
+      params: { width: 512, height: 512, count: 2 },
+      imageEdit: {
+        version: 1,
+        operation: 'panorama',
+        sceneHint: '',
+        source: { nodeId: 'source', sha256: source.sha256 },
+      },
+    }),
+  );
+  expect(job.request.params).toMatchObject({ width: 2880, height: 1440, count: 1 });
+  expect(job.request.imageEdit?.geometry?.expected).toEqual({
+    ratio: 2,
+    width: 2880,
+    height: 1440,
+  });
+  await expect.poll(() => service.get(job.id).status).toBe('succeeded');
+  const db = t.engine.app.get(DatabaseService).db;
+  const stored = db.select().from(generationJobs).where(eq(generationJobs.id, job.id)).get()!;
+  const intermediate = stored.snapshot.imageEditPostProcess!.intermediateSha256;
+  if (wrong) {
+    expect(service.get(job.id).outputs[0].sha256).toBe(intermediate);
+    expect(service.get(job.id).diagnostic?.message).toContain('输出不是 2:1');
+  } else expect(service.get(job.id).outputs[0]).toMatchObject({ width: 2880, height: 1440 });
+  db.update(generationJobs)
+    .set({
+      status: 'paused',
+      outputs: [],
+      snapshot: { ...stored.snapshot, imageEditPostProcess: { intermediateSha256: intermediate } },
+      rawResponse: [{ kind: 'url', url: `${t.upstream.origin}/output.png`, mime: 'image/png' }],
+    })
+    .where(eq(generationJobs.id, job.id))
+    .run();
+  await t.engine.restart();
+  const restarted = t.engine.app.get(GenerationService);
+  restarted.requery(job.id);
+  await expect.poll(() => restarted.get(job.id).status).toBe('succeeded');
+  expect(t.downloads).toBe(1);
+  expect(t.upstream.requests.filter((req) => req.method === 'POST')).toHaveLength(1);
+});
+
 it.each([false, true])('真实适配器冻结竖图尺寸、比例失败仅重试合成：错误比例=%s', async (wrong) => {
   const t = await setup(wrong);
   const media = t.engine.app.get(MediaService);

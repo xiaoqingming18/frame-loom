@@ -1,6 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { type CanvasMediaData, type ImageCap, type SemanticRequest } from '@frame-loom/contracts';
+import {
+  getProtocol,
+  type CanvasMediaData,
+  type ImageCap,
+  type SemanticRequest,
+} from '@frame-loom/contracts';
 import { CanvasContext } from '../context';
 import { createCanvasStore } from '../store/store';
 import { doc, generationJob, generationModelFixture, media, sha } from '../test-utils';
@@ -49,6 +54,58 @@ function setup(overrides: Partial<ImageCap> = {}, dimensions = { width: 256, hei
   );
   return { ...view, store, create, job };
 }
+
+it('全景显式选择、尺寸预览、提示词与子节点一步撤销', async () => {
+  const { store, create, job } = setup();
+  fireEvent.click(screen.getByRole('button', { name: '转全景' }));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '确认' }).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.modelId } });
+  expect(screen.getByText(/输出尺寸：2880×1440/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('四周环境补充描述'), { target: { value: '古代庭院' } });
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create.mock.calls[0][0]).toMatchObject({
+    params: { width: 2880, height: 1440 },
+    imageEdit: { operation: 'panorama', sceneHint: '古代庭院', source: { sha256: sha('a') } },
+  });
+  const prompt = (create.mock.calls[0][0] as SemanticRequest).prompt;
+  for (const text of ['2:1', '地平线', '左右边缘连续', '禁止拼贴', '古代庭院'])
+    expect(prompt).toContain(text);
+  expect(store.getState().document.edges).toHaveLength(1);
+  store.getState().undo();
+  expect(store.getState().document.nodes).toHaveLength(1);
+  expect(store.getState().document.edges).toHaveLength(0);
+});
+
+it('Gemini 默认尺寸不支持全景，不能提交', () => {
+  const { create, job } = setup({ size: getProtocol('gemini-generate')!.templates.image!.size });
+  fireEvent.click(screen.getByRole('button', { name: '转全景' }));
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.modelId } });
+  expect(screen.getByText('能力卡没有 2:1 输出尺寸')).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '确认' }).disabled).toBe(true);
+  expect(create).not.toHaveBeenCalled();
+});
+
+it('全景面板打开后源版本变化，拒绝创建与提交', () => {
+  const { store, create, job } = setup();
+  fireEvent.click(screen.getByRole('button', { name: '转全景' }));
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.modelId } });
+  act(() => {
+    store.getState().apply((document) => ({
+      ...document,
+      nodes: document.nodes.map((node) => ({
+        ...node,
+        data: {
+          ...(node.data as CanvasMediaData),
+          versions: [{ ...job.outputs[0], sha256: sha('b') }],
+        },
+      })),
+    }));
+  });
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  expect(store.getState().document.nodes).toHaveLength(1);
+  expect(create).not.toHaveBeenCalled();
+});
 
 it('单一模型仍要求显式选择，角度只提交一次并保留源图', async () => {
   const { store, create, job } = setup();

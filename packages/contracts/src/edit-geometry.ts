@@ -9,6 +9,70 @@ export type EditGeometry = {
   expected: { ratio?: number; width?: number; height?: number };
 };
 
+export type PanoramaSizePlan = {
+  request: SemanticParams;
+  expected: EditGeometry['expected'];
+  choices: { tier: string; request: SemanticParams; width?: number; height?: number }[];
+  issue?: string;
+};
+
+export function planPanoramaSize(cap: ImageCap, tier?: string): PanoramaSizePlan {
+  const { size } = cap;
+  const choices: PanoramaSizePlan['choices'] = [];
+  if (size.wire === 'pixels' && size.custom) {
+    for (const width of [4096, 3584, 2880, 2048]) {
+      const height = width / 2;
+      const request = { width, height };
+      if (!resolveImageSize(cap, request, true).issue)
+        choices.push({ tier: `${width}×${height}`, request, width, height });
+    }
+  } else if (size.wire !== 'none') {
+    for (const entry of size.tiers.filter((entry) => entry.enabled)) {
+      for (const cell of entry.ratios) {
+        const [width, height] = (
+          size.wire === 'pixels' ? (cell.pixels ?? '').split('x') : cell.ratio.split(':')
+        ).map(Number);
+        const request = { tier: entry.name, aspectRatio: cell.ratio };
+        if (
+          width > 0 &&
+          height > 0 &&
+          Math.abs(width / height / 2 - 1) <= 0.01 + Number.EPSILON &&
+          !resolveImageSize(cap, request, true).issue
+        ) {
+          const pixels = cell.pixels?.split('x').map(Number);
+          choices.push({
+            tier: entry.name,
+            request,
+            ...(pixels ? { width: pixels[0], height: pixels[1] } : {}),
+          });
+        }
+      }
+    }
+    choices.sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0));
+    if (choices.every((choice) => !choice.width)) choices.reverse();
+  }
+  const selected = tier
+    ? choices.find((choice) => choice.tier === tier)
+    : (choices.find((choice) => size.custom && choice.width === 2880) ?? choices[0]);
+  if (!selected)
+    return {
+      request: {},
+      expected: {},
+      choices,
+      issue: tier && choices.length ? '请选择可用的全景清晰度' : '能力卡没有 2:1 输出尺寸',
+    };
+  return {
+    request: selected.request,
+    expected: {
+      ratio: 2,
+      ...(selected.width && selected.height
+        ? { width: selected.width, height: selected.height }
+        : {}),
+    },
+    choices,
+  };
+}
+
 export function planEditGeometry(
   cap: ImageCap,
   source: EditRect,

@@ -43,6 +43,8 @@ import { checkConnection } from '../registry/connections';
 import { GenerationPanel } from './generation-panel';
 import { generationModel } from './generation-inputs';
 import { ImageEditTools } from './image-edit-tools';
+import { isPanorama } from './panorama';
+import { PanoramaViewer } from './panorama-viewer';
 
 const portClass: Record<string, string> = {
   image: 'canvas-port-image',
@@ -402,9 +404,11 @@ function Empty({ kind, pending }: { kind: 'image' | 'video'; pending: boolean })
 export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
   const { host, store } = useCanvas();
   const [uploading, setUploading] = useState(false);
+  const [panoramaOpen, setPanoramaOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const locked = useCanvasState((state) => isNodeLocked(state.document, props.node));
   const version = activeVersion(props.node.data);
+  const panorama = isPanorama(version?.width, version?.height);
   // shortcut: 直接展示原图，实测出现大量 4K 图片解码内存压力时由 engine 生成缩略图。
   return (
     <MediaFrame
@@ -415,6 +419,11 @@ export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
           <div className="nodrag nopan absolute -top-16 left-1/2 flex -translate-x-1/2 items-center gap-1">
             {version && (
               <ImageEditTools key={version.sha256} nodeId={props.node.id} data={props.node.data} />
+            )}
+            {panorama && (
+              <Button size="sm" variant="outline" onClick={() => setPanoramaOpen(true)}>
+                查看全景
+              </Button>
             )}
             {!version && (
               <>
@@ -498,16 +507,40 @@ export function ImageNodeView(props: NodeViewProps<CanvasMediaData>) {
       }
     >
       {version ? (
-        <MediaPreview key={version.sha256}>
-          <img
-            src={host.media.url(version.sha256)}
-            alt={props.node.title ?? '图片'}
-            draggable={false}
-            decoding="async"
-            loading="lazy"
-            className="size-full object-contain"
-          />
-        </MediaPreview>
+        <>
+          <MediaPreview key={version.sha256}>
+            <img
+              src={host.media.url(version.sha256)}
+              alt={props.node.title ?? '图片'}
+              draggable={false}
+              decoding="async"
+              loading="lazy"
+              className="size-full object-contain"
+            />
+          </MediaPreview>
+          {panorama && (
+            <span className="pointer-events-none absolute top-2 right-2 rounded-md border bg-card/95 px-2 py-1 text-xs text-foreground">
+              720°
+            </span>
+          )}
+          {!panorama && props.node.data.imageEdit?.operation === 'panorama' && (
+            <p
+              role="status"
+              className="absolute right-2 bottom-2 left-2 rounded-md border bg-card/95 p-2 text-xs text-foreground"
+            >
+              输出不是 2:1，不能作为全景查看
+            </p>
+          )}
+          {panorama && panoramaOpen && (
+            <PanoramaViewer
+              key={`panorama-${version.sha256}`}
+              nodeId={props.node.id}
+              hash={version.sha256}
+              width={version.width!}
+              onClose={() => setPanoramaOpen(false)}
+            />
+          )}
+        </>
       ) : (
         <Empty kind="image" pending={!!props.node.data.pendingJobIds?.length} />
       )}

@@ -151,6 +151,19 @@ it('媒体引用扫描保护编辑源与表情中间工件哈希', () => {
   });
   expect(documentReferences(doc).hashes).toEqual(new Set([source, crop, identity, mask]));
 });
+
+it('媒体引用扫描保护全景配方源图', () => {
+  const doc = document([]);
+  Object.assign(doc.nodes[0].data as Record<string, unknown>, {
+    imageEdit: {
+      version: 1,
+      operation: 'panorama',
+      sceneHint: '',
+      source: { nodeId: 'source', sha256: 'a'.repeat(64) },
+    },
+  });
+  expect(documentReferences(doc).hashes).toEqual(new Set(['a'.repeat(64)]));
+});
 function model(app: INestApplication<Server>) {
   const channels = app.get(ModelServicesRepository);
   const adapter = fakeProtocol();
@@ -480,7 +493,7 @@ it('清理保护全部页面版本、未结束任务和 pending 任务，会话�
   expect(await fs.readdir(join(p.rootPath, '.frameloom/media'))).toHaveLength(7);
 });
 
-it('全局启动清理保留未结束任务输入和产物、移除项目暂存；旧完成任务仅保留记录', async () => {
+it('全局启动清理保护全景源图与后处理快照、移除旧完成任务媒体', async () => {
   const s = await setup(),
     generation = s.app.get(GenerationService),
     media = s.app.get(MediaService);
@@ -490,7 +503,7 @@ it('全局启动清理保留未结束任务输入和产物、移除项目暂存�
     inputs: [],
   });
   const hashes: string[] = [];
-  for (let i = 0; i < 5; i++)
+  for (let i = 0; i < 7; i++)
     hashes.push((await media.saveStream([Buffer.concat([png, Buffer.from([i])])])).sha256);
   const unfinished = await generation.create(request),
     old = await generation.create(request),
@@ -508,10 +521,16 @@ it('全局启动清理保留未结束任务输入和产物、移除项目暂存�
       request: {
         ...request,
         inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: hashes[1] }],
+        imageEdit: {
+          version: 1,
+          operation: 'panorama',
+          sceneHint: '',
+          source: { nodeId: 'source', sha256: hashes[5] },
+        },
       },
       snapshot: {
         ...unfinishedRow.snapshot,
-        imageEditPostProcess: { intermediateSha256: hashes[4] },
+        imageEditPostProcess: { intermediateSha256: hashes[4], finalSha256: hashes[6] },
       },
     })
     .where(eq(generationJobs.id, unfinished.id))
@@ -530,7 +549,7 @@ it('全局启动清理保留未结束任务输入和产物、移除项目暂存�
     .where(eq(generationJobs.id, removed.id))
     .run();
   await s.restart();
-  for (const i of [0, 1, 3, 4])
+  for (const i of [0, 1, 3, 4, 5, 6])
     expect((await s.app.get(MediaService).resolve(hashes[i])).path).toContain(s.config.dataDir);
   await expect(s.app.get(MediaService).resolve(hashes[2])).rejects.toMatchObject({
     code: 'MEDIA_NOT_FOUND',

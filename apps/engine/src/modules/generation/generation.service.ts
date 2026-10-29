@@ -12,6 +12,7 @@ import {
   effectiveCapability,
   imageEditSupport,
   planEditGeometry,
+  planPanoramaSize,
   resolveImageSize,
   SemanticRequest,
   resolvePromptReferences,
@@ -28,6 +29,7 @@ import { ObjectStorageService } from '../object-storage/object-storage.service.j
 import { generationJobs, type JobRow } from './generation.schema.js';
 import { MediaService } from './media.service.js';
 import { compositeEmotion, emotionArtifacts } from './image-emotion.js';
+import { blendPanoramaSeam } from './image-panorama.js';
 import { publicReference } from './public-reference.js';
 import { ProtocolRegistry } from './protocols/registry.js';
 import { applyExtras, GenerationFailure, prepareCall, send } from './protocols/http.js';
@@ -181,6 +183,27 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           order,
           sha256: media.sha256,
         }));
+      } else if (request.imageEdit.operation === 'panorama') {
+        const recipe = request.imageEdit;
+        const source = await this.media.resolveAt(recipe.source.sha256, root);
+        if (!source.media.width || !source.media.height)
+          throw new DomainError('INVALID_REFERENCE', 422, '全景需要有效的源图片尺寸');
+        const plan = planPanoramaSize(capability, recipe.tier);
+        if (plan.issue) throw new DomainError('INVALID_EDIT', 422, plan.issue);
+        for (const key of ['width', 'height', 'tier', 'aspectRatio'] as const)
+          delete request.params[key];
+        request.params = { ...request.params, ...plan.request, count: 1 };
+        request.imageEdit = {
+          ...recipe,
+          geometry: {
+            crop: { x: 0, y: 0, width: source.media.width, height: source.media.height },
+            pad: { left: 0, right: 0, top: 0, bottom: 0 },
+            expected: plan.expected,
+          },
+        };
+        request.inputs = [
+          { kind: 'image', role: 'reference', order: 0, sha256: recipe.source.sha256 },
+        ];
       } else {
         const recipe = request.imageEdit;
         const source = await this.media.resolveAt(recipe.source.sha256, root);
@@ -550,7 +573,10 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
     const completed = new Set(row.snapshot.completedDownloads ?? []);
     const staged = new Set(row.stagedOutputs);
     const recipe =
-      row.request.imageEdit?.operation === 'emotion' ? row.request.imageEdit : undefined;
+      row.request.imageEdit?.operation === 'emotion' ||
+      row.request.imageEdit?.operation === 'panorama'
+        ? row.request.imageEdit
+        : undefined;
     if (recipe && row.snapshot.imageEditPostProcess?.intermediateSha256) completed.add(0);
     for (const [index, output] of row.rawResponse.entries()) {
       if (completed.has(index)) continue;
@@ -608,34 +634,47 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       if (!finalHash) {
         const intermediate = latest.snapshot.imageEditPostProcess?.intermediateSha256;
         if (!intermediate)
-          throw new GenerationFailure('upstream', 'MISSING_EDIT_OUTPUT', '缺少表情编辑中间图');
+          throw new GenerationFailure('upstream', 'MISSING_EDIT_OUTPUT', '缺少图片编辑中间图');
         const root = row.projectId
           ? await this.files.root(row.projectId).catch(() => undefined)
           : undefined;
         const source = await this.media.resolveAt(recipe.source.sha256, root);
         const generated = await this.media.resolveAt(intermediate, root);
-        const final = await compositeEmotion(
-          await readFile(source.path),
-          await readFile(generated.path),
-          recipe.editRegion,
-          recipe.targetFace,
-          recipe.geometry,
-          (message) =>
-            this.update(row.id, {
-              diagnostic: {
-                stage: 'download',
-                method: 'LOCAL',
-                route: 'emotion-composite',
-                message,
-              },
-            }),
-        ).catch((error: unknown) => {
-          throw new GenerationFailure(
-            'invalid_params',
-            'EDIT_POSTPROCESS_FAILED',
-            error instanceof Error ? error.message : '表情后处理失败',
-          );
-        });
+        const final =
+          recipe.operation === 'panorama'
+            ? await blendPanoramaSeam(await readFile(generated.path)).then((result) => {
+                this.update(row.id, {
+                  diagnostic: {
+                    stage: 'download',
+                    method: 'LOCAL',
+                    route: 'panorama-seam',
+                    message: result.message,
+                  },
+                });
+                return result.image;
+              })
+            : await compositeEmotion(
+                await readFile(source.path),
+                await readFile(generated.path),
+                recipe.editRegion,
+                recipe.targetFace,
+                recipe.geometry,
+                (message) =>
+                  this.update(row.id, {
+                    diagnostic: {
+                      stage: 'download',
+                      method: 'LOCAL',
+                      route: 'emotion-composite',
+                      message,
+                    },
+                  }),
+              ).catch((error: unknown) => {
+                throw new GenerationFailure(
+                  'invalid_params',
+                  'EDIT_POSTPROCESS_FAILED',
+                  error instanceof Error ? error.message : '表情后处理失败',
+                );
+              });
         const finalMedia = await this.media.saveStream([final], signal, 'image', 'image/png', root);
         finalHash = finalMedia.sha256;
         this.update(row.id, {
@@ -649,7 +688,12 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       outputs.add(finalHash);
     }
     const edit = row.request.imageEdit;
-    if (edit && edit.operation !== 'emotion' && edit.geometry?.expected.ratio) {
+    if (
+      edit &&
+      edit.operation !== 'emotion' &&
+      edit.operation !== 'panorama' &&
+      edit.geometry?.expected.ratio
+    ) {
       for (const hash of outputs) {
         const media = this.media.get(hash);
         if (
