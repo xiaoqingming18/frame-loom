@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { Editor } from '@tiptap/core';
 import type { ScriptDocument } from '@frame-loom/contracts';
 import { ScriptEditor } from './script-editor';
+import { applyReview } from './script-commands';
 afterEach(cleanup);
 Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
@@ -49,4 +50,34 @@ it('粘贴三行生成三个动作段', async () => {
   Object.defineProperty(event, 'clipboardData', { value: { getData: () => '一\n二\n三' } });
   fireEvent(textbox, event);
   expect(changed.mock.lastCall?.[0].blocks.map((block) => block.text)).toEqual(['一', '二', '三']);
+});
+it('保持存疑场标题后仍显示可切换徽标', async () => {
+  let editor: Editor | null = null;
+  const changed = vi.fn<(document: ScriptDocument) => void>();
+  render(
+    <ScriptEditor
+      document={{
+        schemaVersion: 1,
+        blocks: [
+          {
+            id: 'a',
+            type: 'scene',
+            text: '天台',
+            attrs: { time: 'night', space: 'ext' },
+            review: { reason: '存疑', options: [{ type: 'scene' }] },
+          },
+        ],
+      }}
+      onChange={changed}
+      onError={vi.fn()}
+      onEditor={(value) => {
+        editor = value;
+      }}
+    />,
+  );
+  await screen.findByRole('textbox', { name: '剧本编辑区' });
+  await waitFor(() => expect(editor).not.toBeNull());
+  editor!.commands.command(({ state, dispatch }) => applyReview('a')(state, dispatch));
+  fireEvent.click(screen.getByRole('button', { name: '切换场景时间' }));
+  expect(changed.mock.lastCall?.[0].blocks[0].attrs).toEqual({ time: 'dawn', space: 'ext' });
 });

@@ -1,6 +1,6 @@
 # Plan: 集成验收与收尾
 
-Status: draft
+Status: active
 Parent: plan.md
 
 ## 目标
@@ -15,7 +15,7 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 新建 `e2e/scripts.test.ts`，主流程走规则路径，不配置文本模型：
+- [x] T1 新建 `e2e/scripts.test.ts`，主流程走规则路径，不配置文本模型：
   1. 新建项目「剧本验收」，不展开项目设定；
   2. 在剧集 Tab 新建剧集，默认集号为 1，标题填「重逢」，确认后进入剧本页；
   3. 点击「粘贴整集剧本」，在文本框中填入 `packages/contracts/fixtures/script-sample-01.txt` 的内容，确认出现黄色的设定提示条；选择「短剧」「真人实拍」和「悬疑」，点击「开始转换」；
@@ -36,7 +36,7 @@ Parent: plan.md
   - 断言没有 CSP 错误。
 
   — 验证：同上一步的命令，2/2 通过。真实输入法下「组字时按 Enter 不拆段」的人工检查结果，引用 06 的记录。
-- [ ] T3 截图（只拍这些，保存到 `.cache/scripts/`，不提交）：明暗两种模式下，各截以下 5 张：
+- [x] T3 截图（只拍这些，保存到 `.cache/scripts/`，不提交）：明暗两种模式下，各截以下 5 张：
   - 带项目设定展开的新建项目对话框；
   - 剧集列表；
   - 转换进行中的剧本页；
@@ -50,13 +50,13 @@ Parent: plan.md
   逐张查看截图，检查以下几点：颜色都来自 token；文字没有被截断或溢出；焦点环可见；`document.documentElement.scrollWidth` 不超过 `innerWidth`。
 
   — 验证：截图文件已生成，查看结论和发现的问题记入本计划，问题修复后重新截图。
-- [ ] T4 性能数字（只记录，不作为门禁）：
+- [x] T4 性能数字（只记录，不作为门禁）：
   - 用 `parseScriptText` 把样例剧本复制成大约 3000 段，通过 `PUT` 写入一集；
   - 在 e2e 中记录从路由跳转到编辑器可编辑的时间；
   - 连续输入 50 个字符，用 `performance.now()` 记录每次按键的平均耗时。
 
   — 验证：两个数字写进本计划的「验证」一节。如果每次按键超过 16ms，记入「发现与偏差」，并按编辑器笔记的「Risks」一节处理。
-- [ ] T5 全仓门禁，只执行这一次：依次运行 `pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check`、`pnpm test`，以及受本需求影响的 e2e：
+- [x] T5 全仓门禁，只执行这一次：依次运行 `pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check`、`pnpm test`，以及受本需求影响的 e2e：
   - `e2e/scripts.test.ts`
   - `e2e/project-library.test.ts`
   - `e2e/project-tags.test.ts`
@@ -80,16 +80,26 @@ Parent: plan.md
 ## 验证
 
 - 预期：T1、T2 的 e2e 通过；T3 的截图已逐张查看；T4 的数字已记录；T5 全部通过；T6 后 `pnpm run verify` 通过。不调用真实模型。
-- 实际：未执行。
+- 构建：`pnpm --filter @frame-loom/engine... build`、`pnpm --filter @frame-loom/desktop build` 通过。
+- 全仓：`pnpm run typecheck`、`pnpm run lint`、`pnpm run format:check` 通过。lint 首轮发现测试类型问题，修复后全仓复查通过；格式问题已修复。后续编辑器修复再次通过 desktop typecheck 与相关文件 eslint。
+- 单元与集成：`pnpm test` 通过，contracts 283、canvas 163、desktop 283、engine 296，共 1025 项；后续新增和修复的剧本目录定向测试最新为 9 文件 66 项，全部通过。
+- 桌面：T5 列出的 7 个 e2e 文件共 9 条用例全部通过（`.cache/scripts-regression.log`）；修复宽屏折叠、最小窗口截图等待与明亮骨架后，剧本两条 e2e 再次通过（`.cache/scripts-e2e-final.log`）。主流程在右栏合并小林；重启后剧本与别名保留。无 pageerror 或 CSP 错误。
+- 截图：`new-project-{light,dark}`、`episodes-{light,dark}`、`conversion-{light,dark}`、`editor-{light,dark}`、`story-{light,dark}`、`episodes-720`、`editor-720` 共 12 张均已生成并逐张查看；最终修复后重看受影响截图。颜色复用 token；表单与抽屉纵向滚动，窄窗口剧集表格在容器内横向滚动，根文档均无横向溢出。名称输入框焦点环清晰，720 窗口可见更多菜单。
+- 性能：3000 段、50 字，最终一轮加载 **526ms**；每次 `keyboard.insertText` 的自动化往返平均 **97.51ms**；浏览器从 beforeinput 到 input 后微任务的平均 **18.97ms**。前一轮对应数字为 504ms、59.81ms、18.98ms，自动化往返波动较大。后者不包括完整绘制，前者包括 CDP 往返，二者不能混用。数字保存在 `.cache/scripts/performance.json`，不作为门禁或流畅度达标承诺。
+- T2 的自动化部分已通过；真实中文输入法组字时按 Enter 的人工检查未完成。专用开发窗口准备后，Computer Use 两次返回 `failed to activate captured window`，无法执行原生按键；已向用户请求实际检查结果。未以 CDP 模拟替代此项。
 
 ## 进度
 
 - 2026-10-29：创建子计划草稿。
+- 2026-10-29：完成开发、自动化与 12 张截图验收；真实输入法人工结果仍待补齐，暂不移动笔记或把总计划标为完成。
 
 ## 发现与偏差
 
-无。
+- 性能仍超过 16ms。已按编辑器笔记先优化装饰：元素高亮仅重算改段，场景徽标复用 mapping；另把元素出现位置合为一轮扫描，缓存未变化的大纲行并只在场 id 列表变化时重绑观察器。固定 3000 段的后一次浏览器输入处理均值由 33.47ms 降为 18.98ms，自动化往返由 101.53ms 降为 59.81ms；机器负载与采样方式会影响数字，仍保留大文档输入延迟风险。
+- 手柄最初受菜单触发器阻止原生拖动；拆开拖动按钮与菜单锚点，并限制选区工具条只响应文字选区，避免遮住落点。生产拖放验收通过。
+- 保存后剧集查询失效必须 exact；返回路由不复用陈旧剧本缓存，外部响应只在 revision 前进且无待保存编辑时重置。否则可能回退 revision 或把旧文档当成新编辑。
+- 已同步 README、AGENTS、项目库与主题外壳笔记。两篇 proposed 笔记暂保留原位；仅在真实输入法验收有结果后执行 T6 状态迁移与链接修复。
 
 ## 交接
 
-依赖 07、08、09，尚未开始。
+仅剩真实输入法组字回车的人工证据与据此完成 T6：补齐 06 → 07、08 状态，移两篇笔记至 implemented 并修链接，父子计划转 done，再运行 verify 并提交。已完成的实现、自动化、截图和文档事实可直接复用，不重跑无关测试。

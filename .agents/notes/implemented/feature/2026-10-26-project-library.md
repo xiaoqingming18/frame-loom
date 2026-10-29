@@ -21,7 +21,7 @@ Status: implemented
 5. 重命名项目只改显示名，不改文件夹名。
 6. 名称冲突时报错，让用户改名，不自动加后缀。
 7. 提供「打开已有项目」入口。
-8. 侧栏显示全部项目，展开后列出该项目的全部创作页，点击进入对应画布。
+8. 侧栏显示全部项目，展开后按剧集分组列出剧本与所属创作页，未分集页面单独分组。
 9. 删除画布测试页。
 10. 资产允许任意类型；单文件上限由本篇确定；同名上传自动改名。
 11. 资产搜索范围是整个项目，结果显示所在路径。
@@ -87,9 +87,12 @@ Status: implemented
   .frameloom\                            内部数据，资产列表和搜索都不显示
     project.json
     pages\<pageId>.json
+    scripts\<episodeId>.json              每集结构化剧本与导入原文
+    story.json                            项目设定库
     media\<sha256>.<ext>
     trash\media\<sha256>.<ext>           孤儿媒体回收区，保留 30 天
     trash\pages\<pageId>-<时间戳>.json   已删除创作页，保留 30 天
+    trash\scripts\<episodeId>-<时间戳>.json 已删除剧本，保留 30 天
     tmp\                                 上传与写入用的临时文件
 ```
 
@@ -126,6 +129,7 @@ Status: implemented
 - schema 放在 `packages/contracts/src/projects.ts`。读取时保留未知的顶层字段，重写时原样写回，给以后的同步元数据留位置。
 - `formatVersion` 高于当前支持的版本时，项目显示为「需要更新应用」，不能打开也不能写入；低于当前版本时，读取后迁移，下次写入时升级。
 - `pages[]` 的顺序就是创建顺序。`updatedAt` 和 `coverSha256` 由 engine 在每次保存页面后计算并回写。封面取所有图片节点所有版本中 `createdAt` 最新的一张图片（生成或上传的都算），没有图片时为 `null`，界面显示纯色卡片。
+- 清单增加可选的 `profile`、`episodes[]`，页面摘要增加可选的 `episodeId`；旧项目缺省仍可打开，`formatVersion` 不变。剧集、剧本和设定库格式见[剧集与结构化剧本](../../proposed/feature/2026-10-29-episodes-and-structured-scripts.md)。页面所属剧集只由 `ProjectPageSummary.episodeId` 表达，不在剧集中维护第二份页面列表。
 - 写入流程：先写到 `.frameloom/tmp/`，`fsync` 后改名覆盖目标文件。Windows 上目标被占用（`EPERM`／`EBUSY`）时，以 50ms 起步退避重试，累计最多 2 秒；仍失败则返回 `PROJECT_WRITE_FAILED`，不破坏原文件。
 - 同一项目的所有写操作（页面、清单、资产、媒体、清理）在 engine 内经过一个按项目 id 划分的串行队列。保存页面时先写页面文件，再写清单；两步之间崩溃会让清单摘要过时，下次读取页面时会修复。
 - 页面 revision 写在页面文件里。engine 缓存「revision、mtime、size」，任何一项与磁盘不一致就重新读取，所以文件被外部改动（同步盘、另一台机器）时也能拿到真实 revision。不一致的保存返回 409 `PAGE_REVISION_CONFLICT`，renderer 沿用现有的「重新加载／导出当前画布 JSON」流程。
@@ -160,6 +164,7 @@ Status: implemented
 - 重命名：只写 `project.json` 的 `name` 和注册表缓存，文件夹不变。项目不可用时不能重命名。
 - 删除：确认框列出项目名和路径，用单选项选择「同时将项目文件夹移到回收站（默认）」或「仅从项目库移除」。项目有未结束的生成任务时，提示「远端可能仍在运行并计费」，并提供「同时放弃这些任务」复选框，复用现有的 cancel。移到回收站由主进程执行；成功后 engine 删除注册行和对应的 `page_views`。
 - 创作页：新建时只填名称（规则同项目名，在项目内唯一），初始为空文档，revision 1，创建后直接进入画布。支持重命名；删除时把页面文件移到 `.frameloom/trash/pages/`，提醒方式同项目删除，删除后在侧栏和列表中移除。
+- `POST /projects/:id/pages` 接受 `{ name, episodeId? }`；`PATCH /projects/:id/pages/:pageId` 接受 `{ name?, episodeId? }`，至少修改一项。`episodeId: null` 表示未分集，非空 id 必须属于该项目。删除剧集时把所属页面设为未分集，并把剧本移入 `trash/scripts/`；回收区超过 30 天的剧本随清理删除，手动清空回收区也覆盖剧本。旧项目没有 `scripts/` 或 `story.json` 时正常工作。
 - 首页「选择项目」仍保持禁用，等创作功能开放后再接入。
 
 ### 媒体、生成与跨项目引用
@@ -223,8 +228,9 @@ Status: implemented
 | 路由 | 内容 |
 | --- | --- |
 | `/projects` | 项目库 |
-| `/projects/$projectId?tab=pages\|assets&path=` | 项目详情。默认 `tab=pages`；`path` 是资产当前目录；后退可回到原 Tab 和目录 |
+| `/projects/$projectId?tab=episodes\|pages\|story\|assets&path=` | 项目详情。默认 `tab=episodes`；`path` 是资产当前目录；后退可回到原 Tab 和目录 |
 | `/projects/$projectId/pages/$pageId` | 画布页，铺满主区。外壳的全出血判断由 `/canvas-lab` 改为匹配此路由 |
+| `/projects/$projectId/episodes/$episodeId?block=` | 剧本页，铺满主区；可定位到指定段落 |
 
 - 代码放在 `features/projects/`：项目库、详情页、资产、画布宿主与持久化（由 `features/canvas-lab` 迁入后删除原目录），对外导出查询选项给侧栏使用。侧栏属于 `app/shell`，可以导入 feature。服务端数据用 Query；画布持久化继续由独立会话持有 revision。
 - 项目库对齐快照：
@@ -239,7 +245,7 @@ Status: implemented
   - 说明条：`muted` 底加 Info 图标，文案沿用快照。
   - 底部：「取消」（secondary，胶囊）和「创建项目」（primary，胶囊）。名称无效时禁用创建，提交中显示加载态；engine 错误显示在对应字段下方并设置 `aria-invalid`。不照搬快照中的灰色禁用按钮色值。
 - 项目详情：
-  - 面包屑「项目库 / 项目名」。Tabs 使用 `line` 变体，两个 Tab 旁的 Info 图标用 Tooltip 说明用途。
+  - 面包屑「项目库 / 项目名」。Tabs 使用 `line` 变体，包含剧集、创作页、设定库和项目资产，Info 图标用 Tooltip 说明用途；标题旁的设置入口编辑项目设定。
   - 「新建创作页」胶囊按钮只在创作页 Tab 显示。
   - 创作页 Tab：卡片宫格，封面图 `object-cover`，无图时为 `muted` 纯色卡片加图标；显示名称和更新日期，菜单提供重命名和删除。空状态用 lucide 图标，文案「暂无创作页」和「创建创作页即可开始。」，不使用快照中的彩色插画。
 - 项目资产 Tab：
@@ -247,7 +253,7 @@ Status: implemented
   - 工具栏左侧是目录面包屑（「全部文件 / 角色」）；右侧依次为圆角搜索框、列表／宫格 ToggleGroup、刷新按钮。
   - 列表视图的列：名称、修改时间、大小、类型；宫格视图显示缩略图。行和卡片的菜单：重命名、移动到…、在资源管理器中显示、删除。
   - 空目录显示虚线拖放区（`border-border-strong`），非空时整个列表区也接受拖放，拖入时高亮 `accent`。搜索时切换为平铺结果，显示所在路径。
-- 侧栏「项目」分组：「+」打开新建对话框。下面列出全部项目（按项目库当前排序）；项目行可展开，列出全部创作页，没有页面时显示灰字「无创作页」。点击项目进入详情，点击页面进入画布；当前项目或页面高亮。列表区域独立滚动，折叠侧栏时整组隐藏。
+- 侧栏「项目」分组：「+」打开新建对话框。下面列出全部项目（按项目库当前排序）；项目展开后按剧集集号排列，每集列出剧本入口和按创建顺序排列的所属创作页，未分集页面单独列出。点击项目进入默认剧集 Tab；点击剧本或页面分别进入编辑器、画布。列表区域独立滚动，折叠侧栏时整组隐藏。
 - 画布页顶部：面包屑「项目库 / 项目 / 创作页」和保存状态。保存失败、冲突、离开拦截和关闭等待沿用画布测试页现有的实现。
 - 只新增 `--project-paper`、`--project-paper-icon` 这对 token（明暗成对定义）。不采用快照的 240px 侧栏、用户头像栏和衬线品牌字号；排序菜单的 16px 圆角、20px 卡片圆角保留为尺寸任意值。
 

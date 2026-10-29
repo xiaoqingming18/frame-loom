@@ -163,4 +163,17 @@ describe('剧本键盘命令', () => {
     ])
       expect(command(editor.state, undefined, { composing: true } as never)).toBe(false);
   });
+  it('保持当前只清除存疑，保留场标题属性和来源', () => {
+    const block: ScriptBlock = {
+      id: 'a',
+      type: 'scene',
+      text: '天台',
+      attrs: { time: 'night', space: 'ext' },
+      src: { line: 1 },
+      review: { reason: '存疑', options: [{ type: 'scene' }] },
+    };
+    const editor = setup([block]);
+    editor.run(applyReview('a'));
+    expect(editor.blocks[0]).toEqual({ ...block, review: undefined });
+  });
 });

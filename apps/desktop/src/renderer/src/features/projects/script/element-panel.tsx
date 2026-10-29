@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { Editor } from '@tiptap/core';
 import {
@@ -40,27 +40,38 @@ export function ElementPanel({
   const [occurrence, setOccurrence] = useState(0);
   const [merging, setMerging] = useState('');
   const [error, setError] = useState('');
-  const scenes = deriveScenes(document.blocks, number);
+  const occurrences = useMemo(() => {
+    const scenes = deriveScenes(document.blocks, number);
+    const terms = story.elements.flatMap((element) =>
+      [element.name, ...element.aliases].map((name) => ({
+        name,
+        kind: element.kind,
+        elementId: element.id,
+      })),
+    );
+    const result = new Map<string, { id: string; scene: string | undefined }[]>();
+    if (!terms.length) return result;
+    let sceneIndex = 0;
+    document.blocks.forEach((block, index) => {
+      while (sceneIndex < scenes.length && index >= scenes[sceneIndex].end) sceneIndex++;
+      const scene = scenes[sceneIndex];
+      for (const mention of block.type === 'note'
+        ? []
+        : findMentions(block.text, terms, block.type)) {
+        const hits = result.get(mention.elementId) ?? [];
+        hits.push({
+          id: block.id,
+          scene: scene && index >= scene.start ? scene.number : undefined,
+        });
+        result.set(mention.elementId, hits);
+      }
+    });
+    return result;
+  }, [document, number, story.elements]);
   const elements = story.elements.filter(
     (element) => element.kind === kind || element.id === selected,
   );
-  const positions = (element: StoryResult['elements'][number]) =>
-    document.blocks.flatMap((block, index) =>
-      block.type === 'note'
-        ? []
-        : findMentions(
-            block.text,
-            [element.name, ...element.aliases].map((name) => ({
-              name,
-              kind: element.kind,
-              elementId: element.id,
-            })),
-            block.type,
-          ).map(() => ({
-            id: block.id,
-            scene: scenes.find((scene) => index >= scene.start && index < scene.end)?.number,
-          })),
-    );
+  const positions = (element: StoryResult['elements'][number]) => occurrences.get(element.id) ?? [];
   const run = (path: string, method: string, body?: unknown) => {
     void mutate(path, method, body).catch((error: unknown) =>
       setError(error instanceof Error ? error.message : '操作失败'),
@@ -69,7 +80,7 @@ export function ElementPanel({
   return (
     <aside aria-label="本集元素" className="flex h-full flex-col overflow-auto p-3">
       <h2 className="mb-3 text-sm font-semibold">本集元素</h2>
-      <div className="mb-3 flex flex-wrap gap-1">
+      <div role="group" aria-label="元素分类" className="mb-3 flex flex-wrap gap-1">
         {(Object.keys(ELEMENT_LABELS) as ElementKind[]).map((value) => {
           const items = story.elements.filter(
             (element) => element.kind === value && positions(element).length,
@@ -79,6 +90,7 @@ export function ElementPanel({
               key={value}
               variant={value === kind ? 'secondary' : 'ghost'}
               size="sm"
+              aria-pressed={value === kind}
               onClick={() => setKind(value)}
             >
               {ELEMENT_LABELS[value]} {items.length}
@@ -104,6 +116,11 @@ export function ElementPanel({
                 scrollToBlock(editor, hits[0].id);
               }}
             >
+              <span
+                aria-hidden
+                data-script-element={element.kind}
+                className="mr-1.5 inline-block size-1.5 rounded-full"
+              />
               <span className="font-medium">{element.name}</span>
               <span className="ml-2 text-xs text-muted-foreground">
                 {element.status === 'pending' ? '待确认' : '已确认'}
@@ -165,6 +182,11 @@ export function ElementPanel({
                   </Button>
                 )}
               </div>
+            )}
+            {element.status === 'confirmed' && (
+              <Button variant="ghost" size="sm" onClick={() => setMerging(element.id)}>
+                合并到…
+              </Button>
             )}
             {merging === element.id && (
               <NativeSelect

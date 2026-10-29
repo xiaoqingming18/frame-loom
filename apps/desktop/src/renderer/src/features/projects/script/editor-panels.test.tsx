@@ -13,6 +13,7 @@ import { ReviewPopover } from './review-popover';
 import { SelectionToolbar } from './selection-toolbar';
 import { CharacterAutocomplete } from './character-autocomplete';
 import { ElementPanel } from './element-panel';
+import { BlockHandle } from './block-handle';
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
@@ -147,9 +148,40 @@ it('本集元素逐处定位、确认、忽略与合并', () => {
   );
   fireEvent.click(screen.getByRole('button', { name: '下一处' }));
   expect(scroll).toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: '合并到…' }));
+  fireEvent.click(screen.getAllByRole('button', { name: '合并到…' })[1]);
   fireEvent.change(screen.getByLabelText('合并目标'), { target: { value: 'a' } });
   expect(mutate).toHaveBeenCalledWith('elements/b/merge', 'POST', { into: 'a' });
   fireEvent.click(screen.getByRole('button', { name: '忽略' }));
   expect(mutate).toHaveBeenCalledWith('elements/b', 'DELETE', undefined);
+});
+it('段落手柄菜单把动作改为对白', async () => {
+  const editor = make({ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '你好' }] });
+  vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: 1, inside: 0 });
+  render(<BlockHandle editor={editor} />);
+  fireEvent.mouseMove(editor.view.dom.querySelector('p')!, { clientX: 10, clientY: 10 });
+  fireEvent.click(screen.getByRole('button', { name: '段落类型：动作' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: '对白' }));
+  expect(fromEditorJson(editor.getJSON()).blocks[0].type).toBe('dialogue');
+});
+it('大纲菜单移动时读取最新正文', async () => {
+  const document: ScriptDocument = {
+    schemaVersion: 1,
+    blocks: [
+      { id: 's1', type: 'scene', text: '书店' },
+      { id: 'a', type: 'action', text: '旧文字' },
+      { id: 's2', type: 'scene', text: '天台' },
+    ],
+  };
+  const editor = make(document);
+  render(<Outline editor={editor} document={document} number={1} />);
+  const pos = editor.state.doc.child(0).nodeSize + 1;
+  editor.commands.insertContentAt(pos, '新');
+  fireEvent.keyDown(screen.getByRole('button', { name: '1-1 场菜单' }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: '下移' }));
+  expect(fromEditorJson(editor.getJSON()).blocks.map((block) => block.id)).toEqual([
+    's2',
+    's1',
+    'a',
+  ]);
+  expect(fromEditorJson(editor.getJSON()).blocks[2].text).toBe('新旧文字');
 });

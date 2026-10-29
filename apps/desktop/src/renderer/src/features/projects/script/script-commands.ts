@@ -188,7 +188,12 @@ export const applyReview =
     if (position < 0) return false;
     const node = state.doc.nodeAt(position)!;
     const type = option?.type ?? (node.attrs.type as BlockType);
-    const attrs = { ...node.attrs, type, attrs: null, review: null };
+    const attrs = {
+      ...node.attrs,
+      type,
+      attrs: type === node.attrs.type ? (node.attrs.attrs as string | null) : null,
+      review: null,
+    };
     const text = option?.text ?? node.textContent;
     const nodes = [];
     if (type === 'dialogue' && option?.character)

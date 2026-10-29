@@ -19,7 +19,7 @@ export function SelectionToolbar({
   useEffect(() => {
     const update = () => {
       const { from, to, empty } = editor.state.selection;
-      if (empty || editor.view.composing) {
+      if (empty || !(editor.state.selection instanceof TextSelection) || editor.view.composing) {
         setSelection(null);
         return;
       }
@@ -43,7 +43,11 @@ export function SelectionToolbar({
       <PopoverAnchor asChild>
         <span className="fixed" style={{ top: selection.top, left: selection.left }} />
       </PopoverAnchor>
-      <PopoverContent className="w-auto" onOpenAutoFocus={(event) => event.preventDefault()}>
+      <PopoverContent
+        className="w-auto"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <div className="flex flex-wrap gap-1">
           {(['character', 'prop', 'costume'] as const).map((kind, index) => (
             <Button

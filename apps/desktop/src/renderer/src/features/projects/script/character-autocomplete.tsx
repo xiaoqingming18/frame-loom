@@ -94,7 +94,10 @@ export function CharacterAutocomplete({
       <PopoverAnchor asChild>
         <span className="fixed" style={{ top: candidate.top, left: candidate.left }} />
       </PopoverAnchor>
-      <PopoverContent onOpenAutoFocus={(event) => event.preventDefault()}>
+      <PopoverContent
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <div role="listbox" aria-label="人物自动补全" className="flex flex-col">
           {[...names, candidate.text].map((name, item) => (
             <Button

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import type { Editor } from '@tiptap/core';
 import {
@@ -9,6 +9,11 @@ import {
 } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { NativeSelect } from '@frame-loom/ui/components/native-select';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+} from '@frame-loom/ui/components/dropdown-menu';
 import { Undo2, Redo2 } from 'lucide-react';
 import { fromEditorJson, toEditorJson } from './editor-model';
 import { scriptExtensions, handleScriptPaste } from './editor-extensions';
@@ -29,7 +34,7 @@ export function ScriptEditor({
   number = 1,
   right,
   overlays,
-  elementsOpen = false,
+  elementsOpen,
   onElementsOpen,
 }: {
   document: ScriptDocument;
@@ -42,18 +47,22 @@ export function ScriptEditor({
   right?: (editor: Editor) => ReactNode;
   overlays?: (editor: Editor) => ReactNode;
   elementsOpen?: boolean;
-  onElementsOpen?: () => void;
+  onElementsOpen?: (open: boolean) => void;
 }) {
   const [help, setHelp] = useState(false);
-  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState<boolean>();
+  const outlineRef = useRef<HTMLDivElement>(null);
+  const elementsRef = useRef<HTMLDivElement>(null);
   const [, render] = useState(0);
+  const [initialContent] = useState(() => toEditorJson(document));
   const editor = useEditor({
     extensions: [
       ...scriptExtensions(),
       SceneChips.configure({ episodeNumber: number }),
       ScriptDecorations,
     ],
-    content: toEditorJson(document),
+    content: initialContent,
+    shouldRerenderOnTransaction: false,
     injectCSS: false,
     editorProps: {
       attributes: { 'aria-label': '剧本编辑区', role: 'textbox', 'aria-multiline': 'true' },
@@ -115,12 +124,32 @@ export function ScriptEditor({
         >
           <Redo2 aria-hidden />
         </Button>
-        {toolbar}
-        <Button variant="ghost" size="sm" onClick={() => setOutlineOpen((value) => !value)}>
+        <div data-script-toolbar-wide className="flex items-center gap-2">
+          {toolbar}
+        </div>
+        <div data-script-toolbar-more>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                更多
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="p-2">{toolbar}</DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setOutlineOpen(outlineRef.current?.offsetWidth === 0)}
+        >
           大纲
         </Button>
         {right && (
-          <Button variant="ghost" size="sm" onClick={onElementsOpen}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onElementsOpen?.(elementsRef.current?.offsetWidth === 0)}
+          >
             元素栏
           </Button>
         )}
@@ -135,7 +164,7 @@ export function ScriptEditor({
         </Button>
       </div>
       <div data-script-layout className="relative flex min-h-0 flex-1">
-        <div data-script-outline data-open={outlineOpen}>
+        <div ref={outlineRef} data-script-outline data-open={outlineOpen}>
           <Outline editor={editor} document={document} number={number} />
         </div>
         <div data-script-scroll className="min-h-0 min-w-0 flex-1 overflow-auto bg-muted/50">
@@ -144,7 +173,7 @@ export function ScriptEditor({
           </div>
         </div>
         {right && (
-          <div data-script-elements data-open={elementsOpen}>
+          <div ref={elementsRef} data-script-elements data-open={elementsOpen}>
             {right(editor)}
           </div>
         )}

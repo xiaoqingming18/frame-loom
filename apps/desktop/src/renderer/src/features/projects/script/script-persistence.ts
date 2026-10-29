@@ -10,7 +10,7 @@ type Snapshot = {
 export function createScriptPersistence(
   initial: { revision: number; document: ScriptDocument },
   save: (revision: number, document: ScriptDocument) => Promise<ScriptSaveResult>,
-  onSaved: (result: ScriptSaveResult) => void,
+  onSaved: (result: ScriptSaveResult, document: ScriptDocument) => void,
 ) {
   let revision = initial.revision;
   let snapshot: Snapshot = { document: initial.document, status: 'saved', generation: 0 };
@@ -41,7 +41,7 @@ export function createScriptPersistence(
         const result = await save(revision, document);
         revision = result.revision;
         saved = document;
-        onSaved(result);
+        onSaved(result, document);
       }
       update({ status: 'saved', message: undefined });
       return true;

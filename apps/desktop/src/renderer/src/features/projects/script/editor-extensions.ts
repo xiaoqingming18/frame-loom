@@ -19,10 +19,10 @@ import {
 const keyboard = Extension.create({
   name: 'scriptKeyboard',
   addKeyboardShortcuts() {
-    const run = (command: Parameters<typeof this.editor.commands.command>[0]) => () =>
-      !this.editor.view.composing && this.editor.commands.command(command);
-    const command = (fn: typeof enterBlock) =>
-      run(({ state, dispatch, view }) => fn(state, dispatch, view));
+    const command = (fn: typeof enterBlock) => () => {
+      const view = this.editor.view;
+      return !view.composing && fn(view.state, view.dispatch, view);
+    };
     return {
       Enter: command(enterBlock),
       Tab: command(cycleBlockType(1)),

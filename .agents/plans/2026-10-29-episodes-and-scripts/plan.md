@@ -42,8 +42,8 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 | 06 | [编辑器内核与保存](06-editor-core.md) | active | 05 | Tiptap 依赖、文档模型、键盘命令、排版、自动保存与冲突处理 |
 | 07 | [大纲、手柄、存疑、高亮与元素栏](07-editor-panels.md) | active | 03、06 | 三栏编辑器的全部交互与响应式布局 |
 | 08 | [导入对话框与转换进度](08-import-ui.md) | active | 04、06 | 导入、项目设定补填、进度、取消、未完成导入、结果提示 |
-| 09 | [设定库 Tab](09-story-tab.md) | active | 03、05 | 分类、筛选、卡片、详情抽屉、合并、批量、恢复 |
-| 10 | [集成验收与收尾](10-acceptance.md) | draft | 07、08、09 | 剧本 e2e、截图、性能数字、一次全仓门禁、笔记转入 implemented |
+| 09 | [设定库 Tab](09-story-tab.md) | done | 03、05 | 分类、筛选、卡片、详情抽屉、合并、批量、恢复 |
+| 10 | [集成验收与收尾](10-acceptance.md) | active | 07、08、09 | 剧本 e2e、截图、性能数字、一次全仓门禁、笔记转入 implemented |
 
 ## 依赖与顺序
 
@@ -82,14 +82,14 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 验收
 
-- [ ] 契约与解析器满足功能笔记验收第 1 条 — 证据：01 单测
-- [ ] engine 满足功能笔记验收第 2 条 — 证据：02、03、04 集成测试
-- [ ] desktop 满足功能笔记验收第 3 条，以及编辑器笔记验收第 1–3 条 — 证据：05–09 单测，以及 `rg` 边界检查
+- [x] 契约与解析器满足功能笔记验收第 1 条 — 证据：01 单测
+- [x] engine 满足功能笔记验收第 2 条 — 证据：02、03、04 集成测试
+- [x] desktop 满足功能笔记验收第 3 条，以及编辑器笔记验收第 1–3 条 — 证据：05–09 单测，以及 `rg` 边界检查
 - [ ] 剧本 e2e、CSP、模拟输入法组字、明暗主题与 720×560 截图满足功能笔记第 4、5 条和编辑器笔记第 4 条 — 证据：10
-- [ ] 性能数字已记录 — 证据：10
-- [ ] 一次全仓 typecheck、lint、format:check、test 和 `pnpm run verify` 通过 — 证据：10
+- [x] 性能数字已记录 — 证据：10
+- [x] 一次全仓 typecheck、lint、format:check、test 和 `pnpm run verify` 通过 — 证据：10
 - [ ] 两篇笔记移入 `implemented/`，相关笔记、`AGENTS.md` 和 README 已同步，父子计划转为 `done` — 证据：10 的收尾提交
 
 ## 发现与偏差
 
-无。
+实现、自动化与截图验收已完成。真实中文输入法组字回车的人工检查因窗口工具无法激活而未执行，已请求用户反馈；06 及依赖它的 07、08、10 保持 active，两篇笔记暂保留 proposed。完整证据与性能限制见 10。

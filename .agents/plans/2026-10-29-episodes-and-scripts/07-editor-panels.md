@@ -25,7 +25,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 步骤
 
-- [ ] T1 新建 `script/outline.tsx`：
+- [x] T1 新建 `script/outline.tsx`：
   - 用 `deriveScenes` 计算每一场，按幕分组，每行显示场号、「日 · 内」、地点，以及最多 3 个人物缩写，多余的显示 +N；
   - 点击某一场，编辑区平滑滚动到该场；用 IntersectionObserver 同步高亮当前场；
   - 拖动排序：在一个 transaction 中移动整场的段落区间；
@@ -36,7 +36,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 样例剧本显示 2 个幕分组、7 场，场号为 1-1 到 1-7；
   - 在 1-3 场上执行「下移」后，原来的 1-3 场显示为 1-4，一次撤销即可恢复；
   - 点击某一场后，编辑区调用了 `scrollIntoView`。
-- [ ] T2 新建 `script/block-handle.tsx`：
+- [x] T2 新建 `script/block-handle.tsx`：
   - 鼠标悬停时，在段落左侧显示手柄，手柄上是该段类型的缩写；
   - 点击手柄打开类型菜单，使用 DropdownMenu；
   - 按住拖动时，设置 `NodeSelection` 和 `view.dragging`，交给 ProseMirror 的原生拖放处理；
@@ -45,7 +45,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   — 验证：
   - 组件测试：通过类型菜单把 action 改为 dialogue；
   - 拖动由 10 的 e2e 覆盖，这里不在 jsdom 中模拟拖放。
-- [ ] T3 新建 `script/decorations.ts`，实现一个 ProseMirror 插件，同时负责元素高亮和存疑标记：
+- [x] T3 新建 `script/decorations.ts`，实现一个 ProseMirror 插件，同时负责元素高亮和存疑标记：
   - 元素高亮：正文中与元素匹配的词加 `inline` 装饰，按类别使用 `script-mention-<kind>` 类，下划线颜色来自对应的 `--tag-*` 变量；
   - 存疑标记：带 `review` 的段落加 `node` 装饰；
   - 匹配时跳过 note 段落，匹配函数使用 contracts 中的 `findMentions`；
@@ -56,13 +56,13 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 修改一个段落后，只有该段落重新计算，用 spy 计数验证；
   - `setMeta` 触发全量重算；
   - note 段落中没有装饰。
-- [ ] T4 新建 `script/review-popover.tsx`：
+- [x] T4 新建 `script/review-popover.tsx`：
   - 点击「存疑」徽标打开浮层，显示原因、`src.line` 对应的原文行，以及候选项按钮；
   - 选择「改为对白（角色：X）」时，按功能笔记的 id 规则拆成角色段落和对白段落，并清除 `review`；
   - 选择「保持当前」时，只清除 `review`。
 
   — 验证：组件测试覆盖以下几点：对样例中的「周屿 你这几年还好吗」选择对白，得到角色段落「周屿」和对白段落「你这几年还好吗」，对白段落沿用原 id；一次撤销即可恢复。
-- [ ] T5 新建 `script/mention-card.tsx`、`script/selection-toolbar.tsx`、`script/character-autocomplete.tsx`：
+- [x] T5 新建 `script/mention-card.tsx`、`script/selection-toolbar.tsx`、`script/character-autocomplete.tsx`：
   - 悬停元素时显示卡片，内容为名称、类别、状态、出现次数；按住 Ctrl 点击时，在右栏打开该元素；
   - 选中文字时显示浮动工具条，文字长度不在 1–40 个字符之间时，前三项禁用：
     - 「标记为人物／道具／服装」调用 `POST /story/elements`；
@@ -74,7 +74,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 输入「林」时候选包含林夏，按回车后段落文本为「林夏」；
   - 选中「旧信封」后点击「标记为道具」，请求体为 `{ kind: 'prop', name: '旧信封' }`；
   - 选中 41 个字符时，前三项禁用。
-- [ ] T6 新建 `script/element-panel.tsx`：
+- [x] T6 新建 `script/element-panel.tsx`：
   - 顶部是「人物」「场景」「道具」「服装」四项分段控件，每项显示数量，待确认的数量另用黄色标出；
   - 列表每行显示色点、名称、别名、出现的场号和状态；
   - 点击某一行，高亮该元素的所有出现位置，并显示「第 i 处 / 共 n 处」以及上一处、下一处按钮；
@@ -86,7 +86,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 合并「小林」到「林夏」后，请求为 `POST .../merge`，请求体为 `{ into: <林夏 id> }`，林夏的出现次数增加；
   - 点击「下一处」后，第二处出现位置的段落滚动到可见位置；
   - 忽略元素后，该元素从列表中消失。
-- [ ] T7 响应式布局与跳转：
+- [x] T7 响应式布局与跳转：
   - 编辑区容器使用 `@container`：宽度小于 1100px 时，右栏改为覆盖式抽屉；小于 860px 时，大纲也改为抽屉，并由工具栏按钮打开；
   - 720×560 窗口下，工具栏放不下的按钮收进「更多」菜单；
   - 打开带 `?block=<id>` 的路由时，滚动到该段落并短暂高亮；id 不存在时忽略。
@@ -104,7 +104,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 在开发模式下，用样例剧本手工检查明暗两种模式下的编辑器各一次，看到的问题记入「发现与偏差」。
 
   本子计划不运行 e2e。
-- 实际：剧本目录 vitest 6 文件 54 测试通过，覆盖整场移动一次撤销、存疑拆分 id、人物补全、手动标记、逐处定位、合并请求和增量装饰。类型检查通过。明暗视觉检查、手柄交互和窄窗口更多菜单待集成验收补齐。
+- 实际：剧本目录 9 文件 66 测试通过，覆盖整场移动一次撤销、存疑拆分与保持属性、人物补全、标记、逐处定位、合并请求、增量装饰、手柄类型菜单和外部段落定位。生产 e2e 验证右栏合并、实际拖放、宽屏折叠和窄屏更多菜单；明暗带存疑段落与元素栏截图已逐张查看。
 
 ## 进度
 
@@ -116,4 +116,4 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 交接
 
-三栏与辅助交互已接通。后续补齐更多菜单、实际拖放和明暗视觉检查，暂保持 active。
+实现及自动化、视觉验收已完成；暂保持 active，等待依赖 06 的真实输入法检查。

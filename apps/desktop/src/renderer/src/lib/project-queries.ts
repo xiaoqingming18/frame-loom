@@ -27,6 +27,7 @@ export const episodesQuery = (client: EngineClient, id: string) =>
 export const scriptQuery = (client: EngineClient, id: string, episodeId: string) =>
   queryOptions({
     queryKey: ['projects', id, 'episodes', episodeId, 'script'],
+    gcTime: 0,
     queryFn: ({ signal }) =>
       client.request(`/projects/${id}/episodes/${episodeId}/script`, ScriptResult, { signal }),
   });

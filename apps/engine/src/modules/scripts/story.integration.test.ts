@@ -174,7 +174,7 @@ it('跨集出现位置按场去重、注释不匹配、外部修改和合并使�
   expect(read).toHaveBeenCalledTimes(1);
   await s.request(`${base}/story/elements/${alias.id}/merge`, 'POST', { into: person.id });
   expect((await story()).elements.find((item) => item.id === person.id)?.mentions).toBe(5);
-  const occurrences = await (
+  const occurrences: unknown = await (
     await s.request(`${base}/story/elements/${person.id}/occurrences`)
   ).json();
   expect(occurrences).toHaveLength(5);

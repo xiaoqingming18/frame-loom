@@ -16,6 +16,7 @@ import {
 import { setBlockType } from './script-commands';
 
 export function BlockHandle({ editor }: { editor: Editor }) {
+  const [open, setOpen] = useState(false);
   const [hover, setHover] = useState<{
     pos: number;
     top: number;
@@ -43,24 +44,26 @@ export function BlockHandle({ editor }: { editor: Editor }) {
   }, [editor]);
   if (!hover) return null;
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <button
-          draggable
-          aria-label={`段落类型：${BLOCK_LABELS[hover.type]}`}
-          className="fixed z-20 rounded-sm border bg-card px-1 text-xs text-muted-foreground"
-          style={{ top: hover.top, left: hover.left }}
-          onDragStart={(event) => {
-            const selection = NodeSelection.create(editor.state.doc, hover.pos);
-            editor.view.dispatch(editor.state.tr.setSelection(selection));
-            // ProseMirror 原生拖放协议要求设置 view.dragging。
-            Object.assign(editor.view, { dragging: { slice: selection.content(), move: true } });
-            event.dataTransfer.setData('text/plain', selection.node.textContent);
-          }}
-        >
-          {BLOCK_SHORT_LABELS[hover.type]}
-        </button>
+        <span className="fixed" style={{ top: hover.top, left: hover.left }} />
       </DropdownMenuTrigger>
+      <button
+        draggable
+        aria-label={`段落类型：${BLOCK_LABELS[hover.type]}`}
+        className="fixed z-20 rounded-sm border bg-card px-1 text-xs text-muted-foreground"
+        style={{ top: hover.top, left: hover.left }}
+        onClick={() => setOpen(true)}
+        onDragStart={(event) => {
+          const selection = NodeSelection.create(editor.state.doc, hover.pos);
+          editor.view.dispatch(editor.state.tr.setSelection(selection));
+          // ProseMirror 原生拖放协议要求设置 view.dragging。
+          Object.assign(editor.view, { dragging: { slice: selection.content(), move: true } });
+          event.dataTransfer.setData('text/plain', selection.node.textContent);
+        }}
+      >
+        {BLOCK_SHORT_LABELS[hover.type]}
+      </button>
       <DropdownMenuContent>
         {BLOCK_TYPES.map((type) => (
           <DropdownMenuItem

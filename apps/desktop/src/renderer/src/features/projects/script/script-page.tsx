@@ -109,8 +109,9 @@ function ScriptSession({
   const running =
     initial.conversion?.status === 'queued' || initial.conversion?.status === 'running';
   const [editor, setEditor] = useState<Editor | null>(null);
+  const focusBlank = useRef(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [elementsOpen, setElementsOpen] = useState(false);
+  const [elementsOpen, setElementsOpen] = useState<boolean>();
   const [record] = useState(initial);
   const allowClose = useRef(false);
   const persistence = useMemo(
@@ -122,8 +123,16 @@ function ScriptSession({
             method: 'PUT',
             body: { revision, document },
           }),
-        (result) => {
-          void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'episodes'] });
+        (result, document) => {
+          queryClient.setQueryData(
+            scriptQuery(client, projectId, episodeId).queryKey,
+            (previous) =>
+              previous ? { ...previous, revision: result.revision, document } : previous,
+          );
+          void queryClient.invalidateQueries({
+            queryKey: ['projects', projectId, 'episodes'],
+            exact: true,
+          });
           if (result.addedElements)
             void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'story'] });
         },
@@ -132,7 +141,13 @@ function ScriptSession({
   );
   const state = useSyncExternalStore(persistence.subscribe, persistence.getSnapshot);
   useEffect(() => {
-    if (initial.revision !== persistence.getRevision() && !persistence.hasPendingChanges()) {
+    if (editor && focusBlank.current) {
+      editor.commands.focus('start');
+      focusBlank.current = false;
+    }
+  }, [editor]);
+  useEffect(() => {
+    if (initial.revision > persistence.getRevision() && !persistence.hasPendingChanges()) {
       persistence.reset(initial);
     }
   }, [initial, persistence]);
@@ -182,11 +197,17 @@ function ScriptSession({
   useEffect(() => {
     if (editor && blockId) scrollToBlock(editor, blockId);
   }, [editor, blockId]);
+  useEffect(() => {
+    if (editor) editor.view.dispatch(editor.state.tr.setMeta('selectedElement', selected ?? ''));
+  }, [editor, selected]);
   async function mutate(path: string, method: string, body?: unknown) {
     const schema = z.union([z.object({ saved: z.literal(true) }), StoryElement]);
     await client.request(`/projects/${projectId}/story/${path}`, schema, { method, body });
     await queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'story'] });
-    await queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'episodes'] });
+    await queryClient.invalidateQueries({
+      queryKey: ['projects', projectId, 'episodes'],
+      exact: true,
+    });
   }
   const createElement = (kind: ElementKind, name: string) =>
     mutate('elements', 'POST', { kind, name });
@@ -255,7 +276,7 @@ function ScriptSession({
     </>
   );
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-block={blockId}>
+    <div className="flex min-h-0 flex-1 flex-col" data-script-host data-block={blockId}>
       <ConversionBanner
         record={initial}
         client={client}
@@ -292,8 +313,8 @@ function ScriptSession({
       )}
       {running ? (
         <div aria-label="剧本转换中" className="flex-1 animate-pulse space-y-6 p-10">
-          <div className="h-6 w-2/3 rounded-md bg-muted" />
-          <div className="h-40 rounded-md bg-muted" />
+          <div className="h-6 w-2/3 rounded-md bg-accent" />
+          <div className="h-40 rounded-md bg-accent" />
         </div>
       ) : state.document.blocks.length ? (
         <ScriptEditor
@@ -305,7 +326,7 @@ function ScriptSession({
           number={number}
           onEditor={setEditor}
           elementsOpen={elementsOpen}
-          onElementsOpen={() => setElementsOpen((value) => !value)}
+          onElementsOpen={setElementsOpen}
           right={(editor) => (
             <ElementPanel
               editor={editor}
@@ -339,7 +360,7 @@ function ScriptSession({
             </>
           )}
         />
-      ) : (
+      ) : !initial.pendingImport ? (
         <div className="m-auto grid max-w-2xl gap-4 p-6 sm:grid-cols-2">
           <Button variant="outline" className="h-36" onClick={() => setImportOpen(true)}>
             粘贴整集剧本
@@ -347,7 +368,8 @@ function ScriptSession({
           <Button
             variant="outline"
             className="h-36"
-            onClick={() =>
+            onClick={() => {
+              focusBlank.current = true;
               persistence.change({
                 schemaVersion: 1,
                 blocks: [
@@ -358,13 +380,13 @@ function ScriptSession({
                     attrs: { time: null, space: null },
                   },
                 ],
-              })
-            }
+              });
+            }}
           >
             从空白开始写
           </Button>
         </div>
-      )}
+      ) : null}
       {importOpen && (
         <ImportDialog
           client={client}

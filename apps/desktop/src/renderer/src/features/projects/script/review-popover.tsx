@@ -36,6 +36,7 @@ export function ReviewPopover({
       ),
     );
     setAnchor(null);
+    editor.view.focus();
   };
   return (
     <Popover
@@ -47,7 +48,7 @@ export function ReviewPopover({
       <PopoverAnchor asChild>
         <span className="fixed" style={{ top: anchor.top, left: anchor.left }} />
       </PopoverAnchor>
-      <PopoverContent>
+      <PopoverContent onCloseAutoFocus={(event) => event.preventDefault()}>
         <p className="text-sm">{block.review.reason}</p>
         <p className="my-2 text-xs text-muted-foreground">
           {source?.split(/\r\n?|\n/u)[block.src?.line ?? -1]}

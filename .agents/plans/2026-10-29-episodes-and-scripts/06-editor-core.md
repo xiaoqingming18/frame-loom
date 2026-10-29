@@ -28,19 +28,19 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 步骤
 
-- [ ] T1 在 `apps/desktop` 的 `devDependencies` 中精确安装以下包，版本都是 `3.32.1`：`@tiptap/core`、`@tiptap/pm`、`@tiptap/react`、`@tiptap/extension-document`、`@tiptap/extension-text`、`@tiptap/extensions`、`@tiptap/extension-unique-id`。同时提交 `pnpm-lock.yaml`。
+- [x] T1 在 `apps/desktop` 的 `devDependencies` 中精确安装以下包，版本都是 `3.32.1`：`@tiptap/core`、`@tiptap/pm`、`@tiptap/react`、`@tiptap/extension-document`、`@tiptap/extension-text`、`@tiptap/extensions`、`@tiptap/extension-unique-id`。同时提交 `pnpm-lock.yaml`。
 
   — 验证：
   - `pnpm install --frozen-lockfile` 通过；
   - `rg "@tiptap/" apps/desktop/src --files-with-matches` 的结果只在 `features/projects/script/` 下；
   - lockfile 中 `@tiptap/*` 的所有包只有一个版本。
-- [ ] T2 新建 `script/editor-model.ts`，定义 `scriptBlock` 节点和根 doc 的 schema，以及 `toEditorJson` 和 `fromEditorJson` 两个函数。字段与渲染规则见编辑器笔记「文档模型」一节。
+- [x] T2 新建 `script/editor-model.ts`，定义 `scriptBlock` 节点和根 doc 的 schema，以及 `toEditorJson` 和 `fromEditorJson` 两个函数。字段与渲染规则见编辑器笔记「文档模型」一节。
 
   — 验证：`editor-model.test.ts` 覆盖以下几点：
   - 样例剧本的规则解析结果，以及一份覆盖全部 11 种段落类型的人工文档（包含 attrs、review、src 为 null、空文本），往返之后 `toEqual` 原文档；
   - `fromEditorJson` 拒绝含换行的文本；
   - 以上测试都在 node 环境下用 `EditorState` 完成，不挂载 DOM。
-- [ ] T3 新建 `script/script-commands.ts`，把功能笔记「键盘规则」一节的每一条实现成纯函数命令。命令包括：
+- [x] T3 新建 `script/script-commands.ts`，把功能笔记「键盘规则」一节的每一条实现成纯函数命令。命令包括：
   - Enter：在段落中间时拆分；在段落末尾时，按类型映射新建下一段；在非 action 的空段落中，改为 action；
   - Tab 和 Shift+Tab：在空段落中循环切换类型；
   - Ctrl+1～9：直接设置类型；
@@ -57,7 +57,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 「店主（OS）」按 Enter 后，文本为「店主」、delivery 为 os；
   - 拆分段落后，所有 id 唯一；撤销后恢复为原来的 id；
   - 修改带 `review` 段落的文字后，`review` 被清除。
-- [ ] T4 新建 `script/script-editor.tsx` 和 `script/script-editor.css`：
+- [x] T4 新建 `script/script-editor.tsx` 和 `script/script-editor.css`：
   - 纸面最大宽度 760px，各段落类型的排版按笔记实现，样式只使用 `data-block-type` 选择器和语义 token；
   - 场标题中的时间 chip 和内外 chip 可以点击循环切换，调用命令修改 attrs；
   - 角色名使用 `--tag-pink`；
@@ -68,13 +68,13 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 组件测试（jsdom）挂载编辑器，断言 `data-block-type` 渲染正确，点击场标题的时间 chip 后 `time` 发生变化；
   - 用 `ClipboardEvent` 模拟粘贴三行纯文本，得到 3 个段落；
   - 不写样式类名的测试。
-- [ ] T5 工具栏和快捷键帮助：
+- [x] T5 工具栏和快捷键帮助：
   - 工具栏吸顶，包含段落类型下拉框（显示光标所在段落的类型，可以切换）、撤销、重做、快捷键帮助「?」，以及保存状态（`role="status"`，`aria-label="剧本保存状态"`）；
   - 快捷键帮助弹窗使用 Dialog，列出全部键盘规则；
   - 「重新导入」和「查看原文」按钮先放在工具栏中，设为禁用，由 08 接上。
 
   — 验证：组件测试覆盖：切换下拉框后，当前段落的类型改变；撤销和重做按钮的禁用状态随历史变化。
-- [ ] T6 新建 `script/script-persistence.ts`，参照 `canvas-persistence.ts`：
+- [x] T6 新建 `script/script-persistence.ts`，参照 `canvas-persistence.ts`：
   - 持有 revision；停止输入 1 秒后保存；保存的 `PUT` 响应中如果 `addedElements` 大于 0，就使 `storyQuery` 和 `episodesQuery` 失效；
   - 遇到 409 `SCRIPT_REVISION_CONFLICT` 时，进入冲突状态，停止保存，显示「重新加载」和「复制全文」（按段落文本用换行拼接后写入剪贴板）；
   - 遇到 409 `SCRIPT_CONVERTING` 时，显示「正在转换，暂不能保存」；
@@ -102,7 +102,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 在开发模式下手工检查一次：用中文输入法输入「你好」时，在组字过程中按 Enter 不会拆分段落。把结果记入「发现与偏差」。
 
   本子计划不运行 e2e。
-- 实际：`pnpm --filter @frame-loom/desktop typecheck`、定向 vitest（4 文件 47 测试）、定向 eslint、desktop build 均通过。安装时 frozen lockfile 校验通过；Tiptap 仅进入剧本路由 chunk（740.13 kB），入口不含编辑器实现。真实中文输入法检查待整体验收补齐。
+- 实际：剧本目录 9 文件 66 测试、desktop typecheck、定向 eslint 与 build 通过；包含空白场标题聚焦及存疑属性保留测试。安装时 frozen lockfile 校验通过，Tiptap 仅进入剧本路由 chunk。生产 e2e 输入、CDP 组字、拖放通过；真实输入法检查未完成。
 
 ## 进度
 
@@ -115,4 +115,4 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 交接
 
-编辑器代码、47 项测试已完成；下一步集成 07，收尾时补真实中文输入法检查。
+仅剩真实中文输入法组字回车检查：独立临时项目的开发窗口已准备，但 Computer Use 两次返回 failed to activate captured window；已请求用户反馈实际结果，未把 CDP 模拟计为人工验收。

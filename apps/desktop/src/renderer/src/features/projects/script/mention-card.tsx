@@ -44,7 +44,10 @@ export function MentionCard({
       <PopoverAnchor asChild>
         <span className="fixed" style={{ top: hover.top, left: hover.left }} />
       </PopoverAnchor>
-      <PopoverContent onOpenAutoFocus={(event) => event.preventDefault()}>
+      <PopoverContent
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <strong>{element.name}</strong>
         <p className="text-xs text-muted-foreground">
           {{ character: '人物', location: '场景', prop: '道具', costume: '服装' }[element.kind]} ·{' '}

@@ -20,7 +20,7 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 新建 `script/import-dialog.tsx`：
+- [x] T1 新建 `script/import-dialog.tsx`：
   - 对话框宽 720px，主体是等宽字体的 Textarea，显示「n / 200000」字数；
   - 项目设定不完整时，文本框上方显示黄色提示条。样式写在 `script/script-editor.css` 的 `.script-warning` 类中，用 `var(--tag-yellow-bg)` 作背景、`var(--tag-yellow)` 作文字颜色。现在没有映射到 Tailwind 的 tag 类，所以不新增 `@theme` 映射，也不使用任意值颜色。提示条里嵌入 `ProfileFields` 的 `compact` 模式，三项都填好之前「开始转换」保持禁用；
   - 设定完整时，只显示一行「按『<formatProfile>』识别」和「修改」按钮，点击后展开 `compact` 表单；
@@ -35,7 +35,7 @@ Parent: plan.md
   - 没有默认模型时显示提示文案；
   - 已有段落时出现二次确认；
   - `flush` 返回 false 时不发送请求。
-- [ ] T2 新建 `script/conversion-banner.tsx`：
+- [x] T2 新建 `script/conversion-banner.tsx`：
   - 剧本页订阅 `/events`，收到 `script.conversion.updated` 且 projectId、episodeId 匹配时，重新获取 `scriptQuery`；
   - 状态为 `queued` 或 `running` 时，编辑器设为只读，编辑区换成骨架屏，顶部显示进度条、阶段文字（split 对应「切分场次」，classify 对应「识别段落类型」，extract 对应「提取人物与场景」，match 对应「匹配设定库」）、「已处理 done / total 批」，以及「取消」按钮；
   - 转换成功后，显示提示「已识别 S 场、B 段，新增 N 个待确认元素」和「查看」按钮（打开右栏）；有 `warnings` 时追加「部分内容按规则识别」，可以展开查看原因；
@@ -48,7 +48,7 @@ Parent: plan.md
   - 点击「取消」发送 cancel 请求；
   - 「继续转换」的请求体不带 `text`；
   - 「丢弃」发送 `DELETE` 请求。
-- [ ] T3 接上工具栏和空白状态卡片：
+- [x] T3 接上工具栏和空白状态卡片：
   - 「粘贴整集剧本」卡片和「重新导入」按钮都打开导入对话框；
   - 「查看原文」打开只读抽屉，显示 `source.text`，并在左侧显示行号；没有 `source` 时禁用；
   - 剧集列表中的状态列使用同一套状态文字，事件到达时使 `episodesQuery` 失效。
@@ -63,7 +63,7 @@ Parent: plan.md
   - 对改动的文件运行 `pnpm exec eslint` 通过。
 
   本子计划不运行 e2e，完整流程由 10 覆盖。
-- 实际：projects 目录定向 vitest 13 文件 90 测试通过；导入补设定、完整设定不重复提交、替换确认、flush 失败、取消、继续与丢弃均已覆盖。定向 eslint 通过；事件流和原文抽屉的页面级验收待补。
+- 实际：projects 定向测试先前 90 项通过；补充页面级模拟 stream，验证 running 锁编辑、succeeded 结果刷新、原文入口禁用和只读抽屉，剧本目录累计 66 测试通过。模拟模型挂起的生产 e2e 验证进度与取消；明暗截图已逐张查看，明亮骨架与背景同色问题改用 accent token 修复。
 
 ## 进度
 
@@ -75,4 +75,4 @@ Parent: plan.md
 
 ## 交接
 
-导入、事件订阅、转换骨架、结果与警告、原文抽屉已接通；页面级事件测试与整体验收尚待补齐。
+实现及页面级事件、原文抽屉、模拟模型进度验收完成；暂保持 active，等待依赖 06 的真实输入法检查。
