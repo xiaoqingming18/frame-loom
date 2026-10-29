@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker, useRouteContext } from '@tanstack/react-router';
-import { episodeLabel, ScriptSaveResult, type ScriptResult } from '@frame-loom/contracts';
+import {
+  episodeLabel,
+  ScriptSaveResult,
+  StoryResult,
+  type ScriptResult,
+  type ElementKind,
+} from '@frame-loom/contracts';
+import type { Editor } from '@tiptap/core';
 import { Button } from '@frame-loom/ui/components/button';
 import { commandWindow } from '@/lib/desktop-bridge';
 import type { EngineClient } from '@/lib/engine-client';
-import { projectQuery, scriptQuery } from '@/lib/project-queries';
+import { projectQuery, scriptQuery, storyQuery } from '@/lib/project-queries';
 import { createScriptPersistence } from './script-persistence';
 import { ScriptEditor } from './script-editor';
+import { BlockHandle } from './block-handle';
+import { ReviewPopover } from './review-popover';
+import { SelectionToolbar } from './selection-toolbar';
+import { CharacterAutocomplete } from './character-autocomplete';
+import { MentionCard } from './mention-card';
+import { ElementPanel } from './element-panel';
+import { scrollToBlock } from './scene-commands';
 
 export function ScriptPage({
   projectId,
@@ -54,6 +68,7 @@ export function ScriptPage({
           projectId={projectId}
           episodeId={episodeId}
           blockId={blockId}
+          number={episode?.number ?? 1}
         />
       )}
     </section>
@@ -66,14 +81,20 @@ function ScriptSession({
   projectId,
   episodeId,
   blockId,
+  number,
 }: {
   initial: ScriptResult;
   client: EngineClient;
   projectId: string;
   episodeId: string;
   blockId?: string;
+  number: number;
 }) {
   const queryClient = useQueryClient();
+  const story = useQuery(storyQuery(client, projectId));
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [elementsOpen, setElementsOpen] = useState(false);
   const [record] = useState(initial);
   const [generation, setGeneration] = useState(0);
   const allowClose = useRef(false);
@@ -95,6 +116,31 @@ function ScriptSession({
     [client, projectId, episodeId, queryClient, record],
   );
   const state = useSyncExternalStore(persistence.subscribe, persistence.getSnapshot);
+  useEffect(() => {
+    if (!editor || !story.data) return;
+    editor.view.dispatch(
+      editor.state.tr.setMeta(
+        'mentions',
+        story.data.elements.flatMap((element) =>
+          [element.name, ...element.aliases].map((name) => ({
+            name,
+            elementId: element.id,
+            kind: element.kind,
+          })),
+        ),
+      ),
+    );
+  }, [editor, story.data]);
+  useEffect(() => {
+    if (editor && blockId) scrollToBlock(editor, blockId);
+  }, [editor, blockId]);
+  async function mutate(path: string, method: string, body?: unknown) {
+    await client.request(`/projects/${projectId}/story/${path}`, StoryResult, { method, body });
+    await queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'story'] });
+    await queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'episodes'] });
+  }
+  const createElement = (kind: ElementKind, name: string) =>
+    mutate('elements', 'POST', { kind, name });
   useBlocker({
     shouldBlockFn: async ({ current, next }) =>
       current.pathname !== next.pathname && !(await persistence.flush()),
@@ -186,6 +232,42 @@ function ScriptSession({
           onChange={(document) => persistence.change(document)}
           onError={persistence.fail}
           toolbar={toolbar}
+          number={number}
+          onEditor={setEditor}
+          elementsOpen={elementsOpen}
+          onElementsOpen={() => setElementsOpen((value) => !value)}
+          right={(editor) => (
+            <ElementPanel
+              editor={editor}
+              story={story.data ?? { revision: 0, elements: [], ignored: [] }}
+              document={state.document}
+              number={number}
+              projectId={projectId}
+              selected={selected}
+              onSelect={setSelected}
+              mutate={mutate}
+            />
+          )}
+          overlays={(editor) => (
+            <>
+              <BlockHandle editor={editor} />
+              <ReviewPopover
+                editor={editor}
+                blocks={state.document.blocks}
+                source={initial.source?.text}
+              />
+              <SelectionToolbar editor={editor} create={createElement} />
+              <CharacterAutocomplete editor={editor} elements={story.data?.elements ?? []} />
+              <MentionCard
+                editor={editor}
+                elements={story.data?.elements ?? []}
+                openElement={(id) => {
+                  setSelected(id);
+                  setElementsOpen(true);
+                }}
+              />
+            </>
+          )}
         />
       ) : (
         <div className="m-auto grid max-w-2xl gap-4 p-6 sm:grid-cols-2">

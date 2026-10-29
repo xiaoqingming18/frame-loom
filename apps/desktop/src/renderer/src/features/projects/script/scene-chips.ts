@@ -5,9 +5,11 @@ import type { SceneAttrs, CharacterAttrs } from '@frame-loom/contracts';
 
 const timeLabels = { day: '日', night: '夜', dawn: '晨', dusk: '昏' };
 const spaceLabels = { int: '内', ext: '外', intext: '内外' };
-export const SceneChips = Extension.create({
+export const SceneChips = Extension.create<{ episodeNumber: number }>({
   name: 'sceneChips',
+  addOptions: () => ({ episodeNumber: 1 }),
   addProseMirrorPlugins() {
+    const episodeNumber = this.options.episodeNumber;
     return [
       new Plugin({
         props: {
@@ -29,7 +31,7 @@ export const SceneChips = Extension.create({
                       container.className = 'script-scene-chips';
                       container.contentEditable = 'false';
                       const badge = document.createElement('span');
-                      badge.textContent = String(number);
+                      badge.textContent = `${episodeNumber}-${number}`;
                       container.append(badge);
                       for (const field of ['time', 'space'] as const) {
                         const button = document.createElement('button');
@@ -48,6 +50,7 @@ export const SceneChips = Extension.create({
                               : '内外';
                         button.addEventListener('mousedown', (event) => event.preventDefault());
                         button.addEventListener('click', () => {
+                          if (!view.editable) return;
                           const current = view.state.doc.nodeAt(pos);
                           if (!current) return;
                           const values =

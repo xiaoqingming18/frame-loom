@@ -1,6 +1,6 @@
 # Plan: 大纲、手柄、存疑、高亮与元素栏
 
-Status: draft
+Status: active
 Parent: plan.md
 Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
@@ -104,7 +104,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 在开发模式下，用样例剧本手工检查明暗两种模式下的编辑器各一次，看到的问题记入「发现与偏差」。
 
   本子计划不运行 e2e。
-- 实际：未执行。
+- 实际：剧本目录 vitest 6 文件 54 测试通过，覆盖整场移动一次撤销、存疑拆分 id、人物补全、手动标记、逐处定位、合并请求和增量装饰。类型检查通过。明暗视觉检查、手柄交互和窄窗口更多菜单待集成验收补齐。
 
 ## 进度
 
@@ -116,4 +116,4 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 交接
 
-依赖 03、06，尚未开始。
+三栏与辅助交互已接通。后续补齐更多菜单、实际拖放和明暗视觉检查，暂保持 active。

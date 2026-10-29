@@ -15,6 +15,8 @@ import { scriptExtensions, handleScriptPaste } from './editor-extensions';
 import { setBlockType } from './script-commands';
 import { SceneChips } from './scene-chips';
 import { KeyboardHelp } from './keyboard-help';
+import { ScriptDecorations } from './decorations';
+import { Outline } from './outline';
 import './script-editor.css';
 
 export function ScriptEditor({
@@ -24,6 +26,11 @@ export function ScriptEditor({
   onEditor,
   locked = false,
   toolbar,
+  number = 1,
+  right,
+  overlays,
+  elementsOpen = false,
+  onElementsOpen,
 }: {
   document: ScriptDocument;
   onChange: (document: ScriptDocument) => void;
@@ -31,11 +38,21 @@ export function ScriptEditor({
   onEditor?: (editor: Editor | null) => void;
   locked?: boolean;
   toolbar?: ReactNode;
+  number?: number;
+  right?: (editor: Editor) => ReactNode;
+  overlays?: (editor: Editor) => ReactNode;
+  elementsOpen?: boolean;
+  onElementsOpen?: () => void;
 }) {
   const [help, setHelp] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   const [, render] = useState(0);
   const editor = useEditor({
-    extensions: [...scriptExtensions(), SceneChips],
+    extensions: [
+      ...scriptExtensions(),
+      SceneChips.configure({ episodeNumber: number }),
+      ScriptDecorations,
+    ],
     content: toEditorJson(document),
     injectCSS: false,
     editorProps: {
@@ -99,6 +116,14 @@ export function ScriptEditor({
           <Redo2 aria-hidden />
         </Button>
         {toolbar}
+        <Button variant="ghost" size="sm" onClick={() => setOutlineOpen((value) => !value)}>
+          大纲
+        </Button>
+        {right && (
+          <Button variant="ghost" size="sm" onClick={onElementsOpen}>
+            元素栏
+          </Button>
+        )}
         <Button
           className="ml-auto"
           variant="ghost"
@@ -109,11 +134,22 @@ export function ScriptEditor({
           ?
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto bg-muted/50">
-        <div data-script-paper>
-          <EditorContent editor={editor} />
+      <div data-script-layout className="relative flex min-h-0 flex-1">
+        <div data-script-outline data-open={outlineOpen}>
+          <Outline editor={editor} document={document} number={number} />
         </div>
+        <div data-script-scroll className="min-h-0 min-w-0 flex-1 overflow-auto bg-muted/50">
+          <div data-script-paper>
+            <EditorContent editor={editor} />
+          </div>
+        </div>
+        {right && (
+          <div data-script-elements data-open={elementsOpen}>
+            {right(editor)}
+          </div>
+        )}
       </div>
+      {overlays?.(editor)}
       {help && <KeyboardHelp onClose={() => setHelp(false)} />}
     </>
   );

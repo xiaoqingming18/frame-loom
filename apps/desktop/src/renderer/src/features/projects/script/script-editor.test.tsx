@@ -4,6 +4,8 @@ import type { Editor } from '@tiptap/core';
 import type { ScriptDocument } from '@frame-loom/contracts';
 import { ScriptEditor } from './script-editor';
 afterEach(cleanup);
+Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+Range.prototype.getBoundingClientRect = () => new DOMRect();
 it('渲染类型、切换时间、切换类型及撤销重做', async () => {
   const changed = vi.fn<(document: ScriptDocument) => void>();
   render(
