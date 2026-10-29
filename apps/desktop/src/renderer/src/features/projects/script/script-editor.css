@@ -8,6 +8,13 @@
 [data-script-layout] {
   container-type: inline-size;
 }
+.script-warning,
+[data-script-warning] {
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--tag-yellow-bg);
+  color: var(--tag-yellow);
+}
 [data-script-outline] {
   width: 220px;
   flex-shrink: 0;

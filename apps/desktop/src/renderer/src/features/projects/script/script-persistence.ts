@@ -2,6 +2,7 @@ import type { ScriptDocument, ScriptSaveResult } from '@frame-loom/contracts';
 import { EngineRequestError } from '@/lib/engine-client';
 
 type Snapshot = {
+  generation: number;
   document: ScriptDocument;
   status: 'saved' | 'saving' | 'error' | 'conflict' | 'converting';
   message?: string;
@@ -12,7 +13,7 @@ export function createScriptPersistence(
   onSaved: (result: ScriptSaveResult) => void,
 ) {
   let revision = initial.revision;
-  let snapshot: Snapshot = { document: initial.document, status: 'saved' };
+  let snapshot: Snapshot = { document: initial.document, status: 'saved', generation: 0 };
   let saved = initial.document;
   let pending: Promise<boolean> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -82,7 +83,12 @@ export function createScriptPersistence(
       clearTimeout(timer);
       revision = record.revision;
       saved = record.document;
-      update({ document: record.document, status: 'saved', message: undefined });
+      update({
+        document: record.document,
+        status: 'saved',
+        message: undefined,
+        generation: snapshot.generation + 1,
+      });
     },
     stop() {
       clearTimeout(timer);

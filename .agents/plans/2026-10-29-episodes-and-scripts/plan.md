@@ -41,7 +41,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 | 05 | [项目设定、剧集列表与侧栏](05-desktop-episodes.md) | done | 02 | 设定表单、详情 Tab、剧集列表与对话框、侧栏、剧本页路由外壳、受影响测试的更新 |
 | 06 | [编辑器内核与保存](06-editor-core.md) | active | 05 | Tiptap 依赖、文档模型、键盘命令、排版、自动保存与冲突处理 |
 | 07 | [大纲、手柄、存疑、高亮与元素栏](07-editor-panels.md) | active | 03、06 | 三栏编辑器的全部交互与响应式布局 |
-| 08 | [导入对话框与转换进度](08-import-ui.md) | draft | 04、06 | 导入、项目设定补填、进度、取消、未完成导入、结果提示 |
+| 08 | [导入对话框与转换进度](08-import-ui.md) | active | 04、06 | 导入、项目设定补填、进度、取消、未完成导入、结果提示 |
 | 09 | [设定库 Tab](09-story-tab.md) | draft | 03、05 | 分类、筛选、卡片、详情抽屉、合并、批量、恢复 |
 | 10 | [集成验收与收尾](10-acceptance.md) | draft | 07、08、09 | 剧本 e2e、截图、性能数字、一次全仓门禁、笔记转入 implemented |
 

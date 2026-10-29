@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { z } from 'zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker, useRouteContext } from '@tanstack/react-router';
 import {
   episodeLabel,
   ScriptSaveResult,
-  StoryResult,
+  StoryElement,
   type ScriptResult,
   type ElementKind,
+  EngineEvent,
 } from '@frame-loom/contracts';
 import type { Editor } from '@tiptap/core';
 import { Button } from '@frame-loom/ui/components/button';
@@ -22,6 +24,14 @@ import { CharacterAutocomplete } from './character-autocomplete';
 import { MentionCard } from './mention-card';
 import { ElementPanel } from './element-panel';
 import { scrollToBlock } from './scene-commands';
+import { ImportDialog } from './import-dialog';
+import { ConversionBanner } from './conversion-banner';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from '@frame-loom/ui/components/dialog';
 
 export function ScriptPage({
   projectId,
@@ -92,11 +102,16 @@ function ScriptSession({
 }) {
   const queryClient = useQueryClient();
   const story = useQuery(storyQuery(client, projectId));
+  const project = useQuery(projectQuery(client, projectId));
+  const [importOpen, setImportOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [openedAt] = useState(Date.now);
+  const running =
+    initial.conversion?.status === 'queued' || initial.conversion?.status === 'running';
   const [editor, setEditor] = useState<Editor | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [elementsOpen, setElementsOpen] = useState(false);
   const [record] = useState(initial);
-  const [generation, setGeneration] = useState(0);
   const allowClose = useRef(false);
   const persistence = useMemo(
     () =>
@@ -117,6 +132,39 @@ function ScriptSession({
   );
   const state = useSyncExternalStore(persistence.subscribe, persistence.getSnapshot);
   useEffect(() => {
+    if (initial.revision !== persistence.getRevision() && !persistence.hasPendingChanges()) {
+      persistence.reset(initial);
+    }
+  }, [initial, persistence]);
+  useEffect(() => {
+    const abort = new AbortController();
+    let retry: ReturnType<typeof setTimeout>;
+    const subscribe = async () => {
+      try {
+        for await (const event of client.stream('/events', EngineEvent, { signal: abort.signal })) {
+          if (
+            event.type === 'script.conversion.updated' &&
+            event.projectId === projectId &&
+            event.episodeId === episodeId
+          ) {
+            await queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+          }
+        }
+      } catch (error) {
+        if (!abort.signal.aborted) console.warn('剧本事件连接中断', error);
+      }
+      if (!abort.signal.aborted) retry = setTimeout(() => void subscribe(), 1500);
+    };
+    void subscribe();
+    return () => {
+      abort.abort();
+      clearTimeout(retry);
+    };
+  }, [client, projectId, episodeId, queryClient]);
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+  };
+  useEffect(() => {
     if (!editor || !story.data) return;
     editor.view.dispatch(
       editor.state.tr.setMeta(
@@ -135,7 +183,8 @@ function ScriptSession({
     if (editor && blockId) scrollToBlock(editor, blockId);
   }, [editor, blockId]);
   async function mutate(path: string, method: string, body?: unknown) {
-    await client.request(`/projects/${projectId}/story/${path}`, StoryResult, { method, body });
+    const schema = z.union([z.object({ saved: z.literal(true) }), StoryElement]);
+    await client.request(`/projects/${projectId}/story/${path}`, schema, { method, body });
     await queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'story'] });
     await queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'episodes'] });
   }
@@ -175,11 +224,10 @@ function ScriptSession({
     if (!blockId) return;
     const target = window.document.querySelector(`[data-id="${CSS.escape(blockId)}"]`);
     target?.scrollIntoView({ block: 'center' });
-  }, [blockId, generation]);
+  }, [blockId, state.generation]);
   async function reload() {
     const record = await queryClient.fetchQuery(scriptQuery(client, projectId, episodeId));
     persistence.reset(record);
-    setGeneration((value) => value + 1);
   }
   const status = {
     saved: '已保存，元素已同步',
@@ -190,10 +238,15 @@ function ScriptSession({
   }[state.status];
   const toolbar = (
     <>
-      <Button variant="ghost" size="sm" disabled>
+      <Button variant="ghost" size="sm" disabled={running} onClick={() => setImportOpen(true)}>
         重新导入
       </Button>
-      <Button variant="ghost" size="sm" disabled>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={!initial.source}
+        onClick={() => setSourceOpen(true)}
+      >
         查看原文
       </Button>
       <span role="status" aria-label="剧本保存状态" className="text-xs text-muted-foreground">
@@ -203,6 +256,18 @@ function ScriptSession({
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-block={blockId}>
+      <ConversionBanner
+        record={initial}
+        client={client}
+        projectId={projectId}
+        episodeId={episodeId}
+        revision={() => persistence.getRevision()}
+        flush={() => persistence.flush()}
+        changed={refresh}
+        edit={() => setImportOpen(true)}
+        view={() => setElementsOpen(true)}
+        openedAt={openedAt}
+      />
       {state.message && (
         <div role="alert" className="flex flex-wrap items-center gap-2 border-b p-3">
           <span>{state.message}</span>
@@ -225,9 +290,14 @@ function ScriptSession({
           )}
         </div>
       )}
-      {state.document.blocks.length ? (
+      {running ? (
+        <div aria-label="剧本转换中" className="flex-1 animate-pulse space-y-6 p-10">
+          <div className="h-6 w-2/3 rounded-md bg-muted" />
+          <div className="h-40 rounded-md bg-muted" />
+        </div>
+      ) : state.document.blocks.length ? (
         <ScriptEditor
-          key={generation}
+          key={state.generation}
           document={state.document}
           onChange={(document) => persistence.change(document)}
           onError={persistence.fail}
@@ -271,7 +341,7 @@ function ScriptSession({
         />
       ) : (
         <div className="m-auto grid max-w-2xl gap-4 p-6 sm:grid-cols-2">
-          <Button variant="outline" className="h-36" disabled>
+          <Button variant="outline" className="h-36" onClick={() => setImportOpen(true)}>
             粘贴整集剧本
           </Button>
           <Button
@@ -294,6 +364,43 @@ function ScriptSession({
             从空白开始写
           </Button>
         </div>
+      )}
+      {importOpen && (
+        <ImportDialog
+          client={client}
+          projectId={projectId}
+          episodeId={episodeId}
+          profile={project.data?.profile}
+          hasBlocks={!!state.document.blocks.length}
+          text={initial.pendingImport?.text}
+          flush={() => persistence.flush()}
+          revision={() => persistence.getRevision()}
+          onImported={refresh}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
+      {sourceOpen && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setSourceOpen(false);
+          }}
+        >
+          <DialogContent className="top-0 right-0 left-auto h-full max-w-full translate-x-0 translate-y-0 overflow-auto rounded-none sm:max-w-2xl">
+            <DialogTitle>剧本原文</DialogTitle>
+            <DialogDescription>最近一次成功转换的原文，只读。</DialogDescription>
+            <div className="font-mono text-sm">
+              {initial.source?.text.split(/\r\n?|\n/u).map((line, index) => (
+                <div key={index} className="flex gap-4">
+                  <span className="w-10 shrink-0 text-right text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <span className="whitespace-pre-wrap">{line || ' '}</span>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
