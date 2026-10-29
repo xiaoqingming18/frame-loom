@@ -1,0 +1,100 @@
+[data-script-paper] {
+  max-width: 760px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 36px 48px 160px;
+  background: var(--card);
+}
+[data-script-paper] .tiptap {
+  outline: none;
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+[data-script-paper] p[data-block-type] {
+  position: relative;
+  margin: 0 0 10px;
+  min-height: 27px;
+}
+[data-script-paper] p[data-block-type='act'] {
+  text-align: center;
+  font-weight: 700;
+  border-block: 1px solid var(--border);
+  padding-block: 14px;
+  margin-block: 24px;
+}
+[data-script-paper] p[data-block-type='scene'] {
+  font-weight: 700;
+  margin-top: 28px;
+}
+[data-script-paper] p[data-block-type='cast'] {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+[data-script-paper] p[data-block-type='cast']::before {
+  content: '人物：';
+}
+[data-script-paper] p[data-block-type='character'] {
+  text-align: center;
+  font-weight: 700;
+  color: var(--tag-pink);
+}
+[data-script-paper] p[data-block-type='parenthetical'] {
+  text-align: center;
+  font-style: italic;
+}
+[data-script-paper] p[data-block-type='parenthetical']::before {
+  content: '（';
+}
+[data-script-paper] p[data-block-type='parenthetical']::after {
+  content: '）';
+}
+[data-script-paper] p[data-block-type='dialogue'] {
+  margin-inline: 15%;
+}
+[data-script-paper] p[data-block-type='transition'] {
+  text-align: right;
+}
+[data-script-paper] p[data-block-type='note'] {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  padding: 8px;
+  border-radius: 6px;
+}
+[data-script-paper] p.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.script-scene-chips {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 8px;
+  font-size: 11px;
+  vertical-align: middle;
+  user-select: none;
+}
+.script-scene-chips button,
+.script-scene-chips span {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 5px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.script-scene-chips button:focus-visible {
+  outline: 2px solid var(--ring);
+}
+.script-chip {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+@container (max-width: 860px) {
+  [data-script-paper] {
+    padding: 20px 32px 100px;
+  }
+}

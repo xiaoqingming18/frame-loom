@@ -1,6 +1,6 @@
 # Plan: 编辑器内核与保存
 
-Status: draft
+Status: active
 Parent: plan.md
 Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
@@ -102,7 +102,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
   - 在开发模式下手工检查一次：用中文输入法输入「你好」时，在组字过程中按 Enter 不会拆分段落。把结果记入「发现与偏差」。
 
   本子计划不运行 e2e。
-- 实际：未执行。
+- 实际：`pnpm --filter @frame-loom/desktop typecheck`、定向 vitest（4 文件 47 测试）、定向 eslint、desktop build 均通过。安装时 frozen lockfile 校验通过；Tiptap 仅进入剧本路由 chunk（740.13 kB），入口不含编辑器实现。真实中文输入法检查待整体验收补齐。
 
 ## 进度
 
@@ -110,8 +110,9 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 发现与偏差
 
-无。
+- 撤销恢复 review 时跳过文本变化清理插件，避免把历史恢复误当作手工输入；已用回归测试验证。
+- 真实中文输入法人工检查尚未执行，因此本子计划暂保持 active；代码工作可供后续面板集成。
 
 ## 交接
 
-依赖 05，尚未开始。
+编辑器代码、47 项测试已完成；下一步集成 07，收尾时补真实中文输入法检查。

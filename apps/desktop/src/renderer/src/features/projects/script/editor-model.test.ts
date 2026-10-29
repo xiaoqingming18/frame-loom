@@ -1,0 +1,59 @@
+// @vitest-environment node
+import sample from '../../../../../../../../packages/contracts/fixtures/script-sample-01.txt?raw';
+import type { JSONContent } from '@tiptap/core';
+import { describe, expect, it } from 'vitest';
+import { getSchema } from '@tiptap/core';
+import { EditorState } from '@tiptap/pm/state';
+import Document from '@tiptap/extension-document';
+import Text from '@tiptap/extension-text';
+import { BLOCK_TYPES, parseScriptText, type ScriptDocument } from '@frame-loom/contracts';
+import { fromEditorJson, ScriptBlockNode, toEditorJson } from './editor-model';
+
+export const schema = getSchema([
+  Document.extend({ content: 'scriptBlock+' }),
+  Text,
+  ScriptBlockNode,
+]);
+describe('剧本文档模型', () => {
+  const documents: ScriptDocument[] = [
+    { schemaVersion: 1, blocks: parseScriptText(sample).blocks },
+    {
+      schemaVersion: 1,
+      blocks: BLOCK_TYPES.map((type, index) => ({
+        id: `b${index}`,
+        type,
+        text: index % 2 ? '内容' : '',
+        ...(type === 'scene'
+          ? { attrs: { time: 'night' as const, space: 'ext' as const } }
+          : type === 'character'
+            ? { attrs: { delivery: 'os' as const } }
+            : {}),
+        ...(index % 2
+          ? { src: { line: index }, review: { reason: '存疑', options: [{ type }] } }
+          : {}),
+      })),
+    },
+  ];
+  it.each(documents)('经 EditorState 无损往返', (document) => {
+    const state = EditorState.create({ schema, doc: schema.nodeFromJSON(toEditorJson(document)) });
+    expect(fromEditorJson(state.doc.toJSON() as JSONContent)).toEqual(document);
+  });
+  it('拒绝换行和行内标记', () => {
+    expect(() =>
+      fromEditorJson(
+        toEditorJson({ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '一\n二' }] }),
+      ),
+    ).toThrow();
+    expect(() =>
+      fromEditorJson({
+        type: 'doc',
+        content: [
+          {
+            type: 'scriptBlock',
+            content: [{ type: 'text', text: '一', marks: [{ type: 'bold' }] }],
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+});
