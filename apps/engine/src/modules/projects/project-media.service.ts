@@ -8,7 +8,7 @@ import { DatabaseService } from '../../core/database/database.service.js';
 import { generationJobs, type JobRow } from '../generation/generation.schema.js';
 import { MediaService } from '../generation/media.service.js';
 import { ProjectFilesService } from './project-files.service.js';
-import { internalPath } from './local-project-store.js';
+import { errorCode, internalPath } from './local-project-store.js';
 import { projects } from './projects.schema.js';
 
 export function documentReferences(document: CanvasDocument) {
@@ -107,10 +107,15 @@ export class ProjectMediaService {
       ['media', 0],
       ['trash/media', 30 * 86400_000],
       ['trash/pages', 30 * 86400_000],
+      ['trash/scripts', 30 * 86400_000],
       ['tmp', 3600_000],
     ] as const) {
       const folder = await internalPath(root, directory);
-      for (const entry of await fs.readdir(folder, { withFileTypes: true })) {
+      const entries = await fs.readdir(folder, { withFileTypes: true }).catch((error: unknown) => {
+        if (errorCode(error) === 'ENOENT') return [];
+        throw error;
+      });
+      for (const entry of entries) {
         if (!entry.isFile()) continue;
         const path = await internalPath(root, `${directory}/${entry.name}`);
         const info = await fs.stat(path);

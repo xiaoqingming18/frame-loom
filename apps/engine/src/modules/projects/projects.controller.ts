@@ -9,6 +9,7 @@ import {
   ProjectPageCreateRequest,
   ProjectPageRenameRequest,
   ProjectPageSaveRequest,
+  ProjectProfile,
   CanvasView,
 } from '@frame-loom/contracts';
 import { ZodValidationPipe } from '../../core/http/zod-validation.pipe.js';
@@ -51,20 +52,26 @@ export class ProjectsController {
     @Param('id', idPipe) id: string,
     @Body(new ZodValidationPipe(ProjectPageCreateRequest)) input: ProjectPageCreateRequest,
   ) {
-    return this.service.createPage(id, input.name);
+    return this.service.createPage(id, input);
   }
   @Patch(':id/pages/:pageId') renamePage(
     @Param('id', idPipe) id: string,
     @Param('pageId', pagePipe) pageId: string,
     @Body(new ZodValidationPipe(ProjectPageRenameRequest)) input: ProjectPageRenameRequest,
   ) {
-    return this.service.renamePage(id, pageId, input.name);
+    return this.service.renamePage(id, pageId, input);
   }
   @Delete(':id/pages/:pageId') deletePage(
     @Param('id', idPipe) id: string,
     @Param('pageId', pagePipe) pageId: string,
   ) {
     return this.service.deletePage(id, pageId);
+  }
+  @Put(':id/profile') saveProfile(
+    @Param('id', idPipe) id: string,
+    @Body(new ZodValidationPipe(ProjectProfile)) profile: ProjectProfile,
+  ) {
+    return this.service.saveProfile(id, profile);
   }
   @Get(':id/pages/:pageId') loadPage(
     @Param('id', idPipe) id: string,

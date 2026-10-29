@@ -10,6 +10,9 @@ import {
   ProjectName,
   ProjectId,
   ProjectPageId,
+  ProjectProfile,
+  type ProjectPageCreateRequest,
+  type ProjectPageRenameRequest,
   emptyCanvasDocument,
   type ProjectManifest,
   type ProjectPageFile,
@@ -96,6 +99,7 @@ export class ProjectsService {
           createdAt: manifest.createdAt,
           updatedAt: manifest.updatedAt,
           status: 'available',
+          ...(manifest.profile ? { profile: manifest.profile } : {}),
         },
         manifest,
       };
@@ -150,7 +154,11 @@ export class ProjectsService {
         set: { rootPath, name: manifest.name, updatedAt: manifest.updatedAt, lastOpenedAt: now },
       })
       .run();
-    return { ...this.row(manifest.id), status: 'available' };
+    return {
+      ...this.row(manifest.id),
+      status: 'available',
+      ...(manifest.profile ? { profile: manifest.profile } : {}),
+    };
   }
 
   async list(): Promise<ProjectSummary[]> {
@@ -184,7 +192,15 @@ export class ProjectsService {
         return fail('PROJECT_WRITE_FAILED', '无法在保存位置创建项目', 500);
       }
       try {
-        for (const directory of ['pages', 'media', 'trash/pages', 'trash/media', 'tmp'])
+        for (const directory of [
+          'pages',
+          'scripts',
+          'media',
+          'trash/pages',
+          'trash/scripts',
+          'trash/media',
+          'tmp',
+        ])
           await fs.mkdir(join(root, '.frameloom', directory), { recursive: true });
         const now = new Date().toISOString();
         const manifest: ProjectManifest = {
@@ -196,6 +212,7 @@ export class ProjectsService {
           updatedAt: now,
           pages: [],
           tags: BUILTIN_TAGS,
+          ...(input.profile ? { profile: ProjectProfile.parse(input.profile) } : {}),
         };
         await this.store.writeManifest(root, manifest);
         return this.register(await this.canonical(root), manifest);
@@ -324,10 +341,26 @@ export class ProjectsService {
     this.cache(manifest);
   }
 
-  createPage(id: string, inputName: string): Promise<ProjectPageSummary> {
+  saveProfile(id: string, profile: ProjectProfile): Promise<ProjectManifest> {
     return this.store.serial(id, async () => {
       const { row, manifest } = await this.available(id);
-      const name = ProjectName.parse(inputName);
+      manifest.profile = ProjectProfile.parse(profile);
+      manifest.updatedAt = new Date().toISOString();
+      await this.writeSummary(row.rootPath, manifest);
+      return manifest;
+    });
+  }
+
+  private validateEpisode(manifest: ProjectManifest, episodeId?: string | null): void {
+    if (episodeId && !manifest.episodes?.some((episode) => episode.id === episodeId))
+      fail('EPISODE_NOT_FOUND', '剧集不存在', 404);
+  }
+
+  createPage(id: string, input: ProjectPageCreateRequest): Promise<ProjectPageSummary> {
+    return this.store.serial(id, async () => {
+      const { row, manifest } = await this.available(id);
+      const name = ProjectName.parse(input.name);
+      this.validateEpisode(manifest, input.episodeId);
       this.uniquePage(manifest, name);
       const now = new Date().toISOString();
       const summary: ProjectPageSummary = {
@@ -336,6 +369,7 @@ export class ProjectsService {
         createdAt: now,
         updatedAt: now,
         coverSha256: null,
+        ...(input.episodeId !== undefined ? { episodeId: input.episodeId } : {}),
       };
       await this.store.writePage(row.rootPath, {
         format: 'frame-loom-page',
@@ -351,13 +385,21 @@ export class ProjectsService {
     });
   }
 
-  renamePage(id: string, pageId: string, inputName: string): Promise<ProjectPageSummary> {
+  renamePage(
+    id: string,
+    pageId: string,
+    input: ProjectPageRenameRequest,
+  ): Promise<ProjectPageSummary> {
     return this.store.serial(id, async () => {
       const { row, manifest } = await this.available(id);
       const summary = this.page(manifest, pageId);
-      const name = ProjectName.parse(inputName);
-      this.uniquePage(manifest, name, pageId);
-      summary.name = name;
+      this.validateEpisode(manifest, input.episodeId);
+      if (input.name !== undefined) {
+        const name = ProjectName.parse(input.name);
+        this.uniquePage(manifest, name, pageId);
+        summary.name = name;
+      }
+      if (input.episodeId !== undefined) summary.episodeId = input.episodeId;
       summary.updatedAt = new Date().toISOString();
       manifest.updatedAt = summary.updatedAt;
       await this.writeSummary(row.rootPath, manifest);

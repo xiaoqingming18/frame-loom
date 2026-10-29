@@ -205,6 +205,7 @@ it('新建、重命名、移除与打开：项目文件独立于注册表且重�
     'media',
     'pages',
     'project.json',
+    'scripts',
     'tmp',
     'trash',
   ]);

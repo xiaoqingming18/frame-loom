@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { ProjectManifest, ProjectPageFile, projectTags } from '@frame-loom/contracts';
+import {
+  ProjectManifest,
+  ProjectPageFile,
+  ScriptFile,
+  StoryFile,
+  projectTags,
+} from '@frame-loom/contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { join, relative, isAbsolute } from 'node:path';
@@ -179,5 +185,90 @@ export class LocalProjectStore extends ProjectStore {
       await internalPath(root, `trash/pages/${trashName}`),
       await internalPath(root, `pages/${pageId}.json`),
     );
+  }
+
+  async readScript(root: string, episodeId: string, saving = false): Promise<ScriptFile> {
+    const path = await internalPath(root, `scripts/${episodeId}.json`);
+    const handle = await fs.open(path, 'r');
+    let text: string;
+    let info;
+    try {
+      text = await handle.readFile('utf8');
+      info = await handle.stat({ bigint: true });
+    } finally {
+      await handle.close();
+    }
+    const script = ScriptFile.parse(JSON.parse(text) as unknown);
+    if (script.id !== episodeId)
+      throw new DomainError('SCRIPT_ID_MISMATCH', 409, '剧本文件 id 不一致');
+    const previous = this.pages.get(path);
+    const digest = createHash('sha256').update(text).digest('hex');
+    if (
+      saving &&
+      previous &&
+      (previous.revision !== script.revision ||
+        previous.digest !== digest ||
+        previous.mtime !== info.mtimeNs ||
+        previous.size !== info.size)
+    )
+      throw new DomainError(
+        'SCRIPT_REVISION_CONFLICT',
+        409,
+        '剧本已被外部修改，请重新加载或复制全文',
+      );
+    this.pages.set(path, {
+      revision: script.revision,
+      mtime: info.mtimeNs,
+      size: info.size,
+      digest,
+    });
+    return script;
+  }
+
+  async writeScript(root: string, script: ScriptFile): Promise<void> {
+    const parsed = ScriptFile.parse(script);
+    await fs.mkdir(await internalPath(root, 'scripts'), { recursive: true });
+    await this.atomicWrite(root, `scripts/${parsed.id}.json`, parsed);
+    await this.readScript(root, parsed.id);
+  }
+
+  async trashScript(root: string, episodeId: string): Promise<string> {
+    await fs.mkdir(await internalPath(root, 'trash/scripts'), { recursive: true });
+    const source = await internalPath(root, `scripts/${episodeId}.json`);
+    const name = `${episodeId}-${Date.now()}-${randomUUID()}.json`;
+    const target = await internalPath(root, `trash/scripts/${name}`);
+    await retryRename(source, target);
+    const now = new Date();
+    await fs.utimes(target, now, now);
+    this.pages.delete(source);
+    return name;
+  }
+
+  async restoreScript(root: string, episodeId: string, trashName: string): Promise<void> {
+    await retryRename(
+      await internalPath(root, `trash/scripts/${trashName}`),
+      await internalPath(root, `scripts/${episodeId}.json`),
+    );
+  }
+
+  async readStory(root: string): Promise<StoryFile> {
+    try {
+      return StoryFile.parse(
+        JSON.parse(await fs.readFile(await internalPath(root, 'story.json'), 'utf8')) as unknown,
+      );
+    } catch (error) {
+      if (errorCode(error) !== 'ENOENT') throw error;
+      return {
+        format: 'frame-loom-story',
+        formatVersion: 1,
+        revision: 0,
+        elements: [],
+        ignored: [],
+      };
+    }
+  }
+
+  async writeStory(root: string, story: StoryFile): Promise<void> {
+    await this.atomicWrite(root, 'story.json', StoryFile.parse(story));
   }
 }
