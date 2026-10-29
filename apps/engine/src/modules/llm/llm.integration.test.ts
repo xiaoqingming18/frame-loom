@@ -7,6 +7,59 @@ import { ModelServicesRepository } from '../model-services/model-services.reposi
 import { LlmService } from './llm.service.js';
 
 const cleanups: (() => Promise<void>)[] = [];
+it.each([200, 401])('complete 拼接分块并转译 HTTP %s 错误', async (status) => {
+  const upstream = await mockUpstream([
+    {
+      method: 'POST',
+      path: '/v1/chat/completions',
+      reply: (req) => {
+        const body = JSON.parse(req.body) as { messages: { role: string; content: string }[] };
+        expect(body.messages).toEqual([
+          { role: 'system', content: '仅分类' },
+          { role: 'user', content: '原文' },
+        ]);
+        return {
+          status,
+          headers: { 'Content-Type': 'text/event-stream' },
+          body:
+            ['甲', '乙']
+              .map(
+                (content) =>
+                  `data: ${JSON.stringify({ id: 'complete', choices: [{ index: 0, delta: { content }, finish_reason: null }] })}\n\n`,
+              )
+              .join('') +
+            `data: ${JSON.stringify({ id: 'complete', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+        };
+      },
+    },
+  ]);
+  cleanups.push(() => upstream.close());
+  const s = await testEngine();
+  cleanups.push(() => s.close());
+  const repo = s.app.get(ModelServicesRepository);
+  const channel = repo.saveChannel({
+    name: '测试补全',
+    baseUrl: upstream.origin,
+    apiKey: 'test',
+    enabled: true,
+  });
+  const model = repo.saveModels(channel.id, [
+    ModelWrite.parse({
+      kind: 'chat',
+      upstreamModelId: 'chat',
+      displayName: '文本',
+      protocolId: 'openai-chat',
+      capability: getProtocol('openai-chat')!.templates.chat,
+      enabled: true,
+    }),
+  ])[0];
+  const result = s.app
+    .get(LlmService)
+    .complete(model.id, { system: '仅分类', user: '原文' }, new AbortController().signal);
+  if (status === 200) await expect(result).resolves.toBe('甲乙');
+  else await expect(result).rejects.toMatchObject({ code: 'AUTH_FAILED' });
+  expect(upstream.requests).toHaveLength(1);
+});
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });

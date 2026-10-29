@@ -9,6 +9,7 @@ import {
   type ProjectManifest,
   type ScriptFile,
   type ScriptSaveRequest,
+  type ConversionState,
 } from '@frame-loom/contracts';
 import { DomainError } from '../../core/http/domain-error.js';
 import { ProjectStore } from '../projects/project-store.js';
@@ -18,6 +19,15 @@ import { StoryService } from './story.service.js';
 
 @Injectable()
 export class EpisodesService {
+  readonly conversions = new Map<string, ConversionState>();
+  conversion(projectId: string, episodeId: string) {
+    return this.conversions.get(`${projectId}:${episodeId}`) ?? null;
+  }
+  assertIdle(projectId: string, episodeId: string) {
+    const status = this.conversion(projectId, episodeId)?.status;
+    if (status === 'queued' || status === 'running')
+      throw new DomainError('SCRIPT_CONVERTING', 409, '剧本正在转换');
+  }
   constructor(
     readonly store: ProjectStore,
     private readonly files: ProjectFilesService,
@@ -40,7 +50,7 @@ export class EpisodesService {
           .sort((a, b) => a.number - b.number)
           .map(async (episode) => ({
             ...episode,
-            conversion: null,
+            conversion: this.conversion(projectId, episode.id),
             pending: await this.story.pending(root, manifest, episode.id),
           })),
       );
@@ -103,6 +113,7 @@ export class EpisodesService {
 
   delete(projectId: string, episodeId: string) {
     return this.store.serial(projectId, async () => {
+      this.assertIdle(projectId, episodeId);
       const { root, manifest } = await this.context(projectId, episodeId);
       const trash = await this.store.trashScript(root, episodeId);
       manifest.episodes = manifest.episodes!.filter((episode) => episode.id !== episodeId);
@@ -151,12 +162,13 @@ export class EpisodesService {
       const { root, manifest } = await this.context(projectId, episodeId);
       const file = await this.store.readScript(root, episodeId);
       await this.repair(root, manifest, file);
-      return { ...file, conversion: null };
+      return { ...file, conversion: this.conversion(projectId, episodeId) };
     });
   }
 
   save(projectId: string, episodeId: string, input: ScriptSaveRequest) {
     return this.store.serial(projectId, async () => {
+      this.assertIdle(projectId, episodeId);
       const document = ScriptDocument.parse(input.document);
       const { root, manifest } = await this.context(projectId, episodeId);
       const current = await this.store.readScript(root, episodeId, true);

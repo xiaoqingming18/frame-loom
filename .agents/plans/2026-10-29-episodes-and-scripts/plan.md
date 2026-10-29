@@ -37,7 +37,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 | 01 | [契约与规则解析器](01-contracts.md) | done | — | `projects.ts` 扩展、`scripts.ts`、`script-parse.ts`、样例剧本与单测 |
 | 02 | [项目设定、剧集与剧本存储](02-engine-storage.md) | done | 01 | 项目设定接口、页面所属剧集、剧集增删改、剧本读写与 409、回收区清理 |
 | 03 | [设定库、同步与出现位置](03-engine-story.md) | done | 02 | 设定库命令、保存时同步、出现位置缓存与接口 |
-| 04 | [后台转换与文本模型](04-engine-conversion.md) | draft | 03 | `LlmService.complete`、转换队列、导入、取消、丢弃接口与事件 |
+| 04 | [后台转换与文本模型](04-engine-conversion.md) | done | 03 | `LlmService.complete`、转换队列、导入、取消、丢弃接口与事件 |
 | 05 | [项目设定、剧集列表与侧栏](05-desktop-episodes.md) | draft | 02 | 设定表单、详情 Tab、剧集列表与对话框、侧栏、剧本页路由外壳、受影响测试的更新 |
 | 06 | [编辑器内核与保存](06-editor-core.md) | draft | 05 | Tiptap 依赖、文档模型、键盘命令、排版、自动保存与冲突处理 |
 | 07 | [大纲、手柄、存疑、高亮与元素栏](07-editor-panels.md) | draft | 03、06 | 三栏编辑器的全部交互与响应式布局 |

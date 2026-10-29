@@ -54,6 +54,32 @@ export class LlmService {
   async validateChat(id: string) {
     await this.prepare(id);
   }
+  async complete(
+    id: string,
+    input: { system: string; user: string },
+    parentSignal: AbortSignal,
+  ): Promise<string> {
+    const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(60000)]);
+    let text = '';
+    let complete = false;
+    try {
+      for await (const event of this.run(
+        id,
+        {
+          systemPrompt: input.system,
+          messages: [{ role: 'user', content: input.user, timestamp: Date.now() }],
+        },
+        signal,
+      )) {
+        if (event.type === 'text_delta') text += event.delta;
+        if (event.type === 'done') complete = true;
+      }
+      if (!complete) throw new DomainError('INCOMPLETE_STREAM', 422, '响应流提前结束');
+      return text;
+    } catch (error) {
+      throw connectionError(error, signal);
+    }
+  }
   private async prepare(id: string, preview = false) {
     const row = this.repository.getModel(id);
     const channel = this.repository.getChannel(row.channelId);

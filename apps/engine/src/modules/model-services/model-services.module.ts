@@ -19,6 +19,6 @@ import { RequestPreviewService } from './request-preview.service.js';
     LlmService,
     RequestPreviewService,
   ],
-  exports: [ModelServicesRepository, ProtocolRegistry],
+  exports: [ModelServicesRepository, ProtocolRegistry, LlmService],
 })
 export class ModelServicesModule {}

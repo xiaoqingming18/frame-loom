@@ -1,6 +1,6 @@
 # Plan: 后台转换与文本模型
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -14,16 +14,16 @@ engine 实现导入、取消和丢弃三个接口，以及四阶段的后台转�
 
 ## 步骤
 
-- [ ] T1 `LlmService.complete(modelId, { system, user }, signal)`：
+- [x] T1 `LlmService.complete(modelId, { system, user }, signal)`：
   - 复用 `prepare` 和 `run`，`Context` 设为 `{ systemPrompt: system, messages: [user] }`；
   - 拼接所有 `text_delta`，没有收到 `done` 时抛出 `INCOMPLETE_STREAM`；
   - `ModelServicesModule` 导出 `LlmService` 和 `ModelServicesRepository`，后者已经在导出列表中。
 
   — 验证：在 `llm.integration.test.ts` 中新增一个用例。`mockUpstream` 断言请求体中的 system 消息和 user 消息，返回两个分块，`complete` 的结果等于两块文本拼接；上游返回 401 时，抛出 `AUTH_FAILED`。
-- [ ] T2 `events.ts` 新增 `{ type: 'script.conversion.updated', projectId, episodeId }`。
+- [x] T2 `events.ts` 新增 `{ type: 'script.conversion.updated', projectId, episodeId }`。
 
   — 验证：`events.test.ts` 已有的解析测试中，加入这个事件的正例和反例（缺少 `episodeId`）。
-- [ ] T3 新建 `scripts/conversion.service.ts`：
+- [x] T3 新建 `scripts/conversion.service.ts`：
   - 全局 FIFO 队列，同一时刻只运行一个转换；
   - 状态表的键为 `projectId:episodeId`，值为 `ConversionState`，最近一次状态一直保留；
   - 每个任务带一个 AbortController；
@@ -31,7 +31,7 @@ engine 实现导入、取消和丢弃三个接口，以及四阶段的后台转�
   - 四个阶段：`split` 用 `parseScriptText`；`classify` 和 `extract` 在同一批调用中完成；`match` 在 `serial` 中执行，依次为：用 `checkSourceIntegrity` 检查、写入剧本（把 `pendingImport` 移到 `source`、替换段落、写入 `convertedAt`、revision 加 1）、写入剧集摘要、执行同步、写入模型提取的元素、计算 `result`。
 
   — 验证：`scripts/conversion.integration.test.ts` 中，没有默认文本模型时，导入样例剧本得到：状态从 queued 到 running 再到 succeeded；共 60 个段落，其中 3 个存疑；`addedElements` 为 10；`warnings` 中包含「未设置默认文本模型」；事件至少发布了 3 次。
-- [ ] T4 实现分批、提示词和输出校验：
+- [x] T4 实现分批、提示词和输出校验：
   - 按行累计不超过 6000 个字符为一批；每批的存疑行数不超过 `max(10, floor((maxOutput − 400) / 20))`；没有存疑行的批次不调用模型；
   - 提示词放在 `scripts/conversion-prompt.ts`，内容是 system 文本加上输入 JSON，格式见笔记；
   - 用 zod 校验输出，并按笔记逐条丢弃不合规的内容：非存疑行的 id、角色不合法的 dialogue 决定、名称不在原文中的元素，每批最多接受 30 个元素；
@@ -45,7 +45,7 @@ engine 实现导入、取消和丢弃三个接口，以及四阶段的后台转�
   5. `sameAs` 指向已有人物时，新元素带有 `suggestedMergeInto`。
 
   每个场景都要断言上游请求次数。
-- [ ] T5 接口：
+- [x] T5 接口：
   - `import`：比较 revision；设定不完整且请求未带 `profile` 时返回 422 `PROJECT_PROFILE_REQUIRED`；带了 `profile` 时先写回清单；写入 `pendingImport`（revision 加 1）；入队后返回 202；没有 `text` 也没有 `pendingImport` 时返回 422 `SCRIPT_IMPORT_EMPTY`；
   - `cancel`：中止转换，状态改为 cancelled；
   - `DELETE import`：转换运行中时返回 409，否则清空 `pendingImport`；
@@ -57,16 +57,17 @@ engine 实现导入、取消和丢弃三个接口，以及四阶段的后台转�
 ## 验证
 
 - 预期：先运行 `pnpm --filter @frame-loom/engine... build`，然后运行 `pnpm --filter @frame-loom/engine exec vitest run src/modules/scripts src/modules/llm src/core/events`，以及 `pnpm --filter @frame-loom/engine typecheck`，都应通过。所有模型调用都使用 `mockUpstream`，不访问网络。
-- 实际：未执行。
+- 实际：`pnpm --filter @frame-loom/engine... build`、`pnpm --filter @frame-loom/engine typecheck` 通过；`pnpm --filter @frame-loom/engine exec vitest run src/modules/scripts src/modules/llm src/core/events` 通过（6 文件、39 用例）。模型调用均为本地 `mockUpstream`。`pnpm --filter @frame-loom/contracts exec vitest run src/events.test.ts` 验证新增事件。
 
 ## 进度
 
 - 2026-10-29：创建子计划草稿。
+- 2026-10-29：后台转换、文本补全、事件与模拟上游定向验证完成。
 
 ## 发现与偏差
 
-无。
+最近转换状态表挂在 `EpisodesService`，由 `ConversionService` 更新，避免两个服务循环注入。取消与最终落盘共用项目队列，取消后立即再次导入时旧任务不能覆盖新任务状态。丢弃导入返回更新后的 revision。
 
 ## 交接
 
-依赖 03，尚未开始。
+无。
