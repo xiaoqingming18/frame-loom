@@ -81,3 +81,22 @@ it('保持存疑场标题后仍显示可切换徽标', async () => {
   fireEvent.click(screen.getByRole('button', { name: '切换场景时间' }));
   expect(changed.mock.lastCall?.[0].blocks[0].attrs).toEqual({ time: 'dawn', space: 'ext' });
 });
+
+it.each([{ isComposing: true }, { keyCode: 229 }])(
+  '输入法确认键 %j 不拆段，后续普通 Enter 正常拆段',
+  async (ime) => {
+    render(
+      <ScriptEditor
+        document={{ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '你好' }] }}
+        onChange={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    const textbox = await screen.findByRole('textbox', { name: '剧本编辑区' });
+    fireEvent.keyDown(textbox, { key: 'Enter', code: 'Enter', keyCode: 13, ...ime });
+    expect(textbox.querySelectorAll('p')).toHaveLength(1);
+    expect(textbox.textContent).toBe('你好');
+    fireEvent.keyDown(textbox, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    expect(textbox.querySelectorAll('p')).toHaveLength(2);
+  },
+);

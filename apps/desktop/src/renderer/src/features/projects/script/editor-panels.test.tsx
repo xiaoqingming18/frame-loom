@@ -100,6 +100,19 @@ it('人物前缀候选用 Enter 完成', async () => {
   fireEvent.keyDown(editor.view.dom, { key: 'Enter' });
   expect(fromEditorJson(editor.getJSON()).blocks[0].text).toBe('林夏');
 });
+it.each([{ isComposing: true }, { keyCode: 229 }])(
+  '输入法确认键 %j 不选择人物补全候选',
+  async (ime) => {
+    const editor = make({ schemaVersion: 1, blocks: [{ id: 'a', type: 'character', text: '' }] });
+    render(<CharacterAutocomplete editor={editor} elements={story.elements} />);
+    editor.commands.insertContent('林');
+    await screen.findByRole('option', { name: '林夏' });
+    fireEvent.keyDown(editor.view.dom, { key: 'Enter', code: 'Enter', keyCode: 13, ...ime });
+    expect(fromEditorJson(editor.getJSON()).blocks).toMatchObject([{ text: '林' }]);
+    fireEvent.keyDown(editor.view.dom, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    expect(fromEditorJson(editor.getJSON()).blocks).toMatchObject([{ text: '林夏' }]);
+  },
+);
 it('选中文字标记道具；41 字禁用', async () => {
   const editor = make({ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '旧信封' }] });
   const create = vi.fn().mockResolvedValue(undefined);

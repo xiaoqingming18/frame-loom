@@ -86,12 +86,14 @@ Parent: plan.md
 - 桌面：T5 列出的 7 个 e2e 文件共 9 条用例全部通过（`.cache/scripts-regression.log`）；修复宽屏折叠、最小窗口截图等待与明亮骨架后，剧本两条 e2e 再次通过（`.cache/scripts-e2e-final.log`）。主流程在右栏合并小林；重启后剧本与别名保留。无 pageerror 或 CSP 错误。
 - 截图：`new-project-{light,dark}`、`episodes-{light,dark}`、`conversion-{light,dark}`、`editor-{light,dark}`、`story-{light,dark}`、`episodes-720`、`editor-720` 共 12 张均已生成并逐张查看；最终修复后重看受影响截图。颜色复用 token；表单与抽屉纵向滚动，窄窗口剧集表格在容器内横向滚动，根文档均无横向溢出。名称输入框焦点环清晰，720 窗口可见更多菜单。
 - 性能：3000 段、50 字，最终一轮加载 **526ms**；每次 `keyboard.insertText` 的自动化往返平均 **97.51ms**；浏览器从 beforeinput 到 input 后微任务的平均 **18.97ms**。前一轮对应数字为 504ms、59.81ms、18.98ms，自动化往返波动较大。后者不包括完整绘制，前者包括 CDP 往返，二者不能混用。数字保存在 `.cache/scripts/performance.json`，不作为门禁或流畅度达标承诺。
-- T2 的自动化部分已通过；真实中文输入法组字时按 Enter 的人工检查未完成。专用开发窗口准备后，Computer Use 两次返回 `failed to activate captured window`，无法执行原生按键；已向用户请求实际检查结果。未以 CDP 模拟替代此项。
+- T2 的自动化部分已通过；用户首次真实中文输入法检查反馈组字回车产生额外段落，人工验收失败。修复事件层 `isComposing` / `229` 保护后，剧本目录 70 项测试、desktop typecheck 和定向 eslint 通过，仍需在最新开发版本人工复验。Computer Use 两次无法激活窗口，未以 CDP 模拟替代此项。
 
 ## 进度
 
 - 2026-10-29：创建子计划草稿。
 - 2026-10-29：完成开发、自动化与 12 张截图验收；真实输入法人工结果仍待补齐，暂不移动笔记或把总计划标为完成。
+- 2026-10-29：用户反馈真实输入法验收失败，补齐原生事件层和人物补全的组字保护与四项回归测试，保持 T2、T6 未完成。
+- 2026-10-29：输入法修复后 desktop 构建及剧本 e2e 2/2 再次通过（`.cache/scripts-ime-e2e.log`），无 pageerror 或 CSP 错误。此次 3000 段测量加载 3183ms，自动化往返均值 106.31ms，浏览器输入处理均值 22.20ms；与前轮相比存在波动，保留性能风险。
 
 ## 发现与偏差
 

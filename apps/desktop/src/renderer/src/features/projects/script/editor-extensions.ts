@@ -1,4 +1,5 @@
 import { Extension, type Extensions } from '@tiptap/core';
+import { Plugin } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import Document from '@tiptap/extension-document';
 import Text from '@tiptap/extension-text';
@@ -15,6 +16,9 @@ import {
   pasteLines,
   setBlockType,
 } from './script-commands';
+
+export const isScriptCompositionKey = (view: EditorView, event: KeyboardEvent) =>
+  view.composing || event.isComposing || event.keyCode === 229;
 
 const keyboard = Extension.create({
   name: 'scriptKeyboard',
@@ -51,7 +55,17 @@ const keyboard = Extension.create({
     };
   },
   addProseMirrorPlugins() {
-    return [clearReviewPlugin()];
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            // 交给原生输入法提交候选，跳过 ProseMirror 的快捷键分发。
+            keydown: (view, event) => isScriptCompositionKey(view, event),
+          },
+        },
+      }),
+      clearReviewPlugin(),
+    ];
   },
 });
 export function scriptExtensions(): Extensions {

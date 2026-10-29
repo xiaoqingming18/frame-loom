@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/core';
 import type { StoryResult } from '@frame-loom/contracts';
 import { Popover, PopoverAnchor, PopoverContent } from '@frame-loom/ui/components/popover';
 import { Button } from '@frame-loom/ui/components/button';
+import { isScriptCompositionKey } from './editor-extensions';
 
 export function CharacterAutocomplete({
   editor,
@@ -67,7 +68,7 @@ export function CharacterAutocomplete({
   useEffect(() => {
     if (!candidate) return;
     const key = (event: KeyboardEvent) => {
-      if (editor.view.composing) return;
+      if (isScriptCompositionKey(editor.view, event)) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         event.stopImmediatePropagation();
