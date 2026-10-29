@@ -132,7 +132,7 @@ deployPrefix  = baseUrl 路径去掉 channelPrefix 后的剩余部分（兼容 /
 - 画布只提交语义请求：方式、提示词、带角色与顺序的素材（`first_frame/last_frame/keyframe/reference/base_video`）、语义参数、能力卡声明过的附加参数、图片编辑配方。适配器负责字段翻译、提示词引用改写、素材交付；never 整体展开参数对象。
 - 素材交付只有内联（data URI／multipart 文件）与公网 URL 两类；URL 交付复用现有对象存储模块。本期首批协议没有供应商文件上传，`provider_uploads` 与相关上传复用代码删除。
 - 任务提交前冻结快照：协议 id 与版本、上游模型 ID、各操作最终地址、能力卡、语义请求、实际请求体（素材以 sha256 表示）、渠道 id 与凭据指纹、素材 URL。凭据指纹变化时任务暂停，never 改用其他账号。有远端 ID 时只查询，提交结果不确定时进入 `submit_unknown`，never 自动重投；首批协议均不声明提交幂等。
-- 渠道并发可配置，模型只能收窄；轮询节奏与超时由协议描述给出，不进入能力卡。
+- 渠道并发可配置，模型只能收窄；轮询节奏与超时由协议描述给出，不进入能力卡。同步提交的等待上限由适配器给出：OpenAI Images 的生成／编辑请求为 5 分钟，其他请求默认 60 秒；创建和恢复任务的截止时间采用同一上限。图片生成可能在返回 HTTP 200 响应头后继续传输，超时必须覆盖完整响应体。两次真实全景任务分别在 60.172／60.052 秒失败，因此不能将 200 当作已拿到图片。超时明确分类并显示中文原因，但已发出的提交仍保持 `submit_unknown`，禁止自动重发以避免重复计费。延长等待会更久占用并发槽，且不保证服务商一定在 5 分钟内返回；不提供无期限等待或能力卡超时配置。
 - 持久任务内核、凭据加密（AES-256-GCM，主密钥经 safeStorage）、SSE 事件、ffprobe 探测、媒体落盘与项目写回保留。
 
 ### 设置页与画布
@@ -155,6 +155,8 @@ deployPrefix  = baseUrl 路径去掉 channelPrefix 后的剩余部分（兼容 /
 - 删除：`model-catalog.ts`、`service-routing.ts`、`generation-capabilities.ts` 与 `ModelProfile` 体系、`channels/model-catalog.service.ts`、`video-retirement.ts`、`generation/profiles/*`、`execution-contract.ts`、旧适配器与旧快照恢复分支、所有地址特例、设置页目录导入与升级报告、`docs/model-service-upgrade.md`、对应旧测试与 E2E。
 
 ### 测试与验收
+
+同步图片超时修复的定向验证：HTTP 200 后延迟 65 秒的响应可读完，超过 5 分钟明确返回超时（虚拟时钟，不调用真实供应商）；本地集成测试验证任务截止时间、超时分类、禁止重提和重启不重发。HTTP、图片适配器和任务集成共 43 项通过；engine typecheck、lint、build 与笔记／计划校验通过。未重发历史全景任务，未验证真实中转站能否在新上限内返回。
 
 共享契约覆盖 15 个唯一协议、模板、上限、空值语义、参数与素材规则、地址及尺寸解析。媒体适配器用 buildSubmit 精确断言请求，文本由 pi-ai 的实际本地模拟请求验证保留字段。官方来源与 2026-10-29 核对日期存入描述及 fixtures README。
 

@@ -352,7 +352,9 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         source: request.source,
         createdAt: now,
         updatedAt: now,
-        deadlineAt: new Date(Date.now() + (descriptor.poll?.timeoutMs ?? 60000)).toISOString(),
+        deadlineAt: new Date(
+          Date.now() + (descriptor.poll?.timeoutMs ?? adapter.submitTimeoutMs ?? 60000),
+        ).toISOString(),
       })
       .run();
     this.events.publish({ type: 'generation.job.updated', jobId: id });
@@ -451,7 +453,9 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       finishedAt: null,
       deadlineAt: new Date(
         Date.now() +
-          (this.registry.get(row.snapshot.protocolId).descriptor.poll?.timeoutMs ?? 60000),
+          (this.registry.get(row.snapshot.protocolId).descriptor.poll?.timeoutMs ??
+            this.registry.get(row.snapshot.protocolId).submitTimeoutMs ??
+            60000),
       ).toISOString(),
     });
     return this.get(id);
@@ -765,7 +769,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           row.snapshot.capability,
         );
         sent = true;
-        result = await adapter.parseSubmit(ctx, await send(call, ctx));
+        result = await adapter.parseSubmit(ctx, await send(call, ctx, adapter.submitTimeoutMs));
       }
       if (signal.aborted || this.row(row.id).status === 'cancelled') return;
       if (result.status === 'failed')

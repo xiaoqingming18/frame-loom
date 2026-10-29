@@ -351,6 +351,33 @@ it.each([{ disconnect: true }, { submitStatus: 503 }])('提交结果不明不重
   expect(t.generation.get(job.id).status).toBe('submit_unknown');
   expect(t.upstream.requests.filter((req) => req.method === 'POST')).toHaveLength(1);
 });
+it('同步提交使用协议等待上限，超时保留准确原因且重启不重投', async () => {
+  const options = { holdSubmit: true };
+  const t = await setup(options);
+  t.adapter.descriptor.poll = undefined;
+  t.adapter.submitTimeoutMs = 1000;
+  try {
+    const job = await t.generation.create(t.request());
+    const row = t.db.select().from(generationJobs).where(eq(generationJobs.id, job.id)).get()!;
+    expect(Date.parse(row.deadlineAt) - Date.parse(row.createdAt)).toBeGreaterThanOrEqual(1000);
+    expect(Date.parse(row.deadlineAt) - Date.parse(row.createdAt)).toBeLessThan(1100);
+    await expect
+      .poll(() => t.generation.get(job.id).status, { timeout: 3000 })
+      .toBe('submit_unknown');
+    expect(t.generation.get(job.id)).toMatchObject({
+      errorCategory: 'timeout',
+      errorCode: 'SUBMIT_UNKNOWN',
+    });
+    expect(t.generation.get(job.id).errorMessage).toContain('远端可能已受理并计费');
+    await expect(t.generation.resubmit(job.id)).rejects.toMatchObject({ code: 'UNSAFE_RESUBMIT' });
+    options.holdSubmit = false;
+    await t.s.restart();
+    expect(t.generation.get(job.id).status).toBe('submit_unknown');
+    expect(t.upstream.requests.filter((req) => req.method === 'POST')).toHaveLength(1);
+  } finally {
+    options.holdSubmit = false;
+  }
+});
 it('凭据变更暂停，恢复原凭据后继续；本地放弃与远端取消分开', async () => {
   const t = await setup();
   const job = await t.generation.create(t.request());

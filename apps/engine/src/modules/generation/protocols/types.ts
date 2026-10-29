@@ -72,6 +72,7 @@ export type AdapterContext = {
 };
 export interface ProtocolAdapter {
   descriptor: ProtocolDescriptor;
+  submitTimeoutMs?: number;
   buildSubmit(ctx: AdapterContext, request: SemanticRequest, cap: Capability): Promise<HttpCall>;
   parseSubmit(ctx: AdapterContext, result: HttpResult): Promise<AdapterResult>;
   buildQuery?(ctx: AdapterContext, remoteTaskId: string): HttpCall;

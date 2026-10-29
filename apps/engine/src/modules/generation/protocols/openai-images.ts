@@ -5,6 +5,7 @@ import { GenerationFailure } from './http.js';
 
 export const openaiImages: ProtocolAdapter = {
   descriptor: OPENAI_IMAGES,
+  submitTimeoutMs: 300_000,
   async buildSubmit(ctx, request, cap) {
     if (cap.kind !== 'image')
       throw new GenerationFailure('invalid_params', 'INVALID_KIND', '需要图像能力卡');

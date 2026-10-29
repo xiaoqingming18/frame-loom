@@ -114,6 +114,7 @@ export async function prepareCall(call: HttpCall): Promise<HttpCall> {
 export async function send(
   call: HttpCall,
   ctx: Pick<AdapterContext, 'signal' | 'diagnose'> & Partial<Pick<AdapterContext, 'credentials'>>,
+  timeoutMs = 60_000,
 ): Promise<HttpResult> {
   const { body, headers } = await prepareCall(call);
   const url = new URL(call.url);
@@ -135,36 +136,49 @@ export async function send(
     route: redact(url.pathname),
   };
   ctx.diagnose(diagnostic);
-  const response = await fetch(call.url, {
-    method: call.method,
-    headers,
-    body: body as BodyInit | undefined,
-    redirect: 'error',
-    signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(60000)]),
-  });
-  const requestId = response.headers.get('x-request-id') ?? response.headers.get('request-id');
-  ctx.diagnose({
-    ...diagnostic,
-    httpStatus: response.status,
-    ...(requestId
-      ? {
-          requestId: redact(requestId)
-            .replace(/[^\x20-\x7e\u4e00-\u9fff]/g, '')
-            .slice(0, 128),
-        }
-      : {}),
-  });
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw classifyHttpError(response.status);
+  const timeout = AbortSignal.timeout(timeoutMs);
+  try {
+    const response = await fetch(call.url, {
+      method: call.method,
+      headers,
+      body: body as BodyInit | undefined,
+      redirect: 'error',
+      signal: AbortSignal.any([ctx.signal, timeout]),
+    });
+    const requestId = response.headers.get('x-request-id') ?? response.headers.get('request-id');
+    ctx.diagnose({
+      ...diagnostic,
+      httpStatus: response.status,
+      ...(requestId
+        ? {
+            requestId: redact(requestId)
+              .replace(/[^\x20-\x7e\u4e00-\u9fff]/g, '')
+              .slice(0, 128),
+          }
+        : {}),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw classifyHttpError(response.status);
+    }
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (data.byteLength > 64 * 1024 * 1024)
+      throw new GenerationFailure('upstream', 'RESPONSE_TOO_LARGE', '上游响应超过 64MB');
+    return {
+      status: response.status,
+      headers: response.headers,
+      bytes: data,
+      responseAudio: call.responseAudio,
+    };
+  } catch (error) {
+    if (timeout.aborted && !ctx.signal.aborted)
+      throw new GenerationFailure(
+        'timeout',
+        'RESPONSE_TIMEOUT',
+        call.operation === 'submit' || call.operation === 'edit'
+          ? '等待上游生成结果超时，远端可能已受理并计费，请勿直接重试'
+          : '等待上游响应超时',
+      );
+    throw error;
   }
-  const data = new Uint8Array(await response.arrayBuffer());
-  if (data.byteLength > 64 * 1024 * 1024)
-    throw new GenerationFailure('upstream', 'RESPONSE_TOO_LARGE', '上游响应超过 64MB');
-  return {
-    status: response.status,
-    headers: response.headers,
-    bytes: data,
-    responseAudio: call.responseAudio,
-  };
 }
