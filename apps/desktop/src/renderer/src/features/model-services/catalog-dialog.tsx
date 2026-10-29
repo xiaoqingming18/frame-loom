@@ -150,6 +150,7 @@ export function CatalogDialog({
                   {row.id}
                 </span>
                 <NativeSelect
+                  className="w-24 shrink-0"
                   aria-label={`${row.id} 类别`}
                   disabled={existing}
                   value={kind ?? ''}
@@ -167,7 +168,7 @@ export function CatalogDialog({
                     </option>
                   ))}
                 </NativeSelect>
-                <span className="text-xs text-muted-foreground">
+                <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
                   {existing
                     ? '已添加'
                     : row.protocolId && kind && getProtocol(row.protocolId)?.kinds.includes(kind)

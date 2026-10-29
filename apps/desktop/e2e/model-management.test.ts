@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 test('渠道、协议与能力编辑、文本与 TTS 测试、默认模型及明暗最小窗口', async ({}, info) => {
   test.setTimeout(180_000);
   const key = 'local-e2e-only-1234';
+  const longModelId = `local-image-${'long-model-name-'.repeat(12)}`;
   const requests: { method: string; path: string; body: Record<string, unknown> }[] = [];
   const violations: string[] = [];
   const upstream = createServer((request, response) => {
@@ -50,6 +51,7 @@ test('渠道、协议与能力编辑、文本与 TTS 测试、默认模型及明
                 architecture: { output_modalities: ['audio'] },
               },
               { id: 'local-video', supported_endpoint_types: ['openai-video'] },
+              { id: longModelId, architecture: { output_modalities: ['image'] } },
             ],
           }),
         );
@@ -131,10 +133,48 @@ test('渠道、协议与能力编辑、文本与 TTS 测试、默认模型及明
     await page.getByLabel('服务地址', { exact: true }).fill(`${origin}/v1`);
     await page.getByLabel('API Key', { exact: true }).fill(key);
     await page.getByRole('button', { name: '保存并读取模型' }).click();
+    const checkCatalogLayout = async (state: string) => {
+      const dialog = page.getByRole('dialog', { name: '读取模型', exact: true });
+      for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate(`window.frameLoom.theme.set('${theme}')`);
+        await page.emulateMedia({ colorScheme: theme });
+        await page.setViewportSize({ width: 800, height: 800 });
+        for (const id of ['local-chat', 'local-tts', 'local-video', longModelId]) {
+          const name = dialog.getByTitle(id, { exact: true });
+          await expect(name).toBeVisible();
+          const bounds = (await name.boundingBox())!;
+          expect(bounds.width).toBeGreaterThan(120);
+          const row = name.locator('..');
+          expect(await row.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+            true,
+          );
+          if (id === longModelId) {
+            expect(
+              await name.evaluate((element) => element.scrollWidth > element.clientWidth),
+            ).toBe(true);
+          }
+        }
+        await page.screenshot({
+          path: info.outputPath(`catalog-${state}-${theme}-800.png`),
+          animations: 'disabled',
+        });
+      }
+    };
+    await checkCatalogLayout('new');
     await page.getByRole('checkbox', { name: '选择 local-chat', exact: true }).check();
     await page.getByRole('checkbox', { name: '选择 local-tts', exact: true }).check();
     await page.getByRole('checkbox', { name: '选择 local-video', exact: true }).check();
     await page.getByRole('button', { name: '添加所选 (3)' }).click();
+    await page.getByRole('button', { name: '读取模型', exact: true }).click();
+    await expect(
+      page.getByRole('checkbox', { name: '选择 local-chat', exact: true }),
+    ).toBeDisabled();
+    await checkCatalogLayout('added');
+    await page
+      .getByRole('dialog', { name: '读取模型', exact: true })
+      .getByRole('button', { name: '取消', exact: true })
+      .click();
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole('button', { name: 'local-video local-video', exact: true }).click();
     let editor = page.getByRole('dialog', { name: 'local-video', exact: true });
     await editor.getByRole('radio', { name: /MiniMax/ }).click();
