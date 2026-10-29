@@ -1,6 +1,6 @@
 # Plan: 设定库 Tab
 
-Status: draft
+Status: active
 Parent: plan.md
 
 ## 目标
@@ -59,7 +59,7 @@ Parent: plan.md
   - 在开发模式下，检查明暗两种模式下的设定库 Tab 和抽屉各一次。
 
   本子计划不运行 e2e。
-- 实际：未执行。
+- 实际：desktop typecheck 通过；story 定向 vitest 1 文件 3 测试通过，覆盖分类计数、搜索别名、状态筛选、恢复、批量确认、字段冲突、出现位置链接和同类合并。明暗视觉检查待集成验收。
 
 ## 进度
 
@@ -71,4 +71,4 @@ Parent: plan.md
 
 ## 交接
 
-依赖 03、05，尚未开始。
+设定库和详情抽屉已接通，待明暗主题实际验收后收尾。

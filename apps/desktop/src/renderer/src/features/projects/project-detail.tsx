@@ -17,6 +17,7 @@ import { EpisodeDialog, type EpisodeAction } from './episodes/episode-dialog';
 import { EpisodeList } from './episodes/episode-list';
 import { ProjectDialog, type ProjectAction } from './project-dialog';
 import { ProjectAssets } from './project-assets';
+import { StoryTab } from './story/story-tab';
 
 export function ProjectDetail({
   projectId,
@@ -130,7 +131,13 @@ export function ProjectDetail({
                   />
                 )}
               </TabsContent>
-              <TabsContent value="story">设定库即将可用</TabsContent>
+              <TabsContent value="story">
+                <StoryTab
+                  client={engineClient}
+                  projectId={projectId}
+                  episodes={project.data.episodes ?? []}
+                />
+              </TabsContent>
               <TabsContent value="pages">
                 {project.data.pages.length === 0 ? (
                   <div className="grid min-h-60 place-content-center gap-3 text-center">
