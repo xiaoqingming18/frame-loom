@@ -1,12 +1,12 @@
 # Plan: 剧集、项目设定与结构化剧本
 
-Status: active
-Note: ../../notes/proposed/feature/2026-10-29-episodes-and-structured-scripts.md
-Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
+Status: done
+Note: ../../notes/implemented/feature/2026-10-29-episodes-and-structured-scripts.md
+Note: ../../notes/implemented/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 目标
 
-本计划实现以下流程：项目可以带项目设定，项目下有正式的剧集，每集有一份结构化剧本，用户可以粘贴整集原文，由后台转换为带类型的段落，并把元素写入设定库，然后在三栏编辑器中编辑剧本，在设定库中确认、合并或忽略元素。完成条件以功能笔记的 `## Acceptance criteria` 第 1–6 条和编辑器笔记的第 1–5 条为准。
+本计划实现以下流程：项目可以带项目设定，项目下有正式的剧集，每集有一份结构化剧本，用户可以粘贴整集原文，由后台转换为带类型的段落，并把元素写入设定库，然后在三栏编辑器中编辑剧本，在设定库中确认、合并或忽略元素。完成条件以功能笔记的 `## Testing` 第 1–6 条和编辑器笔记的第 1–5 条为准（由原验收标准迁入）。
 
 ## 范围与非目标
 
@@ -39,11 +39,11 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 | 03 | [设定库、同步与出现位置](03-engine-story.md) | done | 02 | 设定库命令、保存时同步、出现位置缓存与接口 |
 | 04 | [后台转换与文本模型](04-engine-conversion.md) | done | 03 | `LlmService.complete`、转换队列、导入、取消、丢弃接口与事件 |
 | 05 | [项目设定、剧集列表与侧栏](05-desktop-episodes.md) | done | 02 | 设定表单、详情 Tab、剧集列表与对话框、侧栏、剧本页路由外壳、受影响测试的更新 |
-| 06 | [编辑器内核与保存](06-editor-core.md) | active | 05 | Tiptap 依赖、文档模型、键盘命令、排版、自动保存与冲突处理 |
-| 07 | [大纲、手柄、存疑、高亮与元素栏](07-editor-panels.md) | active | 03、06 | 三栏编辑器的全部交互与响应式布局 |
-| 08 | [导入对话框与转换进度](08-import-ui.md) | active | 04、06 | 导入、项目设定补填、进度、取消、未完成导入、结果提示 |
+| 06 | [编辑器内核与保存](06-editor-core.md) | done | 05 | Tiptap 依赖、文档模型、键盘命令、排版、自动保存与冲突处理 |
+| 07 | [大纲、手柄、存疑、高亮与元素栏](07-editor-panels.md) | done | 03、06 | 三栏编辑器的全部交互与响应式布局 |
+| 08 | [导入对话框与转换进度](08-import-ui.md) | done | 04、06 | 导入、项目设定补填、进度、取消、未完成导入、结果提示 |
 | 09 | [设定库 Tab](09-story-tab.md) | done | 03、05 | 分类、筛选、卡片、详情抽屉、合并、批量、恢复 |
-| 10 | [集成验收与收尾](10-acceptance.md) | active | 07、08、09 | 剧本 e2e、截图、性能数字、一次全仓门禁、笔记转入 implemented |
+| 10 | [集成验收与收尾](10-acceptance.md) | done | 07、08、09 | 剧本 e2e、截图、性能数字、一次全仓门禁、笔记转入 implemented |
 
 ## 依赖与顺序
 
@@ -85,11 +85,11 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 - [x] 契约与解析器满足功能笔记验收第 1 条 — 证据：01 单测
 - [x] engine 满足功能笔记验收第 2 条 — 证据：02、03、04 集成测试
 - [x] desktop 满足功能笔记验收第 3 条，以及编辑器笔记验收第 1–3 条 — 证据：05–09 单测，以及 `rg` 边界检查
-- [ ] 剧本 e2e、CSP、模拟输入法组字、明暗主题与 720×560 截图满足功能笔记第 4、5 条和编辑器笔记第 4 条 — 证据：10
+- [x] 剧本 e2e、CSP、模拟与真实输入法组字、明暗主题与 720×560 截图满足功能笔记第 4、5 条和编辑器笔记第 4 条 — 证据：10 及用户人工复验反馈
 - [x] 性能数字已记录 — 证据：10
 - [x] 一次全仓 typecheck、lint、format:check、test 和 `pnpm run verify` 通过 — 证据：10
-- [ ] 两篇笔记移入 `implemented/`，相关笔记、`AGENTS.md` 和 README 已同步，父子计划转为 `done` — 证据：10 的收尾提交
+- [x] 两篇笔记移入 `implemented/`，相关笔记、`AGENTS.md` 和 README 已同步，父子计划转为 `done` — 证据：10 的收尾提交
 
 ## 发现与偏差
 
-实现、自动化与截图验收已完成。用户首次真实中文输入法验收反馈组字回车产生额外段落；已补齐事件层组字保护并通过自动回归，仍待最新开发版本的人工复验。06 及依赖它的 07、08、10 保持 active，两篇笔记暂保留 proposed。完整证据与性能限制见 10。
+实现、自动化与截图验收已完成。用户首次真实中文输入法验收发现组字回车拆段，修复提交 `4131291` 补齐事件层保护并通过自动回归；用户随后明确反馈「未产生额外段落」，人工复验通过。全部十个子计划与本计划已完成，两篇笔记已移入 implemented。完整证据与大文档性能限制见 10。

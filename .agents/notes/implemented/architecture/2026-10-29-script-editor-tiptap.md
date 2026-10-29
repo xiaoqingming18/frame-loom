@@ -1,10 +1,10 @@
 # Agent Note: 剧本编辑器内核选用 Tiptap
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
-[剧集与结构化剧本](../feature/2026-10-29-episodes-and-structured-scripts.md)要求编辑器内的文档就是标准剧本格式：一个扁平的带类型段落列表，每个段落有稳定 id，并且要支持编剧软件式的键盘规则、段落手柄拖动、存疑标记、元素下划线高亮、人物自动补全和撤销重做。仓库目前没有任何富文本编辑器依赖。手写 `contenteditable` 要自己处理输入法组字、选区、撤销和粘贴，风险过高。
+[剧集与结构化剧本](../feature/2026-10-29-episodes-and-structured-scripts.md)要求编辑器内的文档就是标准剧本格式：一个扁平的带类型段落列表，每个段落有稳定 id，并且要支持编剧软件式的键盘规则、段落手柄拖动、存疑标记、元素下划线高亮、人物自动补全和撤销重做。选型前仓库没有富文本编辑器依赖。手写 `contenteditable` 要自己处理输入法组字、选区、撤销和粘贴，风险过高。
 
 约束：
 
@@ -13,7 +13,7 @@ Status: proposed
 - 依赖要精确锁定版本，许可证必须允许商业分发。
 - 文档里只存纯文本段落，不存行内标记。高亮来自实时匹配（见上面的功能笔记）。
 
-## Proposal
+## Decision
 
 ### 依赖
 
@@ -41,7 +41,7 @@ Status: proposed
 
 ### 交互的实现方式
 
-- **键盘规则**：在 `scriptBlock` 扩展的 `addKeyboardShortcuts` 中实现。每条规则对应 `script-commands.ts` 中的一个纯函数命令，单测可以直接在 `EditorState` 上调用这些命令，不需要 DOM。
+- **键盘规则**：在 `scriptKeyboard` 扩展的 `addKeyboardShortcuts` 中实现。每条规则对应 `script-commands.ts` 中的一个纯函数命令，单测可以直接在 `EditorState` 上调用这些命令，不需要 DOM。
 - **元素高亮和存疑竖条**：用一个 ProseMirror 插件的 `DecorationSet` 实现。初始化时全量计算；之后只对 transaction 改动过的段落调用 `findMentions` 重新计算，其余部分用 `mapping` 映射。设定库变化时，通过 `setMeta('mentions', terms)` 触发一次全量重算。装饰不进入文档，也不进入撤销历史。
 - **段落手柄**：在编辑器容器内放一个自绘的浮动按钮。鼠标移动时，用 `view.posAtCoords` 找到当前段落，把按钮定位到该段左侧。点击按钮打开类型菜单；按住拖动时，设置 `NodeSelection`，并把 `view.dragging = { slice, move: true }` 交给 ProseMirror 的原生拖放处理。键盘用户用 Alt+↑ 和 Alt+↓ 代替拖动。
 - **自动补全和浮动工具条**：用 React 组件加 shadcn Popover 实现，锚点取自 `view.coordsAtPos`。只读取 editor 的状态，通过命令修改文档。
@@ -60,18 +60,21 @@ Status: proposed
 - **CodeMirror 6，每行就是一个段落**：最强的理由是剧本天然按行组织，CodeMirror 处理大文档性能最好，行装饰也很方便。没有采用：在 CodeMirror 中维护每一行的稳定 id 和类型，只能靠自己编写 StateField 并跟随 changes 做映射，粘贴和拆分时的 id 规则也要自己实现；它也不适合把段落渲染成不同排版的块（居中、缩进、徽标）。
 - **使用官方 DragHandle 扩展**：最强的理由是拖动手柄现成可用，键盘和定位都已处理好。没有采用：它要求安装协同相关的 peer 依赖（`@tiptap/extension-collaboration`、`@tiptap/y-tiptap`、`yjs`），而自绘手柄加原生拖放的代码量不大。
 
-## Acceptance criteria
+## Testing
 
-1. `pnpm --filter @frame-loom/desktop typecheck` 通过；`pnpm install --frozen-lockfile` 在干净环境中可以复现；`@tiptap/*` 的 import 只出现在 `features/projects/script/`。可以用 `rg "@tiptap/" apps/desktop/src --files-with-matches` 检查。
+剧本目录 9 文件 70 项测试、desktop 类型检查、定向 lint、构建和剧本 e2e 2/2 均通过。以下验证覆盖文档往返、稳定 id、生产 CSP 和输入法边界。
+
+1. `pnpm --filter @frame-loom/desktop typecheck` 与 `pnpm install --frozen-lockfile` 校验通过；`@tiptap/*` 的 import 只出现在 `features/projects/script/`，已用 `rg "@tiptap/" apps/desktop/src --files-with-matches` 检查。
 2. 往返转换的单测通过：样例剧本的 60 个段落，以及包含每种段落类型、attrs、review、空文本的人工用例，都满足 `fromEditorJson(toEditorJson(doc))` 等于 `doc`。
 3. 拆分段落和粘贴多行之后，所有 id 仍然唯一；撤销之后 id 恢复为原值。
-4. 在构建产物 e2e 中（`app://` 协议加 `PRODUCTION_CSP`）验证以下几点，控制台都不能有 CSP 错误：可以正常输入；先用 CDP `Input.imeSetComposition` 组字、再用 `Input.insertText` 提交后，文字写入当前段落，段落数不变；段落可以拖动。在组字过程中按 Enter 不应拆分段落，这一点在开发模式下用真实的中文输入法人工检查一次，并记入实施计划。
-5. 记录性能数据：3000 段剧本的首屏加载时间，以及连续输入 50 个字符时每次按键的平均耗时。数字写进实施计划。如果明显卡顿（每次按键超过 16ms），先优化装饰计算，再考虑其他方案。
+4. 构建产物 e2e（`app://` 协议加 `PRODUCTION_CSP`）验证正常输入、CDP `Input.imeSetComposition` 后用 `Input.insertText` 提交不拆段，以及段落拖动；控制台无 CSP 错误。首次真实输入法人工检查发现组字回车拆段，修复原生事件保护后，用户在开发模式人工复验反馈「未产生额外段落」，复验通过。
+5. 已记录 3000 段剧本首屏加载与连续输入 50 字的耗时。超过 16ms 后已优化装饰、大纲和元素栏，仍保留大文档延迟风险，具体测量见下文。
 
-## Risks
+## Consequences
 
+- **收益**：Tiptap 与 ProseMirror 提供稳定文档模型、装饰映射和历史机制，剧本文档与编辑器 JSON 无损往返；依赖边界限制在剧本目录内，便于维护和替换。
 - **包体积**：ProseMirror 加 Tiptap 约 150–250 KB（gzip 前）。剧本页采用路由级懒加载，不影响首屏。
-- **输入法组字**：ProseMirror 对 IME 的处理成熟，但自定义键盘规则在组字期间不能触发。所有快捷键处理都要先检查 `view.composing`；原生键盘事件还检查 `isComposing` 和输入法键码 `229`，避免视图状态已经结束组字时把候选确认键交给快捷键。人物补全使用同一判定。用户首次真实输入法验收反馈回车会产生额外段落，修复后仍须重新人工验收。
+- **输入法组字**：ProseMirror 对 IME 的处理成熟，但自定义键盘规则在组字期间不能触发。所有快捷键处理都要先检查 `view.composing`；原生键盘事件还检查 `isComposing` 和输入法键码 `229`，避免视图状态已经结束组字时把候选确认键交给快捷键。人物补全使用同一判定；该保护的回归测试及用户真实输入法复验均通过。
 - **版本耦合**：`@tiptap/*` 各包必须保持同一版本，升级时一起修改。
 - **大文档**：每次按键时，装饰只重算改动过的段落；全量重算只在加载时和设定库变化时发生。
-- **实施测量**：场景徽标使用插件状态缓存并随 mapping 移动，整段替换丢失徽标时重建；大纲复用未变的场行，元素栏一轮扫描计算出现位置。3000 段验收轮加载 526ms，50 字自动化往返每字 97.51ms，浏览器输入事件处理均值 18.97ms（不含完整绘制）；输入法修复后的回归轮分别为 3183ms、106.31ms、22.20ms，加载和自动化往返波动较大，仍有延迟风险。真实中文输入法首次回车验收失败，事件保护修复后待人工复验；生产 CSP 下的 CDP 组字与拖放已通过。
+- **实施测量**：场景徽标使用插件状态缓存并随 mapping 移动，整段替换丢失徽标时重建；大纲复用未变的场行，元素栏一轮扫描计算出现位置。3000 段验收轮加载 526ms，50 字自动化往返每字 97.51ms，浏览器输入事件处理均值 18.97ms（不含完整绘制）；输入法修复后的回归轮分别为 3183ms、106.31ms、22.20ms，加载和自动化往返波动较大，仍有延迟风险。生产 CSP 下的 CDP 组字与拖放已通过。

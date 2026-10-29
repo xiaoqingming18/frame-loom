@@ -104,7 +104,7 @@ Status: implemented
   - 输入区：外观按设计稿实现，但文本框、模型、技能、版本、发送、选择项目全部禁用，并用提示说明「创作功能尚未开放」。
   - 公告胶囊「首版发布」在有发布说明之前不显示。
 - 未开放的按钮使用 `aria-disabled` 并阻止操作，文本框为只读；保留键盘焦点，用 Tooltip 和常驻 `aria-describedby` 提供提示，避免原生 `disabled` 导致提示无法被键盘访问。版本选择只标为「版本」，不宣称存在设计稿的 V3；输入提示移除尚不存在的 Design 使用指南。
-- 项目库（`/projects`）显示项目卡片、搜索、排序和项目操作；详情页承载剧集、创作页、设定库与项目资产。`/projects/$projectId/pages/$pageId` 画布页与 `/projects/$projectId/episodes/$episodeId` 剧本页都使用 `fullBleed` 铺满主区，规格见[剧集与结构化剧本](../../proposed/feature/2026-10-29-episodes-and-structured-scripts.md)。
+- 项目库（`/projects`）显示项目卡片、搜索、排序和项目操作；详情页承载剧集、创作页、设定库与项目资产。`/projects/$projectId/pages/$pageId` 画布页与 `/projects/$projectId/episodes/$episodeId` 剧本页都使用 `fullBleed` 铺满主区，规格见[剧集与结构化剧本](2026-10-29-episodes-and-structured-scripts.md)。
 - 健康查询在外壳挂载时执行一次。查询失败时，设置中心按钮上显示一个 `destructive` 圆点，否则 engine 出错用户无从得知。
 - 健康结果在外壳和设置面板间共享，`staleTime: Infinity`、`retryOnMount: false` 避免打开页签重复查询或自动重试；重新检查按钮显式刷新，主进程以 `engine:exited` 通知退出，页面保留当前编辑内容。
 

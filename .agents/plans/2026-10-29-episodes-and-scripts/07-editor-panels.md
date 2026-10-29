@@ -1,8 +1,8 @@
 # Plan: 大纲、手柄、存疑、高亮与元素栏
 
-Status: active
+Status: done
 Parent: plan.md
-Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
+Note: ../../notes/implemented/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 目标
 
@@ -109,6 +109,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 ## 进度
 
 - 2026-10-29：创建子计划草稿。
+- 2026-10-29：面板交互、自动化与明暗截图验收通过，依赖 06 的真实输入法复验已由用户确认通过，本子计划完成。
 
 ## 发现与偏差
 
@@ -116,4 +117,4 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 交接
 
-实现及自动化、视觉验收已完成；暂保持 active，等待依赖 06 的真实输入法检查。
+无。

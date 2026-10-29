@@ -129,7 +129,7 @@ Status: implemented
 - schema 放在 `packages/contracts/src/projects.ts`。读取时保留未知的顶层字段，重写时原样写回，给以后的同步元数据留位置。
 - `formatVersion` 高于当前支持的版本时，项目显示为「需要更新应用」，不能打开也不能写入；低于当前版本时，读取后迁移，下次写入时升级。
 - `pages[]` 的顺序就是创建顺序。`updatedAt` 和 `coverSha256` 由 engine 在每次保存页面后计算并回写。封面取所有图片节点所有版本中 `createdAt` 最新的一张图片（生成或上传的都算），没有图片时为 `null`，界面显示纯色卡片。
-- 清单增加可选的 `profile`、`episodes[]`，页面摘要增加可选的 `episodeId`；旧项目缺省仍可打开，`formatVersion` 不变。剧集、剧本和设定库格式见[剧集与结构化剧本](../../proposed/feature/2026-10-29-episodes-and-structured-scripts.md)。页面所属剧集只由 `ProjectPageSummary.episodeId` 表达，不在剧集中维护第二份页面列表。
+- 清单增加可选的 `profile`、`episodes[]`，页面摘要增加可选的 `episodeId`；旧项目缺省仍可打开，`formatVersion` 不变。剧集、剧本和设定库格式见[剧集与结构化剧本](2026-10-29-episodes-and-structured-scripts.md)。页面所属剧集只由 `ProjectPageSummary.episodeId` 表达，不在剧集中维护第二份页面列表。
 - 写入流程：先写到 `.frameloom/tmp/`，`fsync` 后改名覆盖目标文件。Windows 上目标被占用（`EPERM`／`EBUSY`）时，以 50ms 起步退避重试，累计最多 2 秒；仍失败则返回 `PROJECT_WRITE_FAILED`，不破坏原文件。
 - 同一项目的所有写操作（页面、清单、资产、媒体、清理）在 engine 内经过一个按项目 id 划分的串行队列。保存页面时先写页面文件，再写清单；两步之间崩溃会让清单摘要过时，下次读取页面时会修复。
 - 页面 revision 写在页面文件里。engine 缓存「revision、mtime、size」，任何一项与磁盘不一致就重新读取，所以文件被外部改动（同步盘、另一台机器）时也能拿到真实 revision。不一致的保存返回 409 `PAGE_REVISION_CONFLICT`，renderer 沿用现有的「重新加载／导出当前画布 JSON」流程。
