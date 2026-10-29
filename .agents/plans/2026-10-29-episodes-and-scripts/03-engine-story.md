@@ -1,6 +1,6 @@
 # Plan: 设定库、同步与出现位置
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -14,7 +14,7 @@ engine 提供设定库的全部命令，包括新建、修改、合并、忽略�
 
 ## 步骤
 
-- [ ] T1 新建 `scripts/story.service.ts`。所有修改都按「在 `serial(projectId)` 中读取、修改、写回」的方式执行，每次写入时 `revision` 加 1。
+- [x] T1 新建 `scripts/story.service.ts`。所有修改都按「在 `serial(projectId)` 中读取、修改、写回」的方式执行，每次写入时 `revision` 加 1。
 
   需要实现的命令：
   - 新建元素：状态为 confirmed，名称冲突时返回 409 `ELEMENT_NAME_CONFLICT`；
@@ -25,7 +25,7 @@ engine 提供设定库的全部命令，包括新建、修改、合并、忽略�
   - 批量操作：一次请求最多 500 个 id，不存在的 id 直接跳过。
 
   — 验证：`scripts/story.integration.test.ts` 覆盖以下用例：各命令的成功路径和每个错误码；合并后其他元素的 `suggestedMergeInto` 被重新指向；忽略后，再次保存剧本时不会重新创建该元素；恢复后会重新创建为待确认元素。
-- [ ] T2 实现 `sync(projectId, blocks)`：
+- [x] T2 实现 `sync(projectId, blocks)`：
   - 用 `syncCandidates` 取出候选名称；
   - 如果某个名称与同类元素的名称或别名都不匹配，也不在 `ignored` 中，就新建为待确认元素；
   - 返回新增的数量。
@@ -33,7 +33,7 @@ engine 提供设定库的全部命令，包括新建、修改、合并、忽略�
   在 `PUT script` 中，剧本写完之后调用 `sync`，并在响应中返回 `addedElements`。
 
   — 验证：保存样例剧本的规则解析结果后，`addedElements` 为 10，其中 4 个人物、6 个场景；内容不变时再保存一次，结果为 0；角色段落「店主（OS）」只生成「店主」这一个元素。
-- [ ] T3 实现出现位置的缓存。缓存键包括：剧本的 revision、mtimeNs、size，以及设定库的 revision。每次读取前先 stat 剧本文件，只有键不一致时才重新读取和匹配。匹配时跳过 note 段落。
+- [x] T3 实现出现位置的缓存。缓存键包括：剧本的 revision、mtimeNs、size，以及设定库的 revision。每次读取前先 stat 剧本文件，只有键不一致时才重新读取和匹配。匹配时跳过 note 段落。
 
   需要提供：
   - `GET /story`：每个元素带 `mentions`（总出现次数）和 `episodes: [{ episodeId, scenes }]`（每集中出现的不同场数）；
@@ -41,23 +41,24 @@ engine 提供设定库的全部命令，包括新建、修改、合并、忽略�
   - 剧集列表中的 `pending`。
 
   — 验证：两集剧本都提到「林夏」时，`episodes` 中两集都出现；外部修改剧本文件后，出现位置随之更新；合并元素后，源元素的名称计入目标元素的出现次数；note 段落中的名称不计入。
-- [ ] T4 把 `StoryService` 注入 `EpisodesService`：剧集列表返回真实的 `pending`。
+- [x] T4 把 `StoryService` 注入 `EpisodesService`：剧集列表返回真实的 `pending`。
 
   — 验证：剧集列表的集成测试断言 `pending` 等于该集中出现过的待确认元素数，确认一个元素后，这个数字减 1。
 
 ## 验证
 
 - 预期：先运行 `pnpm --filter @frame-loom/engine... build`，然后运行 `pnpm --filter @frame-loom/engine exec vitest run src/modules/scripts` 和 `pnpm --filter @frame-loom/engine typecheck`，都应通过。不运行其他目录的测试。
-- 实际：未执行。
+- 实际：`pnpm --filter @frame-loom/engine... build`、`pnpm --filter @frame-loom/engine typecheck` 通过；`pnpm --filter @frame-loom/engine exec vitest run src/modules/scripts` 通过（2 文件、9 用例）。日志为 `.cache/story-tests.log`。
 
 ## 进度
 
 - 2026-10-29：创建子计划草稿。
+- 2026-10-29：设定库原子命令、保存同步、跨集匹配缓存与接口完成，定向测试通过。
 
 ## 发现与偏差
 
-无。
+缓存保存剧本 revision、mtimeNs、size 和设定库 revision；本机保存后显式失效，外部修改通过 stat 失效。`sync` 由已持有串行队列的保存／转换调用，内部不再次进入 `serial`，防止嵌套队列死锁。合并到自身返回 422 `ELEMENT_MERGE_SELF`，不存在元素返回 404 `ELEMENT_NOT_FOUND`。
 
 ## 交接
 
-依赖 02，尚未开始。
+无。

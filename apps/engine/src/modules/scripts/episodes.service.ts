@@ -14,12 +14,14 @@ import { DomainError } from '../../core/http/domain-error.js';
 import { ProjectStore } from '../projects/project-store.js';
 import { ProjectFilesService } from '../projects/project-files.service.js';
 import { internalPath } from '../projects/local-project-store.js';
+import { StoryService } from './story.service.js';
 
 @Injectable()
 export class EpisodesService {
   constructor(
     readonly store: ProjectStore,
     private readonly files: ProjectFilesService,
+    private readonly story: StoryService,
   ) {}
 
   async context(projectId: string, episodeId?: string) {
@@ -32,10 +34,16 @@ export class EpisodesService {
 
   list(projectId: string) {
     return this.store.serial(projectId, async () => {
-      const { manifest } = await this.context(projectId);
-      return [...(manifest.episodes ?? [])]
-        .sort((a, b) => a.number - b.number)
-        .map((episode) => ({ ...episode, conversion: null, pending: 0 }));
+      const { root, manifest } = await this.context(projectId);
+      return Promise.all(
+        [...(manifest.episodes ?? [])]
+          .sort((a, b) => a.number - b.number)
+          .map(async (episode) => ({
+            ...episode,
+            conversion: null,
+            pending: await this.story.pending(root, manifest, episode.id),
+          })),
+      );
     });
   }
 
@@ -160,8 +168,12 @@ export class EpisodesService {
         );
       const file = { ...current, document, revision: current.revision + 1 };
       await this.store.writeScript(root, file);
+      this.story.invalidate(projectId, episodeId);
       await this.repair(root, manifest, file, new Date().toISOString());
-      return { revision: file.revision, addedElements: 0 };
+      return {
+        revision: file.revision,
+        addedElements: await this.story.sync(projectId, document.blocks),
+      };
     });
   }
 }
