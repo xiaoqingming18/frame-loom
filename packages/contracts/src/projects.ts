@@ -73,6 +73,81 @@ export const AssetPath = z
 export const AssetDirectoryPath = z.union([z.literal(''), AssetPath]);
 
 const Timestamp = z.string().datetime();
+export const GENRE_PRESETS = [
+  '都市',
+  '古装',
+  '悬疑',
+  '爱情',
+  '喜剧',
+  '科幻',
+  '奇幻',
+  '武侠',
+  '家庭',
+  '职场',
+  '青春',
+  '恐怖',
+  '历史',
+  '动作',
+] as const;
+export const Genre = z
+  .string()
+  .trim()
+  .min(1)
+  .max(10)
+  .regex(/^[^\u0000-\u001f\u007f-\u009f]+$/u);
+export type Genre = z.infer<typeof Genre>;
+export const ProjectProfile = z.strictObject({
+  form: z.enum(['series', 'short', 'film', 'other']).nullable(),
+  medium: z.enum(['live', 'anim2d', 'anim3d', 'ai', 'mixed']).nullable(),
+  genres: z
+    .array(Genre)
+    .max(5)
+    .refine(
+      (items) => new Set(items.map((item) => item.toLowerCase())).size === items.length,
+      '题材重复',
+    ),
+  aspect: z.enum(['16:9', '9:16', '2.39:1', '4:3']).nullable(),
+});
+export type ProjectProfile = z.infer<typeof ProjectProfile>;
+export function isProfileComplete(profile?: ProjectProfile): boolean {
+  return !!profile?.form && !!profile.medium && profile.genres.length > 0;
+}
+export const PROJECT_FORMS = { series: '剧集', short: '短剧', film: '电影', other: '其他' };
+export const PROJECT_MEDIA = {
+  live: '真人实拍',
+  anim2d: '2D 动画',
+  anim3d: '3D 动画',
+  ai: 'AI 写实',
+  mixed: '混合',
+};
+export function formatProfile(profile?: ProjectProfile): string {
+  if (!profile) return '';
+  return [
+    profile.form && PROJECT_FORMS[profile.form],
+    profile.medium && PROJECT_MEDIA[profile.medium],
+    profile.genres.join('/'),
+    profile.aspect,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+export const EpisodeSummary = z.strictObject({
+  id: z.string().uuid(),
+  number: z.number().int().min(1).max(9999),
+  title: z
+    .string()
+    .max(80)
+    .regex(/^[^\u0000-\u001f\u007f-\u009f]*$/u),
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
+  scenes: z.number().int().nonnegative(),
+  chars: z.number().int().nonnegative(),
+  draft: z.boolean(),
+});
+export type EpisodeSummary = z.infer<typeof EpisodeSummary>;
+export function episodeLabel(episode: Pick<EpisodeSummary, 'number' | 'title'>): string {
+  return `第 ${episode.number} 集${episode.title ? ` ${episode.title}` : ''}`;
+}
 const FormatVersion = z.number().int().positive().max(1, 'PROJECT_FORMAT_TOO_NEW：需要更新应用');
 export const ProjectPageSummary = z
   .object({
@@ -81,6 +156,7 @@ export const ProjectPageSummary = z
     createdAt: Timestamp,
     updatedAt: Timestamp,
     coverSha256: Sha256.nullable(),
+    episodeId: z.string().uuid().nullable().optional(),
   })
   .passthrough();
 export type ProjectPageSummary = z.infer<typeof ProjectPageSummary>;
@@ -94,9 +170,17 @@ export const ProjectManifest = z
     updatedAt: Timestamp,
     pages: z.array(ProjectPageSummary),
     tags: z.array(ProjectTag).max(50).optional(),
+    profile: ProjectProfile.optional(),
+    episodes: z.array(EpisodeSummary).max(500).optional(),
   })
   .passthrough()
   .superRefine((manifest, ctx) => {
+    const episodes = manifest.episodes ?? [];
+    if (
+      new Set(episodes.map((episode) => episode.id)).size !== episodes.length ||
+      new Set(episodes.map((episode) => episode.number)).size !== episodes.length
+    )
+      ctx.addIssue({ code: 'custom', message: '剧集 id 或集号重复' });
     const ids = new Set<string>();
     const names = new Set<string>();
     for (const page of manifest.pages) {
@@ -140,6 +224,7 @@ export const ProjectSummary = z.strictObject({
   addedAt: Timestamp,
   lastOpenedAt: Timestamp,
   status: ProjectStatus,
+  profile: ProjectProfile.optional(),
 });
 export type ProjectSummary = z.infer<typeof ProjectSummary>;
 export const ProjectList = z.array(ProjectSummary);
@@ -147,6 +232,7 @@ export type ProjectList = z.infer<typeof ProjectList>;
 export const ProjectCreateRequest = z.strictObject({
   name: ProjectName,
   location: z.string().min(1).max(4096),
+  profile: ProjectProfile.optional(),
 });
 export type ProjectCreateRequest = z.infer<typeof ProjectCreateRequest>;
 export const ProjectOpenRequest = z.strictObject({
@@ -159,9 +245,17 @@ export const ProjectRelocateRequest = z.strictObject({ rootPath: z.string().min(
 export type ProjectRelocateRequest = z.infer<typeof ProjectRelocateRequest>;
 export const ProjectRenameRequest = z.strictObject({ name: ProjectName });
 export type ProjectRenameRequest = z.infer<typeof ProjectRenameRequest>;
-export const ProjectPageCreateRequest = ProjectRenameRequest;
+export const ProjectPageCreateRequest = z.strictObject({
+  name: ProjectName,
+  episodeId: z.string().uuid().nullable().optional(),
+});
 export type ProjectPageCreateRequest = z.infer<typeof ProjectPageCreateRequest>;
-export const ProjectPageRenameRequest = ProjectRenameRequest;
+export const ProjectPageRenameRequest = z
+  .strictObject({
+    name: ProjectName.optional(),
+    episodeId: z.string().uuid().nullable().optional(),
+  })
+  .refine((patch) => patch.name !== undefined || patch.episodeId !== undefined, '至少修改一个字段');
 export type ProjectPageRenameRequest = z.infer<typeof ProjectPageRenameRequest>;
 export const ProjectPageSaveRequest = z.strictObject({
   revision: z.number().int().positive(),

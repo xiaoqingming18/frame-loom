@@ -10,6 +10,8 @@ export * from './image-edit.js';
 export * from './object-storage.js';
 export * from './canvas.js';
 export * from './projects.js';
+export * from './scripts.js';
+export * from './script-parse.js';
 export * from './voices.js';
 export * from './semantic-request.js';
 export * from './capabilities.js';

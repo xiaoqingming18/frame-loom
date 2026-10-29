@@ -34,7 +34,7 @@ Note: ../../notes/proposed/architecture/2026-10-29-script-editor-tiptap.md
 
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
-| 01 | [契约与规则解析器](01-contracts.md) | draft | — | `projects.ts` 扩展、`scripts.ts`、`script-parse.ts`、样例剧本与单测 |
+| 01 | [契约与规则解析器](01-contracts.md) | done | — | `projects.ts` 扩展、`scripts.ts`、`script-parse.ts`、样例剧本与单测 |
 | 02 | [项目设定、剧集与剧本存储](02-engine-storage.md) | draft | 01 | 项目设定接口、页面所属剧集、剧集增删改、剧本读写与 409、回收区清理 |
 | 03 | [设定库、同步与出现位置](03-engine-story.md) | draft | 02 | 设定库命令、保存时同步、出现位置缓存与接口 |
 | 04 | [后台转换与文本模型](04-engine-conversion.md) | draft | 03 | `LlmService.complete`、转换队列、导入、取消、丢弃接口与事件 |
