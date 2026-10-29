@@ -127,6 +127,7 @@ export function createImageEditChild(
   recipe: ImageEditRecipe,
   prompt: string,
   modelId?: string,
+  params?: CanvasMediaData['params'],
 ): CanvasDocument {
   const source = document.nodes.find((node) => node.id === sourceId);
   const media = source?.type === 'image' ? (source.data as CanvasMediaData) : undefined;
@@ -152,6 +153,7 @@ export function createImageEditChild(
       inputOrder: [],
       ...(modelId ? { modelId } : {}),
       imageEdit: recipe,
+      ...(params ? { params } : {}),
     },
   );
   return connect(registry, addNodes(document, [child]), {

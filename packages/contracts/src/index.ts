@@ -16,5 +16,6 @@ export * from './capabilities.js';
 export * from './protocols.js';
 export * from './endpoints.js';
 export * from './image-size.js';
+export * from './edit-geometry.js';
 export * from './prompt-references.js';
 export * from './capability-check.js';

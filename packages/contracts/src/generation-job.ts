@@ -68,6 +68,7 @@ export const GenerationJob = z.object({
       route: z.string(),
       httpStatus: z.number().optional(),
       requestId: z.string().optional(),
+      message: z.string().optional(),
     })
     .nullable()
     .optional(),

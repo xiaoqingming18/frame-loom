@@ -410,6 +410,38 @@ it('文生没有素材栏，首尾帧有两个素材槽位且保持组字', () =
   expect(screen.getByRole('button', { name: '生成参数' }).textContent).toBe('比例 · 时长');
 });
 
+it('打光预填的自定义尺寸在生成面板显示并允许修改', () => {
+  const test = setupPanel({ params: { width: 848, height: 1200 } });
+  fireEvent.click(screen.getByRole('button', { name: '生成参数' }));
+  expect(screen.getByLabelText<HTMLInputElement>('自定义宽度').value).toBe('848');
+  expect(screen.getByLabelText<HTMLInputElement>('自定义高度').value).toBe('1200');
+  fireEvent.change(screen.getByLabelText('自定义宽度'), { target: { value: '1024' } });
+  expect(test.data().params?.width).toBe(1024);
+});
+
+it('表情后处理失败明确说明重试只合成，展示诊断', async () => {
+  const job = generationJob({
+    status: 'download_failed',
+    errorCode: 'EDIT_POSTPROCESS_FAILED',
+    errorMessage: '表情后处理失败',
+    recoveryAction: 'download',
+    diagnostic: {
+      stage: 'download',
+      method: 'LOCAL',
+      route: 'emotion-composite',
+      message: '输出比例不符',
+    },
+    outputs: [],
+  });
+  const test = setupPanel({ pendingJobIds: [job.id] });
+  act(() => test.store.getState().setGenerationJob(job));
+  expect(screen.getByText('表情后处理失败；重试仅合成已保存的中间图')).toBeTruthy();
+  expect(screen.getByText('输出比例不符')).toBeTruthy();
+  test.api.resubmit.mockResolvedValueOnce({ ...job, status: 'downloading' });
+  fireEvent.click(screen.getByRole('button', { name: '重试合成 1' }));
+  await waitFor(() => expect(test.api.resubmit).toHaveBeenCalledWith(job.id));
+});
+
 it('成功任务写回版本，失败单张重试只替换对应任务', async () => {
   const failed = generationJob({ status: 'failed', outputs: [], errorMessage: '失败' });
   const test = setupPanel({ pendingJobIds: [failed.id] });

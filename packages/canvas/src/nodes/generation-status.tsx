@@ -82,7 +82,11 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
               <p role="status">已暂停等待；恢复将继续原任务，不重新生成</p>
             )}
             {job?.status === 'download_failed' && (
-              <p role="status">下载失败；重试只下载已生成的产物</p>
+              <p role="status">
+                {job.errorCode === 'EDIT_POSTPROCESS_FAILED'
+                  ? '表情后处理失败；重试仅合成已保存的中间图'
+                  : '下载失败；重试只下载已生成的产物'}
+              </p>
             )}
             {!!job?.outputs.length && <p>已归档 {job.outputs.length} 个产物；可用结果已写入版本</p>}
             {job?.cancellation && job.cancellation !== 'confirmed' && (
@@ -103,6 +107,7 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
                 <p>
                   {job.errorCode} {job.diagnostic.httpStatus} {job.diagnostic.requestId}
                 </p>
+                {job.diagnostic.message && <p>{job.diagnostic.message}</p>}
               </details>
             )}
             {job?.recoveryAction === 'none' &&
@@ -119,15 +124,17 @@ export function GenerationStatus({ nodeId, data }: { nodeId: string; data: Canva
                     disabled={locked || submitting}
                     onClick={() => void act(id, true)}
                   >
-                    {job.recoveryAction === 'download'
-                      ? '重试下载'
-                      : job.recoveryAction === 'idempotent_submit'
-                        ? '同键恢复提交'
-                        : job.recoveryAction === 'prepare'
-                          ? '恢复准备'
-                          : job.recoveryAction === 'query'
-                            ? '恢复查询'
-                            : '重试任务'}{' '}
+                    {job.errorCode === 'EDIT_POSTPROCESS_FAILED'
+                      ? '重试合成'
+                      : job.recoveryAction === 'download'
+                        ? '重试下载'
+                        : job.recoveryAction === 'idempotent_submit'
+                          ? '同键恢复提交'
+                          : job.recoveryAction === 'prepare'
+                            ? '恢复准备'
+                            : job.recoveryAction === 'query'
+                              ? '恢复查询'
+                              : '重试任务'}{' '}
                     {index + 1}
                   </Button>
                 )}

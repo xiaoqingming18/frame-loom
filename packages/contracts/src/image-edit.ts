@@ -13,7 +13,17 @@ const Source = z.strictObject({
   nodeId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
   sha256: Sha256,
 });
-const Common = { version: z.literal(1), source: Source };
+const Pixel = z.number().int().nonnegative().max(32768);
+const Geometry = z.strictObject({
+  crop: z.strictObject({ x: Pixel, y: Pixel, width: Pixel.positive(), height: Pixel.positive() }),
+  pad: z.strictObject({ left: Pixel, right: Pixel, top: Pixel, bottom: Pixel }),
+  expected: z.strictObject({
+    ratio: z.number().finite().positive().optional(),
+    width: Pixel.positive().optional(),
+    height: Pixel.positive().optional(),
+  }),
+});
+const Common = { version: z.literal(1), source: Source, geometry: Geometry.optional() };
 
 const ImageEditRecipeUnion = z.discriminatedUnion('operation', [
   z.strictObject({
@@ -58,6 +68,7 @@ export const ImageEditRecipe = ImageEditRecipeUnion.superRefine((recipe, context
   for (const [name, box] of [
     ['目标人脸框', recipe.targetFace],
     ['编辑区域', recipe.editRegion],
+    ...(recipe.geometry ? [['几何裁切', recipe.geometry.crop] as const] : []),
   ] as const)
     if (box.x + box.width > recipe.imageWidth || box.y + box.height > recipe.imageHeight)
       context.addIssue({ code: 'custom', path: [name], message: `${name}超出源图片范围` });

@@ -2,12 +2,18 @@ import { useState } from 'react';
 import { Camera, ScanFace, Sun } from 'lucide-react';
 import { Button } from '@frame-loom/ui/components/button';
 import { Dialog, DialogContent, DialogTitle } from '@frame-loom/ui/components/dialog';
-import { ImageEditRecipe, imageEditSupport, type CanvasMediaData } from '@frame-loom/contracts';
+import {
+  ImageEditRecipe,
+  imageEditSupport,
+  planEditGeometry,
+  type CanvasMediaData,
+} from '@frame-loom/contracts';
 import { useCanvas, useCanvasState } from '../context';
 import { createImageEditChild } from '../commands/commands';
 import { EmotionWorkspace } from './emotion-workspace';
 import { activeVersion } from './media';
 import { AnglePreview, LightingPreview } from './image-edit-previews';
+import { buildImageEditPrompt } from './image-edit-prompts';
 import {
   anglePresets,
   applyAnglePreset,
@@ -34,6 +40,20 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
   if (!version) return null;
   const models = (config?.models ?? []).filter((model) => model.capability.kind === 'image');
   const model = models.find((item) => item.id === modelId);
+  let geometry: ReturnType<typeof planEditGeometry> | undefined;
+  let geometryIssue: string | undefined;
+  if (model?.capability.kind === 'image') {
+    try {
+      geometry = planEditGeometry(model.capability, {
+        x: 0,
+        y: 0,
+        width: version.width ?? 0,
+        height: version.height ?? 0,
+      });
+    } catch (error) {
+      geometryIssue = error instanceof Error ? error.message : '无法规划图片尺寸';
+    }
+  }
   if (tool === 'emotion')
     return (
       <>
@@ -73,22 +93,28 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
       return;
     }
     const params = recipe(operation);
-    const issue = imageEditSupport(selectedModel.capability, selectedModel.protocol)[operation]
-      .reason;
+    const issue =
+      geometryIssue ??
+      imageEditSupport(selectedModel.capability, selectedModel.protocol)[operation].reason;
     if (issue) {
       store.getState().notify(issue);
       return;
     }
-    const prompt =
-      operation === 'angle'
-        ? `保持主体身份与风格一致，将视角调整为水平 ${angle.horizontalAngle}°、俯仰 ${angle.pitchAngle}°，景别 ${angle.cameraDistance.toFixed(1)}，${angle.lens === 'wide' ? '广角' : '标准'}镜头。`
-        : buildLightingPrompt(lighting, smartDescription, template);
+    const prompt = buildImageEditPrompt(params, smartDescription, template);
     const before = store.getState().document.nodes.length;
     if (
       !store
         .getState()
         .apply((document) =>
-          createImageEditChild(registry, document, nodeId, params, prompt, selectedModel.id),
+          createImageEditChild(
+            registry,
+            document,
+            nodeId,
+            params,
+            prompt,
+            selectedModel.id,
+            geometry?.request,
+          ),
         )
     )
       return;
@@ -101,7 +127,7 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
         .create({
           modelId: selectedModel.id,
           prompt,
-          params: {},
+          params: geometry?.request ?? {},
           extras: {},
           inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: version.sha256 }],
           imageEdit: params,
@@ -125,9 +151,10 @@ export function ImageEditTools({ nodeId, data }: { nodeId: string; data: CanvasM
   };
   const activeModel = model;
   const issue =
-    activeModel?.capability.kind === 'image'
+    geometryIssue ??
+    (activeModel?.capability.kind === 'image'
       ? imageEditSupport(activeModel.capability, activeModel.protocol)[tool ?? 'angle'].reason
-      : undefined;
+      : undefined);
   const disabled = activeModel?.capability.kind !== 'image' || !!issue;
   return (
     <div className="nodrag nopan relative inline-flex items-center gap-1">

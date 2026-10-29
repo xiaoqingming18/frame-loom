@@ -6,14 +6,13 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { ImageEditRecipe, imageEditSupport } from '@frame-loom/contracts';
+import { ImageEditRecipe, imageEditSupport, planEditGeometry } from '@frame-loom/contracts';
 import { Button } from '@frame-loom/ui/components/button';
 import { Dialog, DialogContent, DialogTitle } from '@frame-loom/ui/components/dialog';
 import { useCanvas } from '../context';
 import { createImageEditChild } from '../commands/commands';
 import type { CanvasGenerationModel } from '../host';
 import {
-  buildEmotionPrompt,
   neutralEmotionPreset,
   emotionPresetAt,
   resolveEditRegion,
@@ -21,6 +20,7 @@ import {
   type CanvasEmotionPreset,
 } from './image-emotion';
 import { detectFaces } from './face-detection';
+import { buildImageEditPrompt } from './image-edit-prompts';
 
 const EmotionHeadPreview = lazy(() =>
   import('./emotion-head-preview').then((module) => ({ default: module.EmotionHeadPreview })),
@@ -62,7 +62,21 @@ export function EmotionWorkspace({
     model?.capability.kind === 'image'
       ? imageEditSupport(model.capability, model.protocol).emotion
       : undefined;
-  const capabilityIssue = support?.reason;
+  let geometry: ReturnType<typeof planEditGeometry> | undefined;
+  let geometryIssue: string | undefined;
+  if (model?.capability.kind === 'image') {
+    try {
+      geometry = planEditGeometry(
+        model.capability,
+        selectedFace
+          ? resolveEditRegion(selectedFace, width, height)
+          : { x: 0, y: 0, width, height },
+      );
+    } catch (cause) {
+      geometryIssue = cause instanceof Error ? cause.message : '无法规划表情尺寸';
+    }
+  }
+  const capabilityIssue = geometryIssue ?? support?.reason;
 
   useEffect(() => {
     const abort = new AbortController();
@@ -130,7 +144,7 @@ export function EmotionWorkspace({
       setError('表情编辑参数无效');
       return;
     }
-    const issue = support?.reason;
+    const issue = geometryIssue ?? support?.reason;
     if (issue) {
       setError(issue);
       return;
@@ -152,17 +166,11 @@ export function EmotionWorkspace({
       const recipe = ImageEditRecipe.parse({
         ...recipeBase,
         editRegion,
+        ...(geometry
+          ? { geometry: { crop: geometry.crop, pad: geometry.pad, expected: geometry.expected } }
+          : {}),
       });
-      const prompt = buildEmotionPrompt(
-        {
-          presetId: preset.id,
-          intimacy: preset.intimacy,
-          arousal: preset.arousal,
-          characterName: '角色1',
-          faceBox: selectedFace,
-        },
-        editRegion,
-      );
+      const prompt = buildImageEditPrompt(recipe);
       const before = state.document.nodes.length;
       if (
         !state.apply((document) =>
@@ -175,7 +183,7 @@ export function EmotionWorkspace({
       const job = await host.generation.create({
         modelId: model.id,
         prompt,
-        params: {},
+        params: geometry?.request ?? {},
         extras: {},
         inputs: [{ kind: 'image', role: 'reference', order: 0, sha256: sourceHash }],
         imageEdit: recipe,
@@ -431,7 +439,13 @@ export function EmotionWorkspace({
                 取消
               </Button>
               <Button
-                disabled={!selectedFace || !support?.available || !!capabilityIssue || busy}
+                disabled={
+                  !selectedFace ||
+                  !support?.available ||
+                  !!capabilityIssue ||
+                  !!geometryIssue ||
+                  busy
+                }
                 onClick={() => void submit()}
               >
                 {busy ? '准备中…' : '生成表情'}

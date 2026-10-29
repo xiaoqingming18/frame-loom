@@ -11,6 +11,8 @@ import {
   checkMedia,
   effectiveCapability,
   imageEditSupport,
+  planEditGeometry,
+  resolveImageSize,
   SemanticRequest,
   resolvePromptReferences,
   type GenerationStatus,
@@ -134,7 +136,15 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         const source = await this.media.resolveAt(recipe.source.sha256, root);
         if (source.media.width !== recipe.imageWidth || source.media.height !== recipe.imageHeight)
           throw new DomainError('INVALID_REFERENCE', 422, '源图片尺寸已变化');
-        const prepared = await emotionArtifacts(await readFile(source.path), recipe.targetFace);
+        const prepared = await emotionArtifacts(
+          await readFile(source.path),
+          recipe.targetFace,
+          capability,
+        );
+        const { request: sizeRequest, ...geometry } = prepared.geometry!;
+        for (const key of ['width', 'height', 'tier', 'aspectRatio'] as const)
+          delete request.params[key];
+        request.params = { ...request.params, ...sizeRequest };
         const crop = await this.media.saveStream(
           [prepared.crop],
           undefined,
@@ -154,6 +164,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           : undefined;
         request.imageEdit = {
           ...recipe,
+          geometry,
           targetFace: prepared.face,
           editRegion: prepared.region,
           artifacts: {
@@ -170,6 +181,34 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           order,
           sha256: media.sha256,
         }));
+      } else {
+        const recipe = request.imageEdit;
+        const source = await this.media.resolveAt(recipe.source.sha256, root);
+        const { request: planned, ...geometry } = planEditGeometry(capability, {
+          x: 0,
+          y: 0,
+          width: source.media.width ?? 0,
+          height: source.media.height ?? 0,
+        });
+        if (
+          recipe.operation === 'angle' ||
+          !['width', 'height', 'tier', 'aspectRatio'].some((key) =>
+            Object.hasOwn(request.params, key),
+          )
+        )
+          request.params = { ...request.params, ...planned };
+        const resolved = resolveImageSize(capability, request.params, true);
+        if (recipe.operation === 'lighting' && resolved.width && resolved.height)
+          geometry.expected = {
+            ratio: resolved.width / resolved.height,
+            width: resolved.width,
+            height: resolved.height,
+          };
+        else if (recipe.operation === 'lighting' && resolved.ratio) {
+          const [w, h] = resolved.ratio.split(':').map(Number);
+          if (w > 0 && h > 0) geometry.expected = { ratio: w / h };
+        }
+        request.imageEdit = { ...recipe, geometry };
       }
     }
     const issues = checkRequest(request, { ...model, capability }, descriptor);
@@ -580,7 +619,23 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
           await readFile(generated.path),
           recipe.editRegion,
           recipe.targetFace,
-        );
+          recipe.geometry,
+          (message) =>
+            this.update(row.id, {
+              diagnostic: {
+                stage: 'download',
+                method: 'LOCAL',
+                route: 'emotion-composite',
+                message,
+              },
+            }),
+        ).catch((error: unknown) => {
+          throw new GenerationFailure(
+            'invalid_params',
+            'EDIT_POSTPROCESS_FAILED',
+            error instanceof Error ? error.message : '表情后处理失败',
+          );
+        });
         const finalMedia = await this.media.saveStream([final], signal, 'image', 'image/png', root);
         finalHash = finalMedia.sha256;
         this.update(row.id, {
@@ -592,6 +647,25 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
       }
       outputs.clear();
       outputs.add(finalHash);
+    }
+    const edit = row.request.imageEdit;
+    if (edit && edit.operation !== 'emotion' && edit.geometry?.expected.ratio) {
+      for (const hash of outputs) {
+        const media = this.media.get(hash);
+        if (
+          media.width &&
+          media.height &&
+          Math.abs(media.width / media.height / edit.geometry.expected.ratio - 1) > 0.01
+        )
+          this.update(row.id, {
+            diagnostic: {
+              stage: 'download',
+              method: 'LOCAL',
+              route: 'image-edit-geometry',
+              message: '图片编辑输出比例与请求不一致，请检查供应商尺寸支持',
+            },
+          });
+      }
     }
     this.update(row.id, {
       status: 'succeeded',
@@ -703,6 +777,7 @@ export class GenerationService implements OnApplicationBootstrap, BeforeApplicat
         );
       if (
         !paused &&
+        failure.code !== 'EDIT_POSTPROCESS_FAILED' &&
         !sent &&
         ['running', 'downloading'].includes(row.status) &&
         Date.now() < Date.parse(row.deadlineAt)

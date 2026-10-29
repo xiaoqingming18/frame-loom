@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { type CanvasMediaData, type ImageCap } from '@frame-loom/contracts';
+import { type CanvasMediaData, type ImageCap, type SemanticRequest } from '@frame-loom/contracts';
 import { CanvasContext } from '../context';
 import { createCanvasStore } from '../store/store';
 import { doc, generationJob, generationModelFixture, media, sha } from '../test-utils';
@@ -16,8 +16,9 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function setup(overrides: Partial<ImageCap> = {}) {
+function setup(overrides: Partial<ImageCap> = {}, dimensions = { width: 256, height: 256 }) {
   const job = generationJob();
+  job.outputs[0] = { ...job.outputs[0], ...dimensions };
   const data: CanvasMediaData = {
     versions: job.outputs,
     activeVersion: 0,
@@ -63,6 +64,41 @@ it('单一模型仍要求显式选择，角度只提交一次并保留源图', a
   expect((store.getState().document.nodes[0].data as CanvasMediaData).versions).toEqual(
     job.outputs,
   );
+});
+
+it('竖图角度请求与打光子节点均预填同比例尺寸', async () => {
+  const { store, create, job } = setup({}, { width: 250, height: 357 });
+  fireEvent.click(screen.getByRole('button', { name: '多角度编辑' }));
+  fireEvent.change(screen.getByLabelText('编辑模型'), { target: { value: job.modelId } });
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  const params = (create.mock.calls[0][0] as SemanticRequest).params;
+  expect(Math.abs(params.width! / params.height! / (250 / 357) - 1)).toBeLessThan(0.01);
+  fireEvent.click(screen.getByRole('button', { name: '重打光编辑' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认' }));
+  expect((store.getState().document.nodes[2].data as CanvasMediaData).params).toEqual(params);
+  expect(create).toHaveBeenCalledOnce();
+});
+
+it('全部标准比例禁用时表情预检显示原因并禁止提交', async () => {
+  vi.mocked(detectFaces).mockResolvedValue({
+    imageWidth: 256,
+    imageHeight: 256,
+    faces: [{ id: 'face', x: 50, y: 40, width: 60, height: 70, source: 'detected' }],
+  });
+  const { create, job } = setup({
+    size: {
+      wire: 'tier',
+      tiers: [{ name: '1K', enabled: false, ratios: [{ ratio: '3:4' }] }],
+      default: { tier: '1K', ratio: '3:4' },
+    },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '表情编辑' }));
+  fireEvent.change(screen.getByLabelText('表情模型'), { target: { value: job.modelId } });
+  fireEvent.click(await screen.findByRole('radio', { name: '角色1' }));
+  expect(screen.getByText(/没有已启用的有效比例/)).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '生成表情' }).disabled).toBe(true);
+  expect(create).not.toHaveBeenCalled();
 });
 
 it('参考图不足时表情禁用并说明原因，单参考角度仍可用', async () => {
