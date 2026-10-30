@@ -182,9 +182,11 @@ export class EpisodesService {
       await this.store.writeScript(root, file);
       this.story.invalidate(projectId, episodeId);
       await this.repair(root, manifest, file, new Date().toISOString());
+      const addedElements = await this.story.sync(projectId, document.blocks);
+      await this.story.pruneOrphans(projectId);
       return {
         revision: file.revision,
-        addedElements: await this.story.sync(projectId, document.blocks),
+        addedElements,
       };
     });
   }

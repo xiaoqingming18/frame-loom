@@ -35,6 +35,41 @@ async function setup() {
   return { s, project, profile, episode, base, url };
 }
 
+it('读取磁盘 v1 自动迁移且首次保存写出 v2', async () => {
+  const { s, project, url, episode } = await setup();
+  const path = join(project.rootPath, '.frameloom/scripts', `${episode.id}.json`);
+  const original = JSON.parse(await fs.readFile(path, 'utf8')) as Record<string, unknown>;
+  await fs.writeFile(
+    path,
+    JSON.stringify({
+      ...original,
+      document: {
+        schemaVersion: 1,
+        blocks: [{ id: 's', type: 'scene', text: '天台', attrs: { time: 'night', space: 'ext' } }],
+      },
+    }),
+  );
+  const result = ScriptResult.parse(await (await s.request(`${url}/script`)).json());
+  expect(result.document).toMatchObject({
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: [{ attrs: { timeText: null, note: null, timecode: null } }],
+  });
+  expect(
+    (
+      await s.request(`${url}/script`, 'PUT', {
+        revision: result.revision,
+        document: result.document,
+      })
+    ).status,
+  ).toBe(200);
+  expect(JSON.parse(await fs.readFile(path, 'utf8')) as unknown).toMatchObject({
+    formatVersion: 1,
+    document: { schemaVersion: 2 },
+  });
+});
+
 it('项目设定与页面所属剧集兼容旧目录并校验边界', async () => {
   const { s, project, profile, episode, base } = await setup();
   expect(project.profile).toEqual(profile);
@@ -107,7 +142,10 @@ it('剧集增改删、集号冲突、删除失败恢复和页面保留', async (
 it('剧本 revision 与外部修改冲突、摘要修复与落盘顺序', async () => {
   const { s, project, base, url, episode } = await setup();
   const file = ScriptResult.parse(await (await s.request(`${url}/script`)).json());
-  expect(file).toMatchObject({ revision: 1, document: { schemaVersion: 1, blocks: [] } });
+  expect(file).toMatchObject({
+    revision: 1,
+    document: { schemaVersion: 2, preface: '', appendix: '', blocks: [] },
+  });
   const document = {
     schemaVersion: 1,
     blocks: [

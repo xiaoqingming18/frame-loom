@@ -24,6 +24,11 @@ const source = () =>
     new URL('../../../../../packages/contracts/fixtures/script-sample-01.txt', import.meta.url),
     'utf8',
   );
+const source2 = () =>
+  fs.readFile(
+    new URL('../../../../../packages/contracts/fixtures/script-sample-02.txt', import.meta.url),
+    'utf8',
+  );
 function stream(content: string) {
   return {
     headers: { 'Content-Type': 'text/event-stream' },
@@ -116,13 +121,15 @@ it.each(['valid', 'retry', 'invalid', 'provider'] as const)(
       const input = JSON.parse(
         body.messages.find((message) => message.role === 'user')!.content,
       ) as { lines: { id: number; text: string; unsure: boolean }[] };
-      const line = input.lines.find((line) => line.text === '周屿 你这几年还好吗')!;
-      expect(line.unsure).toBe(true);
+      const line = input.lines.find((line) => line.text === '周屿 你这几年还好吗');
+      if (line) expect(line.unsure).toBe(true);
       return stream(
         '```json\n' +
           JSON.stringify({
             decisions: [
-              { id: line.id, type: 'dialogue', character: '周屿', text: '伪造对白' },
+              ...(line
+                ? [{ id: line.id, type: 'dialogue', character: '周屿', text: '伪造对白' }]
+                : []),
               { id: 0, type: 'note' },
             ],
             elements: [
@@ -140,7 +147,9 @@ it.each(['valid', 'retry', 'invalid', 'provider'] as const)(
         : await source();
     await s.request(`${url}/import`, 'POST', { revision: 1, text, profile });
     const result = await wait('succeeded');
-    expect(upstream!.requests).toHaveLength(scenario === 'retry' || scenario === 'invalid' ? 2 : 1);
+    expect(upstream!.requests).toHaveLength(
+      scenario === 'invalid' ? 4 : scenario === 'retry' ? 3 : scenario === 'provider' ? 1 : 2,
+    );
     expect(upstream!.violations).toEqual([]);
     expect(JSON.stringify(result.document)).not.toContain('伪造对白');
     if (scenario === 'valid' || scenario === 'retry') {
@@ -207,4 +216,64 @@ it('导入前检查设定与原文，取消保留原文，运行中拒绝写入�
   expect((await s.request(`${url}/import`, 'POST', { revision: 1 })).status).toBe(409);
   expect((await s.request(`${url}/import`, 'DELETE')).status).toBe(200);
   expect((await read()).pendingImport).toBeNull();
+});
+
+it('真实 Markdown 规则转换入库角色表，重导不覆盖说明、不重复新增', async () => {
+  const { s, url, base, wait } = await setup();
+  const text = await source2();
+  await s.request(`${url}/import`, 'POST', { revision: 1, text, profile });
+  const first = await wait('succeeded');
+  expect(first.conversion!.result).toEqual({ scenes: 6, blocks: 67, unsure: 2, addedElements: 24 });
+  const story = StoryResult.parse(await (await s.request(`${base}/story`)).json());
+  expect(
+    story.elements
+      .filter((element) => element.status === 'confirmed')
+      .map((element) => element.name),
+  ).toEqual(['卢允之', '影娘', '卢母', '道士', '张小姐']);
+  expect(story.elements.filter((element) => element.status === 'pending')).toHaveLength(19);
+  expect(story.elements.some((element) => ['片名', '片尾字幕卡'].includes(element.name))).toBe(
+    false,
+  );
+  const person = story.elements.find((element) => element.name === '影娘')!;
+  await s.request(`${base}/story/elements/${person.id}`, 'PATCH', { description: '手动说明' });
+  await s.request(`${url}/import`, 'POST', { revision: first.revision, text, profile });
+  expect((await wait('succeeded')).conversion!.result?.addedElements).toBe(0);
+  expect(
+    StoryResult.parse(await (await s.request(`${base}/story`)).json()).elements.find(
+      (element) => element.id === person.id,
+    )?.description,
+  ).toBe('手动说明');
+});
+it('全部正文分批，非存疑决定生效且未提及的存疑清除', async () => {
+  const seen: { id: number; text: string; guess: string; unsure: boolean }[] = [];
+  const { s, url, wait, upstream } = await setup((request) => {
+    const body = JSON.parse(request.body) as { messages: { role: string; content: string }[] };
+    const input = JSON.parse(body.messages.find((message) => message.role === 'user')!.content) as {
+      lines: typeof seen;
+    };
+    seen.push(...input.lines);
+    return stream(
+      JSON.stringify({
+        decisions: input.lines.some((line) => line.id === 142)
+          ? [{ id: 142, type: 'production', text: '伪造对白' }]
+          : [],
+        elements: [{ kind: 'prop', name: '不存在的道具', aliases: [], sameAs: null }],
+      }),
+    );
+  });
+  const text = await source2();
+  await s.request(`${url}/import`, 'POST', { revision: 1, text, profile });
+  const result = await wait('succeeded');
+  expect(upstream!.requests).toHaveLength(3);
+  expect(seen).toHaveLength(67);
+  expect(seen.every((line) => line.id >= 47 && line.id <= 164)).toBe(true);
+  expect(new Set(seen.map((line) => line.id)).size).toBe(67);
+  expect(seen.find((line) => line.id === 142)).toMatchObject({ guess: 'action', unsure: false });
+  expect(result.document.blocks.find((block) => block.src?.line === 142)).toMatchObject({
+    type: 'production',
+    text: '反打：卢生也笑了，左边嘴角往上翘，和她一模一样。',
+    attrs: { label: '提示' },
+  });
+  expect(result.document.blocks.some((block) => block.review)).toBe(false);
+  expect(JSON.stringify(result.document)).not.toContain('伪造对白');
 });

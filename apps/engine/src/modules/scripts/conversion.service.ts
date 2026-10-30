@@ -12,6 +12,8 @@ import {
   deriveScenes,
   isProfileComplete,
   parseScriptText,
+  normalizeLine,
+  retypeLine,
   type ConversionState,
   type ProjectProfile,
   type ScriptBlock,
@@ -177,23 +179,20 @@ export class ConversionService implements OnModuleDestroy {
     const batches: InputLine[][] = [];
     let batch: InputLine[] = [];
     let chars = 0;
-    let unsure = 0;
     for (const [id, textLine] of text.split(/\r\n?|\n/u).entries()) {
-      if (!textLine.trim()) continue;
+      if (!textLine.trim() || !byLine.has(id)) continue;
       const block = byLine.get(id);
       const line = { id, text: textLine, guess: block?.type ?? 'action', unsure: !!block?.review };
-      if (batch.length && (chars + textLine.length > 6000 || (line.unsure && unsure >= limit))) {
+      if (batch.length && (chars + textLine.length > 6000 || batch.length >= limit)) {
         batches.push(batch);
         batch = [];
         chars = 0;
-        unsure = 0;
       }
       batch.push(line);
       chars += textLine.length;
-      if (line.unsure) unsure++;
     }
     if (batch.length) batches.push(batch);
-    return batches.filter((batch) => batch.some((line) => line.unsure));
+    return batches;
   }
 
   private apply(
@@ -204,43 +203,48 @@ export class ConversionService implements OnModuleDestroy {
   ) {
     const accepted = new Set<number>();
     for (const decision of decisions) {
-      const line = batch.find((line) => line.id === decision.id && line.unsure);
+      const line = batch.find((line) => line.id === decision.id);
       if (!line || accepted.has(line.id)) continue;
-      const index = blocks.findIndex((block) => block.src?.line === line.id && block.review);
+      const index = blocks.findIndex((block) => block.src?.line === line.id);
       if (index < 0) continue;
-      const original = blocks[index];
-      if (decision.type === 'dialogue') {
-        const name = decision.character;
-        if (!name || !(line.text.trimStart().startsWith(name) || knownCharacters.includes(name)))
-          continue;
-        const value = line.text.trim();
-        const remainder = value.slice(name.length);
-        const content =
-          value.startsWith(name) && /^(?:\s|[:：])/u.test(remainder)
-            ? remainder.replace(/^[\s:：]+/u, '')
-            : value;
-        blocks.splice(
-          index,
-          1,
-          {
-            id: randomUUID(),
-            type: 'character',
-            text: name,
-            src: original.src,
-            attrs: { delivery: null, extension: null },
-          },
-          { id: original.id, type: 'dialogue', text: content, src: original.src },
-        );
-      } else {
-        blocks[index] = {
-          id: original.id,
-          type: decision.type,
-          text: original.text,
-          src: original.src,
-        };
+      const normalized = normalizeLine(line.text);
+      if (
+        decision.character &&
+        !(
+          normalized.content.startsWith(decision.character) ||
+          knownCharacters.includes(decision.character)
+        )
+      )
+        continue;
+      const originals = blocks.filter((block) => block.src?.line === line.id);
+      const replacement = retypeLine(normalized, decision.type, decision.character);
+      if (decision.type === 'dialogue' && decision.character && replacement.length === 1) {
+        let previous = index - 1;
+        while (previous >= 0 && ['dialogue', 'parenthetical'].includes(blocks[previous].type))
+          previous--;
+        if (
+          previous < 0 ||
+          blocks[previous].type !== 'character' ||
+          blocks[previous].text !== decision.character
+        )
+          replacement.unshift(...retypeLine(normalizeLine(decision.character), 'character'));
       }
+      const body =
+        originals.find((block) =>
+          ['action', 'parenthetical', 'dialogue', 'sound', 'text', 'note', 'production'].includes(
+            block.type,
+          ),
+        ) ?? originals[0];
+      replacement[replacement.length - 1].id = body.id;
+      blocks.splice(
+        index,
+        originals.length,
+        ...replacement.map((block) => ({ ...block, src: { line: line.id } })),
+      );
       accepted.add(line.id);
     }
+    const ids = new Set(batch.map((line) => line.id));
+    for (const block of blocks) if (block.src && ids.has(block.src.line)) delete block.review;
   }
 
   private addExtracted(story: StoryFile, elements: Extracted[]) {
@@ -298,7 +302,8 @@ export class ConversionService implements OnModuleDestroy {
     const { root, manifest } = await this.episodes.context(projectId, episodeId);
     const initial = await this.episodes.store.readScript(root, episodeId);
     const source = initial.pendingImport!;
-    const blocks = parseScriptText(source.text).blocks;
+    const parsed = parseScriptText(source.text);
+    const { blocks, preface, appendix, roster } = parsed;
     const story = await this.episodes.store.readStory(root);
     const knownCharacters = story.elements
       .filter((element) => element.kind === 'character')
@@ -392,7 +397,7 @@ export class ConversionService implements OnModuleDestroy {
       const integrity = checkSourceIntegrity(source.text, blocks);
       if (integrity.missingLines.length || integrity.invalidBlocks.length)
         throw new DomainError('SCRIPT_SOURCE_INTEGRITY', 422, '转换结果未通过原文完整性检查');
-      const document = ScriptDocument.parse({ schemaVersion: 1, blocks });
+      const document = ScriptDocument.parse({ schemaVersion: 2, preface, appendix, blocks });
       const file = {
         ...current,
         revision: current.revision + 1,
@@ -402,18 +407,22 @@ export class ConversionService implements OnModuleDestroy {
         convertedAt: new Date().toISOString(),
       };
       const latestStory = await this.episodes.store.readStory(root);
+      const previousStory = JSON.stringify(latestStory);
       const addedElements =
-        this.story.syncInto(latestStory, blocks) + this.addExtracted(latestStory, extracted);
+        this.story.addRoster(latestStory, roster) +
+        this.story.syncInto(latestStory, blocks) +
+        this.addExtracted(latestStory, extracted);
       StoryFile.parse(latestStory);
       signal.throwIfAborted();
       await this.episodes.store.writeScript(root, file);
       this.story.invalidate(projectId, episodeId);
       await this.episodes.repair(root, currentContext.manifest, file, file.convertedAt);
-      if (addedElements)
+      if (JSON.stringify(latestStory) !== previousStory)
         await this.episodes.store.writeStory(root, {
           ...latestStory,
           revision: latestStory.revision + 1,
         });
+      await this.story.pruneOrphans(projectId);
       this.update(job, {
         status: 'succeeded',
         stage: null,

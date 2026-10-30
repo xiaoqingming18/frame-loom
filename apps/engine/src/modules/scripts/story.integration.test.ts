@@ -8,6 +8,7 @@ import {
   StoryElement,
   StoryResult,
   parseScriptText,
+  ScriptDocument as DocumentSchema,
   type ScriptDocument,
 } from '@frame-loom/contracts';
 import { testEngine } from '../../testing/test-engine.js';
@@ -38,6 +39,47 @@ async function setup() {
     s.request(script, 'PUT', { revision, document });
   return { s, project, base, episode, script, story, create, save };
 }
+
+it('待确认清理跨集检查，保留前言、附录和已确认元素并清除合并引用', async () => {
+  const { s, project, base, episode, story, save, create } = await setup();
+  const document = DocumentSchema.parse({
+    schemaVersion: 2,
+    preface: '前言人物',
+    appendix: '附录人物',
+    blocks: parseScriptText('周屿：你好').blocks,
+  });
+  await save(document);
+  const second = EpisodeSummary.parse(
+    await (await s.request(`${base}/episodes`, 'POST', { number: 2, title: '' })).json(),
+  );
+  await s.request(`${base}/episodes/${second.id}/script`, 'PUT', { revision: 1, document });
+  const confirmed = await create('character', '永远保留');
+  const front = await create('character', '前言人物');
+  const back = await create('character', '附录人物');
+  const person = (await story()).elements.find((element) => element.name === '周屿')!;
+  const store = s.app.get(ProjectStore);
+  await store.serial(project.id, async () => {
+    const file = await store.readStory(project.rootPath);
+    for (const element of file.elements)
+      if ([front.id, back.id].includes(element.id)) {
+        element.status = 'pending';
+        element.suggestedMergeInto = person.id;
+      }
+    await store.writeStory(project.rootPath, { ...file, revision: file.revision + 1 });
+  });
+  const empty = { ...document, blocks: [] };
+  await save(empty, 2);
+  expect((await story()).elements.some((element) => element.id === person.id)).toBe(true);
+  await s.request(`${base}/episodes/${second.id}/script`, 'PUT', { revision: 2, document: empty });
+  const remaining = (await story()).elements;
+  expect(remaining.map((element) => element.id).sort()).toEqual(
+    [confirmed.id, front.id, back.id].sort(),
+  );
+  expect(remaining.every((element) => !element.suggestedMergeInto)).toBe(true);
+  expect(
+    (await (await s.request(`${base}/episodes/${episode.id}/script`)).json()) as unknown,
+  ).toMatchObject({ document: empty });
+});
 
 it('保存同步样例恰好新增十个元素，重复保存不新增，确认更新本集待确认数量', async () => {
   const { s, base, story, save } = await setup();
@@ -114,7 +156,9 @@ it('忽略全部别名、恢复后跨集同步，批量跳过不存在项且限�
     schemaVersion: 2,
     preface: '',
     appendix: '',
-    blocks: [{ id: 'c', type: 'character', text: '店主（OS）' }],
+    blocks: [
+      { id: 'c', type: 'character', text: '店主', attrs: { delivery: 'os', extension: 'OS' } },
+    ],
   };
   expect(await (await save(document)).json()).toMatchObject({ addedElements: 0 });
   expect(
@@ -154,7 +198,12 @@ it('跨集出现位置按场去重、注释不匹配、外部修改和合并使�
     preface: '',
     appendix: '',
     blocks: [
-      { id: 'scene', type: 'scene', text: '天台' },
+      {
+        id: 'scene',
+        type: 'scene',
+        text: '天台',
+        attrs: { time: null, space: null, timeText: null, note: null, timecode: null },
+      },
       { id: 'a', type: 'action', text: '林夏 小林 林夏' },
       { id: 'note', type: 'note', text: '林夏' },
     ],

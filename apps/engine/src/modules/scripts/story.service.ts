@@ -13,6 +13,7 @@ import {
   type ScriptBlock,
   type StoryElement,
   type StoryOccurrencesResult,
+  type RosterEntry,
 } from '@frame-loom/contracts';
 import { DomainError } from '../../core/http/domain-error.js';
 import { ProjectFilesService } from '../projects/project-files.service.js';
@@ -25,7 +26,13 @@ const key = (kind: ElementKind, name: string) => `${kind}:${name.toLowerCase()}`
 export class StoryService {
   private readonly cache = new Map<
     string,
-    { stamp: string; revision: number; storyRevision: number; occurrences: Occurrence[] }
+    {
+      stamp: string;
+      revision: number;
+      storyRevision: number;
+      occurrences: Occurrence[];
+      surrounding: Set<string>;
+    }
   >();
   constructor(private readonly files: ProjectFilesService) {}
 
@@ -201,6 +208,64 @@ export class StoryService {
     return added;
   }
 
+  addRoster(story: StoryFile, roster: RosterEntry[]) {
+    let added = 0;
+    for (const entry of roster) {
+      if (story.ignored.some((item) => key(item.kind, item.name) === key('character', entry.name)))
+        continue;
+      const existing = story.elements.find(
+        (element) =>
+          element.kind === 'character' &&
+          [element.name, ...element.aliases].some(
+            (name) => name.toLowerCase() === entry.name.toLowerCase(),
+          ),
+      );
+      if (existing) {
+        if (!existing.description && entry.description) {
+          existing.description = entry.description;
+          existing.updatedAt = new Date().toISOString();
+        }
+        continue;
+      }
+      const now = new Date().toISOString();
+      story.elements.push({
+        id: randomUUID(),
+        kind: 'character',
+        ...entry,
+        aliases: [],
+        attrs: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+      added++;
+    }
+    return added;
+  }
+
+  // 调用者已经持有项目串行队列；读取全部剧集后才删除，避免跨集误删。
+  async pruneOrphans(projectId: string) {
+    const root = await this.files.root(projectId);
+    const manifest = await this.files.store.readManifest(root);
+    const story = await this.files.store.readStory(root);
+    const used = new Set<string>();
+    for (const episode of manifest.episodes ?? []) {
+      for (const occurrence of await this.occurrences(root, manifest, story, episode.id))
+        used.add(occurrence.elementId);
+      for (const id of this.cache.get(`${projectId}:${episode.id}`)!.surrounding) used.add(id);
+    }
+    const removed = new Set(
+      story.elements
+        .filter((element) => element.status === 'pending' && !used.has(element.id))
+        .map((element) => element.id),
+    );
+    if (!removed.size) return;
+    story.elements = story.elements.filter((element) => !removed.has(element.id));
+    for (const element of story.elements)
+      if (element.suggestedMergeInto && removed.has(element.suggestedMergeInto))
+        delete element.suggestedMergeInto;
+    await this.write(root, story);
+  }
+
   // 调用者已经持有项目串行队列，避免嵌套 serial 导致死锁。
   async sync(projectId: string, blocks: ScriptBlock[]) {
     const root = await this.files.root(projectId);
@@ -252,6 +317,17 @@ export class StoryService {
       revision: file.revision,
       storyRevision: story.revision,
       occurrences,
+      surrounding: new Set(
+        story.elements
+          .filter((element) =>
+            [element.name, ...element.aliases].some((name) =>
+              `${file.document.preface}\n${file.document.appendix}`
+                .toLowerCase()
+                .includes(name.toLowerCase()),
+            ),
+          )
+          .map((element) => element.id),
+      ),
     });
     return occurrences;
   }
