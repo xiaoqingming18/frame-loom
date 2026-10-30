@@ -25,7 +25,12 @@ function setup(blockId?: string, initial: Partial<ScriptResult> = {}) {
     pendingImport: null,
     convertedAt: null,
     conversion: null,
-    document: { schemaVersion: 1, blocks: [{ id: 'target', type: 'action', text: '目标段落' }] },
+    document: {
+      schemaVersion: 2,
+      preface: '',
+      appendix: '',
+      blocks: [{ id: 'target', type: 'action', text: '目标段落' }],
+    },
     ...initial,
   };
   let emit: (() => void) | undefined;
@@ -61,7 +66,7 @@ function setup(blockId?: string, initial: Partial<ScriptResult> = {}) {
 }
 
 it('从空白开始创建场标题并聚焦编辑区', async () => {
-  setup(undefined, { document: { schemaVersion: 1, blocks: [] } });
+  setup(undefined, { document: { schemaVersion: 2, preface: '', appendix: '', blocks: [] } });
   fireEvent.click(await screen.findByRole('button', { name: '从空白开始写' }));
   const editor = await screen.findByRole('textbox', { name: '剧本编辑区' });
   expect(editor.querySelector('p')?.dataset.blockType).toBe('scene');

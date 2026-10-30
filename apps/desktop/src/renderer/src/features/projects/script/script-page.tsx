@@ -371,13 +371,15 @@ function ScriptSession({
             onClick={() => {
               focusBlank.current = true;
               persistence.change({
-                schemaVersion: 1,
+                schemaVersion: 2,
+                preface: '',
+                appendix: '',
                 blocks: [
                   {
                     id: crypto.randomUUID(),
                     type: 'scene',
                     text: '',
-                    attrs: { time: null, space: null },
+                    attrs: { time: null, space: null, timeText: null, note: null, timecode: null },
                   },
                 ],
               });

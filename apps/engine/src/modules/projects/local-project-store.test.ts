@@ -33,7 +33,7 @@ it('剧本文件被占用时复用原子写重试，保留未知字段并检测�
     source: null,
     pendingImport: null,
     convertedAt: null,
-    document: { schemaVersion: 1 as const, blocks: [] },
+    document: { schemaVersion: 2 as const, preface: '', appendix: '', blocks: [] },
     unknown: '保留',
   };
   expect(await store.readStory(root)).toMatchObject({ revision: 0, elements: [], ignored: [] });

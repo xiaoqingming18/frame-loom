@@ -12,7 +12,7 @@ const initial: ScriptResult = {
   source: null,
   pendingImport: { text: '原文', importedAt: new Date().toISOString() },
   convertedAt: null,
-  document: { schemaVersion: 1, blocks: [] },
+  document: { schemaVersion: 2, preface: '', appendix: '', blocks: [] },
   conversion: {
     status: 'running',
     stage: 'classify',

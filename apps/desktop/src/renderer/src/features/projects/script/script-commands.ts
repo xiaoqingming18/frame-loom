@@ -31,6 +31,7 @@ export const NEXT_TYPE: Record<BlockType, BlockType> = {
   parenthetical: 'dialogue',
   dialogue: 'action',
   sound: 'action',
+  production: 'action',
   text: 'action',
   transition: 'scene',
   note: 'action',

@@ -12,8 +12,17 @@ it('渲染类型、切换时间、切换类型及撤销重做', async () => {
   render(
     <ScriptEditor
       document={{
-        schemaVersion: 1,
-        blocks: [{ id: 'a', type: 'scene', text: '天台', attrs: { time: 'day', space: 'ext' } }],
+        schemaVersion: 2,
+        preface: '',
+        appendix: '',
+        blocks: [
+          {
+            id: 'a',
+            type: 'scene',
+            text: '天台',
+            attrs: { time: 'day', space: 'ext', timeText: null, note: null, timecode: null },
+          },
+        ],
       }}
       onChange={changed}
       onError={vi.fn()}
@@ -23,7 +32,13 @@ it('渲染类型、切换时间、切换类型及撤销重做', async () => {
   expect(screen.getByText('天台').getAttribute('data-block-type')).toBe('scene');
   expect(screen.getByRole<HTMLButtonElement>('button', { name: '撤销' }).disabled).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: '切换场景时间' }));
-  expect(changed.mock.lastCall?.[0].blocks[0].attrs).toEqual({ time: 'night', space: 'ext' });
+  expect(changed.mock.lastCall?.[0].blocks[0].attrs).toEqual({
+    time: 'night',
+    space: 'ext',
+    timeText: null,
+    note: null,
+    timecode: null,
+  });
   fireEvent.change(screen.getByLabelText('段落类型'), { target: { value: 'dialogue' } });
   expect(changed.mock.lastCall?.[0].blocks[0].type).toBe('dialogue');
   fireEvent.click(screen.getByRole('button', { name: '撤销' }));
@@ -36,7 +51,12 @@ it('粘贴三行生成三个动作段', async () => {
   const changed = vi.fn<(document: ScriptDocument) => void>();
   render(
     <ScriptEditor
-      document={{ schemaVersion: 1, blocks: [{ id: 'a', type: 'scene', text: '' }] }}
+      document={{
+        schemaVersion: 2,
+        preface: '',
+        appendix: '',
+        blocks: [{ id: 'a', type: 'scene', text: '' }],
+      }}
       onChange={changed}
       onError={vi.fn()}
       onEditor={(value) => {
@@ -57,13 +77,15 @@ it('保持存疑场标题后仍显示可切换徽标', async () => {
   render(
     <ScriptEditor
       document={{
-        schemaVersion: 1,
+        schemaVersion: 2,
+        preface: '',
+        appendix: '',
         blocks: [
           {
             id: 'a',
             type: 'scene',
             text: '天台',
-            attrs: { time: 'night', space: 'ext' },
+            attrs: { time: 'night', space: 'ext', timeText: null, note: null, timecode: null },
             review: { reason: '存疑', options: [{ type: 'scene' }] },
           },
         ],
@@ -79,7 +101,13 @@ it('保持存疑场标题后仍显示可切换徽标', async () => {
   await waitFor(() => expect(editor).not.toBeNull());
   editor!.commands.command(({ state, dispatch }) => applyReview('a')(state, dispatch));
   fireEvent.click(screen.getByRole('button', { name: '切换场景时间' }));
-  expect(changed.mock.lastCall?.[0].blocks[0].attrs).toEqual({ time: 'dawn', space: 'ext' });
+  expect(changed.mock.lastCall?.[0].blocks[0].attrs).toEqual({
+    time: 'dawn',
+    space: 'ext',
+    timeText: null,
+    note: null,
+    timecode: null,
+  });
 });
 
 it.each([{ isComposing: true }, { keyCode: 229 }])(
@@ -87,7 +115,12 @@ it.each([{ isComposing: true }, { keyCode: 229 }])(
   async (ime) => {
     render(
       <ScriptEditor
-        document={{ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '你好' }] }}
+        document={{
+          schemaVersion: 2,
+          preface: '',
+          appendix: '',
+          blocks: [{ id: 'a', type: 'action', text: '你好' }],
+        }}
         onChange={vi.fn()}
         onError={vi.fn()}
       />,

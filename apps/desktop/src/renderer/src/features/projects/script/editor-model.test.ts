@@ -16,18 +16,30 @@ export const schema = getSchema([
 ]);
 describe('剧本文档模型', () => {
   const documents: ScriptDocument[] = [
-    { schemaVersion: 1, blocks: parseScriptText(sample).blocks },
+    { schemaVersion: 2, preface: '', appendix: '', blocks: parseScriptText(sample).blocks },
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
+      preface: '',
+      appendix: '',
       blocks: BLOCK_TYPES.map((type, index) => ({
         id: `b${index}`,
         type,
         text: index % 2 ? '内容' : '',
         ...(type === 'scene'
-          ? { attrs: { time: 'night' as const, space: 'ext' as const } }
+          ? {
+              attrs: {
+                time: 'night' as const,
+                space: 'ext' as const,
+                timeText: null,
+                note: null,
+                timecode: null,
+              },
+            }
           : type === 'character'
-            ? { attrs: { delivery: 'os' as const } }
-            : {}),
+            ? { attrs: { delivery: 'os' as const, extension: null } }
+            : type === 'sound' || type === 'production'
+              ? { attrs: { label: '音效' } }
+              : {}),
         ...(index % 2
           ? { src: { line: index }, review: { reason: '存疑', options: [{ type }] } }
           : {}),
@@ -41,7 +53,12 @@ describe('剧本文档模型', () => {
   it('拒绝换行和行内标记', () => {
     expect(() =>
       fromEditorJson(
-        toEditorJson({ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '一\n二' }] }),
+        toEditorJson({
+          schemaVersion: 2,
+          preface: '',
+          appendix: '',
+          blocks: [{ id: 'a', type: 'action', text: '一\n二' }],
+        }),
       ),
     ).toThrow();
     expect(() =>

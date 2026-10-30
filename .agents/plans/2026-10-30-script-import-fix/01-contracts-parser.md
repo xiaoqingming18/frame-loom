@@ -1,6 +1,6 @@
 # Plan: schema v2 与规则解析器
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -24,7 +24,7 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 修改 `scripts.ts`：
+- [x] T1 修改 `scripts.ts`：
   - `BLOCK_TYPES` 增加 `production`，`BLOCK_LABELS` 为「制作提示」，`BLOCK_SHORT_LABELS` 为「制」；
   - `SceneAttrs` 增加 `timeText`、`note`、`timecode`，`CharacterAttrs` 增加 `extension`，新增 `TagAttrs`；
   - attrs 与类型的对应关系按笔记执行（scene、character、sound、production 的 attrs 必填，其余类型不允许带 attrs）；
@@ -36,13 +36,13 @@ Parent: plan.md
   - v2 文档原样通过；
   - attrs 缺失或类型不符时被拒绝（每种类型至少一个反例）；
   - `preface` 超过 50000 个字符时被拒绝。
-- [ ] T2 修改 `desktop.ts`：`DesktopPreferences` 增加可选字段 `scriptView: 'styled' | 'markdown'` 和 `scriptMentions: boolean`。
+- [x] T2 修改 `desktop.ts`：`DesktopPreferences` 增加可选字段 `scriptView: 'styled' | 'markdown'` 和 `scriptMentions: boolean`。
 
   — 验证：`desktop.test.ts` 新增用例，覆盖新字段的正例和非法值的反例。
-- [ ] T3 修改 `script-parse.ts`：新增 `normalizeLine`，`kind`、结构行、区域标记、`boldHead`、`boldRest` 和 `content` 的规则都按笔记实现。
+- [x] T3 修改 `script-parse.ts`：新增 `normalizeLine`，`kind`、结构行、区域标记、`boldHead`、`boldRest` 和 `content` 的规则都按笔记实现。
 
   — 验证：用表驱动的单测，每种 kind、每种结构行、粗体加括号、粗体加时间码、行内反引号，都至少有一个用例。
-- [ ] T4 重写 `parseSceneHeading`：按笔记中的第 0–6 步实现。
+- [x] T4 重写 `parseSceneHeading`：按笔记中的第 0–6 步实现。
 
   — 验证：用表驱动的单测，至少包含以下输入，预期按笔记计算：
   - `**1. 内景　城西卢宅·正屋 — 清晨（多年以后）**　`加时间码；
@@ -53,7 +53,7 @@ Parent: plan.md
   - `1-8 夜 外 天台`、`第3场 日 内 客厅`、`INT. 客厅 - 夜`、`场景2：天台`、`12. 夜 外 码头`；
   - `- 第一任新主人刷了一遍石灰`（返回 null）；
   - `他走到门口。`（返回 null）。
-- [ ] T5 重写 `parseScriptText(text, newId)`，返回 `{ preface, appendix, blocks, coveredLines, unsure, roster }`：
+- [x] T5 重写 `parseScriptText(text, newId)`，返回 `{ preface, appendix, blocks, coveredLines, unsure, roster }`：
   - 先预扫描已知名字，判断是否使用独立角色行的写法；
   - 然后按笔记的规则表 1–20 处理每一行，规则 12 按「对白组」把后续行一起处理；
   - 前言、附录和区域标记按笔记处理；
@@ -66,7 +66,7 @@ Parent: plan.md
   - 两份样例的原文完整性检查都通过；
   - `roster` 中有 5 个已确认、14 个待确认；
   - 规则 16 的三个分支、规则 17 和 18、规则 19 各有一个独立用例。
-- [ ] T6 新增 `retypeBlock(block, type, newId)` 和 `retypeLine(normalized, type, character?, newId)`，规则按笔记的「段落类型切换」一节；从 scene 和 character 切出去时，先还原成一行文字。
+- [x] T6 新增 `retypeBlock(block, type, newId)` 和 `retypeLine(normalized, type, character?, newId)`，规则按笔记的「段落类型切换」一节；从 scene 和 character 切出去时，先还原成一行文字。
 
   — 验证：表驱动的单测覆盖以下几点：
   - 「把『**1. 内景 X — 夜**』这一行从 action 切成 scene」得到正确的 attrs；
@@ -75,7 +75,7 @@ Parent: plan.md
   - 「『【镜头】固定机位』从 action 切成 production」得到 label 为「镜头」；
   - 「场标题切成 action」得到还原后的一行文字；
   - 其余 11 种目标类型，每种至少一个用例。
-- [ ] T7 修改 `syncCandidates`：跳过带 `review` 的段落；角色名取 `CharacterAttrs` 之外的 text。`deriveScenes` 的 time 字段，改为同时返回 `timeText`。
+- [x] T7 修改 `syncCandidates`：跳过带 `review` 的段落；角色名取 `CharacterAttrs` 之外的 text。`deriveScenes` 的 time 字段，改为同时返回 `timeText`。
 
   — 验证：对 `script-sample-02.txt` 的解析结果调用 `syncCandidates`，得到人物「孩童们」「影娘」「卢生」，场景「城西卢宅·正屋」「卢宅门口」「卢宅正屋」；存疑的「片名」「片尾字幕卡」不在结果中。
 
@@ -159,16 +159,18 @@ Parent: plan.md
 
 - 预期：`pnpm --filter @frame-loom/contracts test` 和 `pnpm --filter @frame-loom/contracts typecheck` 通过，`build` 能输出 `dist/`。
 - v2 的类型变化会让 engine 和 desktop 中构造 attrs 的代码无法通过类型检查。本子计划只做让它们恢复编译的最小改动：补齐新增的必填字段，sound 补上 label。这部分不改变行为，也不实现 03、04 的功能。改动后，`pnpm --filter @frame-loom/engine typecheck` 和 `pnpm --filter @frame-loom/desktop typecheck` 必须通过，保证每个提交都能编译。不运行 engine 和 desktop 的测试。
-- 实际：未执行。
+- 实际：contracts test 317 项通过，contracts typecheck、build 通过；engine typecheck、desktop typecheck 通过（Node 24.22.0 / pnpm 12.15.0）。
 
 ## 进度
 
 - 2026-10-30：创建子计划草稿。
+- 2026-10-30：完成 v2 schema、预处理、逐行规则、角色表、类型重解析及定向验证。
 
 ## 发现与偏差
 
-无。
+- v2 输出类型使现有强类型测试数据需要同步版本与新增属性；同批做机械适配，不运行其他包测试。
+- 结构行也执行 content 标记剥离，`***`、`___` 的 content 分别为 `*`、`_`，kind 仍为 structure，不生成段落。
 
 ## 交接
 
-尚未开始。
+无。

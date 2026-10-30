@@ -227,7 +227,7 @@ export class ConversionService implements OnModuleDestroy {
             type: 'character',
             text: name,
             src: original.src,
-            attrs: { delivery: null },
+            attrs: { delivery: null, extension: null },
           },
           { id: original.id, type: 'dialogue', text: content, src: original.src },
         );

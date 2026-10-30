@@ -53,7 +53,12 @@ const story: StoryResult = {
   ],
 };
 it('大纲显示幕与七场，点击定位；整场移动一次撤销', () => {
-  const document: ScriptDocument = { schemaVersion: 1, blocks: parseScriptText(sample).blocks };
+  const document: ScriptDocument = {
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: parseScriptText(sample).blocks,
+  };
   const editor = make(document);
   const scroll = vi.fn();
   HTMLElement.prototype.scrollIntoView = scroll;
@@ -75,7 +80,7 @@ it('存疑选择对白保留原 id，一次撤销恢复', async () => {
   const block = parseScriptText(sample).blocks.find(
     (block) => block.text === '周屿 你这几年还好吗',
   )!;
-  const editor = make({ schemaVersion: 1, blocks: [block] });
+  const editor = make({ schemaVersion: 2, preface: '', appendix: '', blocks: [block] });
   const button = document.createElement('button');
   button.dataset.reviewId = block.id;
   editor.view.dom.append(button);
@@ -93,7 +98,12 @@ it('存疑选择对白保留原 id，一次撤销恢复', async () => {
 it('人物前缀候选用 Enter 完成', async () => {
   Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
   Range.prototype.getBoundingClientRect = () => new DOMRect();
-  const editor = make({ schemaVersion: 1, blocks: [{ id: 'a', type: 'character', text: '' }] });
+  const editor = make({
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: [{ id: 'a', type: 'character', text: '' }],
+  });
   render(<CharacterAutocomplete editor={editor} elements={story.elements} />);
   editor.commands.insertContent('林');
   await screen.findByRole('option', { name: '林夏' });
@@ -103,7 +113,12 @@ it('人物前缀候选用 Enter 完成', async () => {
 it.each([{ isComposing: true }, { keyCode: 229 }])(
   '输入法确认键 %j 不选择人物补全候选',
   async (ime) => {
-    const editor = make({ schemaVersion: 1, blocks: [{ id: 'a', type: 'character', text: '' }] });
+    const editor = make({
+      schemaVersion: 2,
+      preface: '',
+      appendix: '',
+      blocks: [{ id: 'a', type: 'character', text: '' }],
+    });
     render(<CharacterAutocomplete editor={editor} elements={story.elements} />);
     editor.commands.insertContent('林');
     await screen.findByRole('option', { name: '林夏' });
@@ -114,7 +129,12 @@ it.each([{ isComposing: true }, { keyCode: 229 }])(
   },
 );
 it('选中文字标记道具；41 字禁用', async () => {
-  const editor = make({ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '旧信封' }] });
+  const editor = make({
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: [{ id: 'a', type: 'action', text: '旧信封' }],
+  });
   const create = vi.fn().mockResolvedValue(undefined);
   render(<SelectionToolbar editor={editor} create={create} />);
   editor.commands.setTextSelection({ from: 1, to: 4 });
@@ -123,7 +143,9 @@ it('选中文字标记道具；41 字禁用', async () => {
   await waitFor(() => expect(screen.queryByRole('button', { name: '标记为人物' })).toBeNull());
   editor.commands.setContent(
     toEditorJson({
-      schemaVersion: 1,
+      schemaVersion: 2,
+      preface: '',
+      appendix: '',
       blocks: [{ id: 'a', type: 'action', text: '字'.repeat(41) }],
     }),
   );
@@ -136,7 +158,9 @@ it('选中文字标记道具；41 字禁用', async () => {
 });
 it('本集元素逐处定位、确认、忽略与合并', () => {
   const document: ScriptDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
     blocks: [{ id: 'a', type: 'action', text: '林夏看着林夏' }],
   };
   const editor = make(document);
@@ -148,7 +172,9 @@ it('本集元素逐处定位、确认、忽略与合并', () => {
     <ElementPanel
       editor={editor}
       document={{
-        schemaVersion: 1,
+        schemaVersion: 2,
+        preface: '',
+        appendix: '',
         blocks: [{ id: 'a', type: 'action', text: '林夏看着林夏，小林' }],
       }}
       story={{ ...story, elements: [...story.elements, pending] }}
@@ -168,7 +194,12 @@ it('本集元素逐处定位、确认、忽略与合并', () => {
   expect(mutate).toHaveBeenCalledWith('elements/b', 'DELETE', undefined);
 });
 it('段落手柄菜单把动作改为对白', async () => {
-  const editor = make({ schemaVersion: 1, blocks: [{ id: 'a', type: 'action', text: '你好' }] });
+  const editor = make({
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: [{ id: 'a', type: 'action', text: '你好' }],
+  });
   vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: 1, inside: 0 });
   render(<BlockHandle editor={editor} />);
   fireEvent.mouseMove(editor.view.dom.querySelector('p')!, { clientX: 10, clientY: 10 });
@@ -178,7 +209,9 @@ it('段落手柄菜单把动作改为对白', async () => {
 });
 it('大纲菜单移动时读取最新正文', async () => {
   const document: ScriptDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
     blocks: [
       { id: 's1', type: 'scene', text: '书店' },
       { id: 'a', type: 'action', text: '旧文字' },

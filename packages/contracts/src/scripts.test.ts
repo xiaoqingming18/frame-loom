@@ -115,7 +115,9 @@ it('剧本验证唯一 id、纯文本和 attrs，文件大小和未知字段', (
   ])
     expect(ScriptDocument.safeParse({ schemaVersion: 1, blocks }).success).toBe(false);
   for (const type of BLOCK_TYPES)
-    expect(ScriptBlock.safeParse({ ...block, type }).success).toBe(true);
+    expect(ScriptBlock.safeParse({ ...block, type }).success).toBe(
+      !['scene', 'character', 'sound', 'production'].includes(type),
+    );
   const file = {
     format: 'frame-loom-script',
     formatVersion: 1,
@@ -127,7 +129,10 @@ it('剧本验证唯一 id、纯文本和 attrs，文件大小和未知字段', (
     document: { schemaVersion: 1, blocks: [] },
     unknown: '保留',
   };
-  expect(ScriptFile.parse(file)).toEqual(file);
+  expect(ScriptFile.parse(file)).toEqual({
+    ...file,
+    document: { schemaVersion: 2, preface: '', appendix: '', blocks: [] },
+  });
   expect(ScriptFile.safeParse({ ...file, unknown: 'x'.repeat(4 * 1024 * 1024) }).success).toBe(
     false,
   );
@@ -175,6 +180,9 @@ describe('场标题', () => {
       space: null,
       location: '天台',
       confident: false,
+      timeText: null,
+      note: null,
+      timecode: null,
     });
     expect(parseSceneHeading('她走进天台')).toBeNull();
   });
@@ -196,6 +204,7 @@ it('样例逐字保留，统计符合验收规格', () => {
     dialogue: 11,
     parenthetical: 3,
     sound: 2,
+    production: 0,
     text: 1,
     transition: 2,
     note: 0,
@@ -265,7 +274,7 @@ it('长词优先、不重叠、单字仅角色全文命中，场和同步跳过�
   expect(
     syncCandidates([
       { id: 'n', type: 'note', text: '林夏' },
-      { id: 'c', type: 'character', text: '店主（OS）' },
+      { id: 'c', type: 'character', text: '店主', attrs: { delivery: 'os', extension: 'OS' } },
     ]),
   ).toEqual([{ kind: 'character', name: '店主' }]);
 });

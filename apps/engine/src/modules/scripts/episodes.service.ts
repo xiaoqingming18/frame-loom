@@ -84,7 +84,7 @@ export class EpisodesService {
         source: null,
         pendingImport: null,
         convertedAt: null,
-        document: { schemaVersion: 1, blocks: [] },
+        document: { schemaVersion: 2, preface: '', appendix: '', blocks: [] },
       });
       manifest.episodes = [...episodes, episode];
       manifest.updatedAt = now;

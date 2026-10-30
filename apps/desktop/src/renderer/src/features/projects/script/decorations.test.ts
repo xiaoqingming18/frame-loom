@@ -15,7 +15,7 @@ it('样例装饰与共享匹配一致，单段修改仅重算一段，meta 全�
   const compute = vi.fn(blockDecorations);
   let state = EditorState.create({
     schema,
-    doc: schema.nodeFromJSON(toEditorJson({ schemaVersion: 1, blocks })),
+    doc: schema.nodeFromJSON(toEditorJson({ schemaVersion: 2, preface: '', appendix: '', blocks })),
     plugins: [createDecorations(compute)],
   });
   state = state.apply(state.tr.setMeta('mentions', terms));

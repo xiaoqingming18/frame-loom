@@ -45,7 +45,12 @@ it('保存同步样例恰好新增十个元素，重复保存不新增，确认�
     new URL('../../../../../packages/contracts/fixtures/script-sample-01.txt', import.meta.url),
     'utf8',
   );
-  const document: ScriptDocument = { schemaVersion: 1, blocks: parseScriptText(text).blocks };
+  const document: ScriptDocument = {
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: parseScriptText(text).blocks,
+  };
   expect(await (await save(document)).json()).toMatchObject({ revision: 2, addedElements: 10 });
   expect(await (await save(document, 2)).json()).toMatchObject({ addedElements: 0 });
   const result = await story();
@@ -106,7 +111,9 @@ it('忽略全部别名、恢复后跨集同步，批量跳过不存在项且限�
     { kind: 'character', name: '老板' },
   ]);
   const document: ScriptDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
     blocks: [{ id: 'c', type: 'character', text: '店主（OS）' }],
   };
   expect(await (await save(document)).json()).toMatchObject({ addedElements: 0 });
@@ -143,7 +150,9 @@ it('忽略全部别名、恢复后跨集同步，批量跳过不存在项且限�
 it('跨集出现位置按场去重、注释不匹配、外部修改和合并使缓存更新', async () => {
   const { s, base, project, episode, story, save, create } = await setup();
   const document: ScriptDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
     blocks: [
       { id: 'scene', type: 'scene', text: '天台' },
       { id: 'a', type: 'action', text: '林夏 小林 林夏' },

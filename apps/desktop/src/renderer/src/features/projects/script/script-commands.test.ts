@@ -24,7 +24,7 @@ const schema = getSchema([Document.extend({ content: 'scriptBlock+' }), Text, Sc
 function setup(blocks: ScriptBlock[], cursor = blocks[0].text.length + 1) {
   let state = EditorState.create({
     schema,
-    doc: schema.nodeFromJSON(toEditorJson({ schemaVersion: 1, blocks })),
+    doc: schema.nodeFromJSON(toEditorJson({ schemaVersion: 2, preface: '', appendix: '', blocks })),
     plugins: [history(), clearReviewPlugin()],
   });
   state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, cursor)));
@@ -85,7 +85,7 @@ describe('剧本键盘命令', () => {
       id: 'a',
       type: 'scene',
       text: '天台',
-      attrs: { time: 'night', space: 'ext' },
+      attrs: { time: 'night', space: 'ext', timeText: null, note: null, timecode: null },
     });
     const character = setup([{ id: 'a', type: 'character', text: '店主（OS）' }]);
     character.run(enterBlock);
@@ -93,7 +93,7 @@ describe('剧本键盘命令', () => {
       id: 'a',
       type: 'character',
       text: '店主',
-      attrs: { delivery: 'os' },
+      attrs: { delivery: 'os', extension: null },
     });
   });
   it('中间拆分后半无来源，撤销恢复 id，重做仍唯一', () => {
@@ -168,7 +168,7 @@ describe('剧本键盘命令', () => {
       id: 'a',
       type: 'scene',
       text: '天台',
-      attrs: { time: 'night', space: 'ext' },
+      attrs: { time: 'night', space: 'ext', timeText: null, note: null, timecode: null },
       src: { line: 1 },
       review: { reason: '存疑', options: [{ type: 'scene' }] },
     };

@@ -10,6 +10,7 @@ export const BLOCK_TYPES = [
   'parenthetical',
   'dialogue',
   'sound',
+  'production',
   'text',
   'transition',
   'note',
@@ -25,6 +26,7 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   parenthetical: '括注',
   dialogue: '对白',
   sound: '音效／音乐',
+  production: '制作提示',
   text: '字幕／画面文字',
   transition: '转场',
   note: '注释',
@@ -38,6 +40,7 @@ export const BLOCK_SHORT_LABELS: Record<BlockType, string> = {
   parenthetical: '括',
   dialogue: '白',
   sound: '音',
+  production: '制',
   text: '字',
   transition: '转',
   note: '注',
@@ -49,12 +52,18 @@ export const SceneSpace = z.enum(['int', 'ext', 'intext']);
 export const SceneAttrs = z.strictObject({
   time: SceneTime.nullable(),
   space: SceneSpace.nullable(),
+  timeText: z.string().max(20).nullable(),
+  note: z.string().max(40).nullable(),
+  timecode: z.string().max(40).nullable(),
 });
 export type SceneAttrs = z.infer<typeof SceneAttrs>;
 export const CharacterAttrs = z.strictObject({
   delivery: z.enum(['vo', 'os', 'inner']).nullable(),
+  extension: z.string().max(80).nullable(),
 });
 export type CharacterAttrs = z.infer<typeof CharacterAttrs>;
+export const TagAttrs = z.strictObject({ label: z.string().min(1).max(8) });
+export type TagAttrs = z.infer<typeof TagAttrs>;
 const BlockText = z
   .string()
   .max(4000)
@@ -70,7 +79,7 @@ export const ScriptBlock = z
     id: BlockId,
     type: BlockType,
     text: BlockText,
-    attrs: z.union([SceneAttrs, CharacterAttrs]).optional(),
+    attrs: z.union([SceneAttrs, CharacterAttrs, TagAttrs]).optional(),
     src: z.strictObject({ line: z.number().int().nonnegative() }).optional(),
     review: z
       .strictObject({ reason: z.string().max(200), options: z.array(ReviewOption).min(1).max(4) })
@@ -78,20 +87,80 @@ export const ScriptBlock = z
   })
   .superRefine((block, ctx) => {
     if (
-      block.attrs !== undefined &&
       !(
         block.type === 'scene'
           ? SceneAttrs
           : block.type === 'character'
             ? CharacterAttrs
-            : z.never()
+            : block.type === 'sound' || block.type === 'production'
+              ? TagAttrs
+              : z.undefined()
       ).safeParse(block.attrs).success
     )
       ctx.addIssue({ code: 'custom', message: 'attrs 与段落类型不匹配' });
   });
 export type ScriptBlock = z.infer<typeof ScriptBlock>;
+const LegacyBlock = z
+  .strictObject({
+    ...ScriptBlock.shape,
+    type: z.enum(BLOCK_TYPES.filter((type) => type !== 'production')),
+    attrs: z
+      .union([
+        SceneAttrs.pick({ time: true, space: true }),
+        CharacterAttrs.pick({ delivery: true }),
+      ])
+      .optional(),
+  })
+  .superRefine((block, ctx) => {
+    if (
+      block.attrs !== undefined &&
+      !(
+        block.type === 'scene'
+          ? SceneAttrs.pick({ time: true, space: true })
+          : block.type === 'character'
+            ? CharacterAttrs.pick({ delivery: true })
+            : z.never()
+      ).safeParse(block.attrs).success
+    )
+      ctx.addIssue({ code: 'custom', message: 'attrs 与段落类型不匹配' });
+  });
+const DocumentV2 = z.strictObject({
+  schemaVersion: z.literal(2),
+  preface: z.string().max(50000),
+  appendix: z.string().max(50000),
+  blocks: z.array(ScriptBlock).max(5000),
+});
 export const ScriptDocument = z
-  .strictObject({ schemaVersion: z.literal(1), blocks: z.array(ScriptBlock).max(5000) })
+  .union([
+    DocumentV2,
+    z
+      .strictObject({ schemaVersion: z.literal(1), blocks: z.array(LegacyBlock).max(5000) })
+      .transform((doc): z.input<typeof DocumentV2> => ({
+        schemaVersion: 2 as const,
+        preface: '',
+        appendix: '',
+        blocks: doc.blocks.map(({ attrs, ...block }) => ({
+          ...block,
+          ...(block.type === 'scene'
+            ? {
+                attrs: {
+                  time: null,
+                  space: null,
+                  ...attrs,
+                  timeText: null,
+                  note: null,
+                  timecode: null,
+                },
+              }
+            : block.type === 'character'
+              ? { attrs: { delivery: null, ...attrs, extension: null } }
+              : block.type === 'sound'
+                ? { attrs: { label: '音效' } }
+                : {}),
+        })),
+      }))
+      .pipe(DocumentV2),
+  ])
   .refine(
     (doc) => new Set(doc.blocks.map((block) => block.id)).size === doc.blocks.length,
     '段落 id 重复',

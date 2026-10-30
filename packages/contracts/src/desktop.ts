@@ -23,6 +23,8 @@ export const DesktopPreferences = z.strictObject({
   projectLocation: z.string().min(1).max(4096).optional(),
   projectSort: ProjectSort.optional(),
   assetView: AssetView.optional(),
+  scriptView: z.enum(['styled', 'markdown']).optional(),
+  scriptMentions: z.boolean().optional(),
 });
 export type DesktopPreferences = z.infer<typeof DesktopPreferences>;
 export const DesktopPreferencesUpdate = DesktopPreferences.omit({ version: true }).partial();

@@ -3,7 +3,9 @@ import type { ScriptDocument } from '@frame-loom/contracts';
 import { EngineRequestError } from '@/lib/engine-client';
 import { createScriptPersistence } from './script-persistence';
 const doc = (text: string): ScriptDocument => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
+  preface: '',
+  appendix: '',
   blocks: [{ id: 'a', type: 'action', text }],
 });
 afterEach(() => vi.useRealTimers());
