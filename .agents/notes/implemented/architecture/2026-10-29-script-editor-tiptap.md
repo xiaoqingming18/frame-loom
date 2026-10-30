@@ -31,15 +31,17 @@ Status: implemented
 - 只有一种 block 节点 `scriptBlock`，`content: 'text*'`，不允许任何 mark，`code: false`。属性包括：
   - `id`：由 UniqueID 维护；
   - `type`：`BlockType`；
-  - `attrs`：JSON 字符串，只有 scene 和 character 类型使用；
+  - `attrs`：JSON 字符串，scene、character、sound 和 production 类型使用；
   - `src`：原文行号或 `null`；
   - `review`：JSON 字符串或 `null`。
 
-  `doc` 的 content 为 `scriptBlock+`。HTML 渲染为 `<p data-block-type data-id>`，各类型的样式只通过 `data-block-type` 选择器加 token 实现。
+  `doc` 的 content 为 `scriptBlock+`，根属性保存 v2 的 preface 和 appendix。HTML 渲染为 `<p data-block-type data-id>`，各类型的样式只通过 `data-block-type` 选择器加 token 实现。
 - `toEditorJson(document)` 和 `fromEditorJson(json)` 放在 `features/projects/script/editor-model.ts`，两者必须无损互逆。`fromEditorJson` 的输出要经过 `ScriptDocument.parse` 校验，校验失败时不保存，并显示错误。
 - 编辑某个段落的文字时，清除该段的 `review`。这在 `appendTransaction` 中实现：凡是文本发生变化的段落，如果带有 `review`，就清除。
 
 ### 交互的实现方式
+
+[导入修正与 Markdown 视图](../feature/2026-10-30-script-import-and-markdown-view.md)补充类型重解析、大纲分幕、默认关闭元素标记和前言附录。Markdown 使用 Textarea，切回样式时在同一个 Tiptap 实例中执行一次可撤销事务；依赖边界不变。
 
 - **键盘规则**：在 `scriptKeyboard` 扩展的 `addKeyboardShortcuts` 中实现。每条规则对应 `script-commands.ts` 中的一个纯函数命令，单测可以直接在 `EditorState` 上调用这些命令，不需要 DOM。
 - **元素高亮和存疑竖条**：用一个 ProseMirror 插件的 `DecorationSet` 实现。初始化时全量计算；之后只对 transaction 改动过的段落调用 `findMentions` 重新计算，其余部分用 `mapping` 映射。设定库变化时，通过 `setMeta('mentions', terms)` 触发一次全量重算。装饰不进入文档，也不进入撤销历史。

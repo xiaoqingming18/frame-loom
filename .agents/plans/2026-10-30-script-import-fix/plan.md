@@ -1,7 +1,7 @@
 # Plan: 剧本导入识别修正、前言附录与 Markdown 视图
 
-Status: active
-Note: ../../notes/proposed/feature/2026-10-30-script-import-and-markdown-view.md
+Status: done
+Note: ../../notes/implemented/feature/2026-10-30-script-import-and-markdown-view.md
 
 ## 目标
 
@@ -14,7 +14,7 @@ Note: ../../notes/proposed/feature/2026-10-30-script-import-and-markdown-view.md
 - 元素下划线默认关闭；
 - 编辑器提供可以双向编辑的 Markdown 视图。
 
-完成条件以笔记 `## Acceptance criteria` 第 1–5 条为准。
+完成条件以笔记 `## Testing` 第 1–5 条为准（实施后由 Acceptance criteria 转为实际验证记录）。
 
 ## 范围与非目标
 
@@ -43,7 +43,7 @@ Note: ../../notes/proposed/feature/2026-10-30-script-import-and-markdown-view.md
 | 03 | [engine 转换、角色表与清理](03-engine.md) | done | 01 | 全行交给模型、角色表入库、同步跳过存疑段落、待确认元素清理、v1 读取后写出 v2 |
 | 04 | [编辑器修正](04-desktop-editor.md) | done | 01 | 幕的处理、类型切换重新解析、新排版、前言附录卡片、元素标记开关、偏好、结果提示文案 |
 | 05 | [Markdown 视图](05-desktop-markdown.md) | done | 02、04 | 页签、Textarea 编辑、自动回写保存、切换回样式视图、偏好记忆 |
-| 06 | [集成验收与收尾](06-acceptance.md) | draft | 03、05 | 新旧 e2e、截图、完整剧本人工记录、一次全仓门禁、笔记转为 implemented |
+| 06 | [集成验收与收尾](06-acceptance.md) | done | 03、05 | 新旧 e2e、截图、完整剧本人工记录、一次全仓门禁、笔记转为 implemented |
 
 ## 依赖与顺序
 
@@ -84,14 +84,14 @@ Note: ../../notes/proposed/feature/2026-10-30-script-import-and-markdown-view.md
 
 ## 验收
 
-- [ ] 笔记验收第 1 条 — 证据：01、02 单测
-- [ ] 笔记验收第 2 条 — 证据：03 集成测试
-- [ ] 笔记验收第 3 条 — 证据：04、05 单测
-- [ ] 笔记验收第 4 条 — 证据：06 e2e 与截图
-- [ ] 笔记验收第 5 条已记录 — 证据：06
-- [ ] 一次全仓 typecheck、lint、format:check、test 和 `pnpm run verify` 通过 — 证据：06
-- [ ] 笔记移入 `implemented/`，原剧集笔记和编辑器选型笔记补上互链并同步事实，父子计划转为 `done` — 证据：06 收尾提交
+- [x] 笔记验收第 1 条 — 证据：01、02 单测
+- [x] 笔记验收第 2 条 — 证据：03 集成测试
+- [x] 笔记验收第 3 条 — 证据：04、05 单测
+- [x] 笔记验收第 4 条 — 证据：06 e2e 与截图
+- [x] 笔记验收第 5 条已记录 — 证据：06
+- [x] 一次全仓 typecheck、lint、format:check、test 和 `pnpm run verify` 通过 — 证据：06；失败修复后仅重跑受影响项及未运行包
+- [x] 笔记移入 `implemented/`，原剧集笔记和编辑器选型笔记补上互链并同步事实，父子计划转为 `done` — 证据：06 收尾提交
 
 ## 发现与偏差
 
-无。
+- 全仓测试首次在 contracts 阶段停止，修复同类型 action 重解析后继续完成各包；后续增加的 Markdown 映射回归仅重跑 contracts 和剧本相关检查。详见 06。

@@ -111,7 +111,7 @@ it('列表和动作不识别为场标题', () => {
   expect(parseSceneHeading('- 第一任新主人刷了一遍石灰')).toBeNull();
   expect(parseSceneHeading('他走到门口。')).toBeNull();
 });
-it('真实样例逐段对照计划，前言、附录、角色表和元素准确', async () => {
+it('真实样例逐段对照计划，前言、附录、角色表和元素准确', () => {
   const plan = `| 47 | scene | 城西卢宅·正屋 | time=dawn space=int timeText=清晨 note=多年以后 timecode=00:00–00:35 |  |
 | 49 | transition | 黑场。 |  |  |
 | 51 | sound | 棕刷蘸进灰浆桶，提起来，往下滴水。 | label=音效 |  |

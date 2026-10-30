@@ -8,7 +8,7 @@ import { ScriptResult, StoryResult, parseScriptText } from '@frame-loom/contract
 import { engineApi, disposeTestApp, addMediaChannel, addMediaModel } from './model-service.fixture';
 
 const desktop = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const screenshots = resolve(desktop, '../../.cache/scripts');
+const screenshots = resolve(desktop, '../../.cache/scripts-fix');
 const sample = await readFile(
   resolve(desktop, '../../packages/contracts/fixtures/script-sample-01.txt'),
   'utf8',
@@ -86,7 +86,7 @@ test('剧本创建导入编辑设定库与重启保留', async () => {
     await dialog.getByRole('button', { name: '悬疑', exact: true }).click();
     await dialog.getByRole('button', { name: '开始转换' }).click();
     await expect(
-      page.getByText('已识别 7 场、60 段，新增 10 个待确认元素', { exact: true }),
+      page.getByText('已识别 7 场、60 段，新增 10 个元素', { exact: true }),
     ).toBeVisible();
     await expect(page.locator('.tiptap p[data-id]')).toHaveCount(60);
     const projects = (await engineApi(page, '/projects')) as { id: string }[];
@@ -214,6 +214,117 @@ test('剧本创建导入编辑设定库与重启保留', async () => {
   }
 });
 
+test('真实格式剧本与 Markdown 视图', async () => {
+  test.setTimeout(180000);
+  await mkdir(screenshots, { recursive: true });
+  const sandbox = await mkdtemp(join(tmpdir(), 'frame-script-markdown-'));
+  const userData = join(sandbox, 'data');
+  let app: ElectronApplication | undefined;
+  try {
+    app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
+    let page = await app.firstWindow();
+    await page.emulateMedia({ colorScheme: null });
+    const pageErrors = errors(page);
+    await page.getByRole('link', { name: '项目库', exact: true }).click();
+    await app.evaluate(({ dialog }, location) => {
+      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [location] });
+    }, sandbox);
+    await page.getByRole('button', { name: '新建项目', exact: true }).last().click();
+    let dialog = page.getByRole('dialog');
+    await dialog.getByLabel('项目名称', { exact: true }).fill('真实格式验收');
+    await dialog.getByRole('button', { name: '更改' }).click();
+    await dialog.getByRole('button', { name: '创建项目' }).click();
+    await page.getByRole('button', { name: '新建剧集', exact: true }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByLabel('标题').fill('影娘');
+    await dialog.getByRole('button', { name: '确认', exact: true }).click();
+    await page.getByRole('button', { name: '粘贴整集剧本' }).click();
+    dialog = page.getByRole('dialog');
+    const text = await readFile(
+      resolve(desktop, '../../packages/contracts/fixtures/script-sample-02.txt'),
+      'utf8',
+    );
+    await dialog.getByLabel('剧本原文').fill(text);
+    await dialog.getByRole('radio', { name: '电影', exact: true }).check();
+    await dialog.getByRole('radio', { name: '真人实拍', exact: true }).check();
+    await dialog.getByRole('button', { name: '悬疑', exact: true }).click();
+    await dialog.getByRole('button', { name: '开始转换' }).click();
+    await expect(
+      page.getByText('已识别 6 场、67 段，新增 24 个元素', { exact: true }),
+    ).toBeVisible();
+    const projects = (await engineApi(page, '/projects')) as { id: string }[];
+    const projectId = projects[0].id;
+    const episodes = (await engineApi(page, `/projects/${projectId}/episodes`)) as { id: string }[];
+    const base = `/projects/${projectId}/episodes/${episodes[0].id}/script`;
+    const before = ScriptResult.parse(await engineApi(page, base));
+    const dialogueId = before.document.blocks.find((block) => block.text === '我不是妖怪。')!.id;
+    const preface = page.locator('details').filter({ hasText: '前言' });
+    await preface.locator('summary').click();
+    await expect(preface).toContainText('一句话梗概');
+    await preface.locator('summary').click();
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1600, 900));
+    const outline = page.getByRole('navigation', { name: '场次大纲' });
+    await expect(outline.locator('[draggable="true"]')).toHaveCount(6);
+    await expect(outline.locator('[draggable="true"]').first()).toContainText('清晨');
+    await expect(page.locator('[data-element-id]')).toHaveCount(0);
+    for (const value of ['light', 'dark'] as const) {
+      await theme(page, value);
+      await page.getByRole('tab', { name: '样式', exact: true }).focus();
+      await shot(page, `sample-styled-${value}`);
+      await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Markdown 原文' }).focus();
+      await shot(page, `sample-markdown-${value}`);
+      await page.getByRole('tab', { name: '样式', exact: true }).click();
+    }
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
+    await shot(page, 'sample-styled-720');
+    await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+    const textarea = page.getByRole('textbox', { name: 'Markdown 原文' });
+    await textarea.focus();
+    await shot(page, 'sample-markdown-720');
+    const markdown = await textarea.inputValue();
+    const updated = markdown
+      .replace('我不是妖怪。', '我不是妖怪，我是你。')
+      .replace('**5. 内景', '**5. 内景　卢宅正屋 — 雨夜**\n\n雨水沿着门框落下。\n\n**5. 内景');
+    expect(updated).not.toBe(markdown);
+    await textarea.fill(updated);
+    await expect
+      .poll(
+        async () =>
+          ScriptResult.parse(await engineApi(page, base)).document.blocks.find(
+            (block) => block.id === dialogueId,
+          )?.text,
+      )
+      .toBe('我不是妖怪，我是你。');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1600, 900));
+    await page.getByRole('tab', { name: '样式', exact: true }).click();
+    await expect(outline.locator('[draggable="true"]')).toHaveCount(7);
+    await expect(page.getByRole('textbox', { name: '剧本编辑区' })).toContainText(
+      '我不是妖怪，我是你。',
+    );
+    await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+    await expect(textarea).toBeVisible();
+    expect(pageErrors).toEqual([]);
+    await app.close();
+    app = await _electron.launch({ args: [desktop, `--user-data-dir=${userData}`] });
+    page = await app.firstWindow();
+    const restartedErrors = errors(page);
+    await page.getByRole('link', { name: '项目库', exact: true }).click();
+    await page.getByRole('link', { name: '打开项目 真实格式验收' }).click();
+    await page.getByText('影娘', { exact: true }).last().click();
+    await expect(page.getByRole('textbox', { name: 'Markdown 原文' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Markdown', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(restartedErrors).toEqual([]);
+  } finally {
+    await disposeTestApp(app);
+    await app?.close().catch(() => {});
+    await rm(sandbox, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+  }
+});
+
 test('编辑器生产 CSP 输入法组字拖动与性能', async () => {
   test.setTimeout(180000);
   await mkdir(screenshots, { recursive: true });
@@ -286,7 +397,7 @@ test('编辑器生产 CSP 输入法组字拖动与性能', async () => {
     const current = ScriptResult.parse(await engineApi(page, base));
     await engineApi(page, base, 'PUT', {
       revision: current.revision,
-      document: { schemaVersion: 1, blocks },
+      document: { schemaVersion: 2, preface: '', appendix: '', blocks },
     });
     const start = Date.now();
     await page.getByText('第 1 集', { exact: true }).last().click();

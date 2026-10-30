@@ -1,6 +1,6 @@
 # Agent Note: 剧本导入识别修正、前言附录与 Markdown 视图
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
@@ -34,7 +34,7 @@ Status: proposed
 6. **Markdown 视图**：两个视图都能编辑；从 Markdown 切回样式视图时照常转换，认不出的行标为存疑，不阻止切换；默认显示样式视图，并记住上次的选择（本机偏好，不写入项目文件）；本次不做导出 Markdown 文件。
 7. 继续坚持「模型只输出标签，不输出文字」。配置了文本模型时，所有正文行都交给模型判断。
 
-## Proposal
+## Decision
 
 ### 范围
 
@@ -186,7 +186,7 @@ TagAttrs = { label: string（1–8 个字符） }               // sound 和 pro
 
 ### 段落类型切换
 
-contracts 新增 `retypeBlock(block, type, newId): ScriptBlock[]`。编辑器的类型菜单、类型下拉框、Tab 循环、Ctrl+数字，以及存疑候选项，都改为调用它，不再只改 `type`：
+contracts 提供 `retypeBlock(block, type, newId): ScriptBlock[]`。编辑器的类型菜单、类型下拉框、Tab 循环、Ctrl+数字，以及存疑候选项，都调用它，重新解析文字与属性：
 
 - **切成 scene**：先把当前文字加上 `boldHead` 的信息，交给 `parseSceneHeading` 解析，得到 attrs 和 location；解析失败时，location 为 `content`，attrs 全部为 null。
 - **切成 character**：去掉 `**`，把末尾的括号拆进 `extension` 和 `delivery`。如果剩余部分是「名字＋冒号＋内容」，就拆成 character 和 dialogue 两个段落，dialogue 沿用原 id。
@@ -297,15 +297,15 @@ contracts 新增 `retypeBlock(block, type, newId): ScriptBlock[]`。编辑器的
 | --- | --- |
 | schema v2 与迁移 | `packages/contracts/src/scripts.ts` |
 | `normalizeLine`、规则解析器、场标题解析、角色表解析、`retypeBlock`、`retypeLine` | `packages/contracts/src/script-parse.ts` |
-| `renderScriptMarkdown`、`applyMarkdownEdit` | `packages/contracts/src/script-markdown.ts`（新建） |
+| `renderScriptMarkdown`、`applyMarkdownEdit` | `packages/contracts/src/script-markdown.ts` |
 | 偏好字段 | `packages/contracts/src/desktop.ts` |
 | 转换、角色表入库、同步与清理 | `apps/engine/src/modules/scripts/` |
 | 编辑器各项改动 | `apps/desktop/src/renderer/src/features/projects/script/` |
 
 ### 相关笔记核对
 
-- [剧集与结构化剧本](../../implemented/feature/2026-10-29-episodes-and-structured-scripts.md)：本篇部分取代其中的以下内容：规则解析表、「只请模型对存疑行做决定」、原文完整性第 2 条、Tab 循环与类型菜单、元素高亮的默认行为，以及段落类型表（新增 production）。剧集、项目设定、接口和设定库的其余部分仍然有效。实施完成时，在原篇这些位置加上指向本篇的链接，并更新代码位置等事实，不把原篇的决定改写成相反的内容。
-- [剧本编辑器内核选型](../../implemented/architecture/2026-10-29-script-editor-tiptap.md)：相关。Markdown 视图使用 Textarea，不扩展 Tiptap 的使用范围，`@tiptap/*` 的边界不变。实施完成时补充互链。
+- [剧集与结构化剧本](2026-10-29-episodes-and-structured-scripts.md)：本篇部分取代其中的以下内容：规则解析表、「只请模型对存疑行做决定」、原文完整性第 2 条、Tab 循环与类型菜单、元素高亮的默认行为，以及段落类型表（新增 production）。剧集、项目设定、接口和设定库的其余部分仍然有效。原篇保留历史决定，并在对应位置链接本篇，数据格式和代码位置已同步。
+- [剧本编辑器内核选型](../architecture/2026-10-29-script-editor-tiptap.md)：已互链。Markdown 视图使用 Textarea，不扩展 Tiptap 的使用范围，`@tiptap/*` 的边界不变。
 - 其余笔记与本篇无关。
 
 ## Alternatives considered
@@ -320,7 +320,9 @@ contracts 新增 `retypeBlock(block, type, newId): ScriptBlock[]`。编辑器的
 - **回写时整篇重新解析，不逐行比对**：最强的理由是实现简单，结果完全由解析器决定。没有采用：每次切换视图，所有段落的 id 和用户手动修正过的类型都会丢失，故事板和分镜的引用也会失效。
 - **以 Markdown 文本作为剧本的存储格式**：最强的理由是只有一份数据，不存在两个视图之间的同步问题。没有采用：段落 id、attrs 和 `review` 没有地方存放；原篇已经因为「以纯文本为准会让 id 失效」否定过这条路。
 
-## Acceptance criteria
+## Testing
+
+下列验收由 contracts、engine、desktop 单测和生产构建 e2e 覆盖；明暗主题及 720×560 截图逐张查看。完整《影娘》在开发模式下按纯规则导入，得到 415 段、28 场、2 处存疑，各类型数量与第 5 条一致。没有调用真实文本模型，没有重新打包验收。
 
 1. **contracts 单测**：
    - 读取 v1 文档后迁移为 v2，各项缺省值正确；attrs 与类型的对应关系有正反例。
@@ -346,7 +348,9 @@ contracts 新增 `retypeBlock(block, type, newId): ScriptBlock[]`。编辑器的
    - 截图检查明暗两种模式和 720×560 窗口下的 Markdown 视图、前言卡片和制作提示段落。
 5. **人工检查**：把用户提供的完整《影娘》剧本（`D:\WorkSpace\project\personal\reference_files\影娘_剧本.md`，不入库）按纯规则导入，在计划中记录各类型的数量。写本笔记时，用一份按本规格编写的原型（不入库）跑过这份剧本，结果为：前言 0–46 行，附录从 831 行开始，共 415 段，其中存疑 2 段；scene 28、character 56、dialogue 69、parenthetical 14、production 36、sound 23、transition 8、text 2、note 9、action 170。28 个场标题中，第 1–26 场为确定，「片名」和「27. 片尾字幕卡」为存疑。实现结果与这些数字不一致时，逐条核对差异的原因，记入计划。这一项不作为门禁。
 
-## Risks
+## Consequences
+
+- **收益**：Markdown 剧本中的格式标记、独立角色行、制作提示和正文外区域得到识别；角色表进入设定库，孤立待确认元素自动清理。样式和 Markdown 双向编辑保留未改行的段落身份，偏好在重启后保留。
 
 - **规则仍然覆盖不全**：其他作者的写法还会有新的变体。配置了模型之后，判断类型的工作交给模型，规则只负责去掉格式标记和拆出属性，误判的影响会小很多。新的语料按回归样例的方式继续补充。
 - **调用次数增加**：配置了模型时，每次导入的调用次数从「存疑批次数」增加到「全部批次数」。默认 `maxOutput` 为 1024 时，3 万字大约需要 16 次调用。

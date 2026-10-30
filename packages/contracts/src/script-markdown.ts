@@ -85,17 +85,52 @@ export function renderScriptMarkdown(document: ScriptDocument): {
   return { text: lines.join('\n'), lineBlocks };
 }
 const lineKey = (text: string) => text.replace(/^\*\*\d+\.\s*/u, '**');
+function matchLines(oldLines: string[], newLines: string[]): [number, number][] {
+  // shortcut: 朴素 LCS，单集超过 5000 行时改用 Myers diff
+  const width = newLines.length + 1;
+  const lcs = new Uint32Array((oldLines.length + 1) * width);
+  for (let i = oldLines.length - 1; i >= 0; i--)
+    for (let j = newLines.length - 1; j >= 0; j--)
+      lcs[i * width + j] =
+        lineKey(oldLines[i]) === lineKey(newLines[j])
+          ? 1 + lcs[(i + 1) * width + j + 1]
+          : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+  const matches: [number, number][] = [[-1, -1]];
+  let i = 0;
+  let j = 0;
+  while (i < oldLines.length && j < newLines.length) {
+    if (lineKey(oldLines[i]) === lineKey(newLines[j])) matches.push([i++, j++]);
+    else if (lcs[(i + 1) * width + j] >= lcs[i * width + j + 1]) i++;
+    else j++;
+  }
+  matches.push([oldLines.length, newLines.length]);
+  return matches;
+}
 function mapOldLines(document: ScriptDocument, text: string): ScriptBlock[][] {
   const rendered = renderScriptMarkdown(document);
+  const byId = new Map(document.blocks.map((block) => [block.id, block]));
   if (rendered.text === text) {
-    const byId = new Map(document.blocks.map((block) => [block.id, block]));
     return rendered.lineBlocks.map((id) => (id ? [byId.get(id)!] : []));
   }
-  // 自动保存后文本不重新渲染；依照原行解析顺序匹配当前文档。
+  // 先匹配规范化后仍相同的行，避免手工纠正过的类型被重新解析后错位。
   const parsed = parseScriptText(text);
   const byLine: ScriptBlock[][] = [];
-  for (const [index, block] of parsed.blocks.entries())
-    (byLine[block.src!.line] ??= []).push(document.blocks[index]);
+  const matches = matchLines(rendered.text.split('\n'), text.split('\n'));
+  for (let k = 1; k < matches.length; k++) {
+    const [oldIndex, newIndex] = matches[k];
+    const [oldStart, newStart] = matches[k - 1];
+    const id = rendered.lineBlocks[oldIndex];
+    if (id) byLine[newIndex] = [byId.get(id)!];
+    const blocks = rendered.lineBlocks
+      .slice(oldStart + 1, oldIndex)
+      .flatMap((id) => (id ? [byId.get(id)!] : []));
+    let offset = 0;
+    for (const block of parsed.blocks) {
+      const line = block.src!.line;
+      if (line > newStart && line < newIndex && offset < blocks.length)
+        (byLine[line] ??= []).push(blocks[offset++]);
+    }
+  }
   return byLine;
 }
 export function applyMarkdownEdit(
@@ -113,25 +148,7 @@ export function applyMarkdownEdit(
     const line = block.src!.line;
     byLine.set(line, [...(byLine.get(line) ?? []), block]);
   }
-  // shortcut: 朴素 LCS，单集超过 5000 行时改用 Myers diff
-  const width = newLines.length + 1;
-  const lcs = new Uint32Array((oldLines.length + 1) * width);
-  for (let i = oldLines.length - 1; i >= 0; i--)
-    for (let j = newLines.length - 1; j >= 0; j--)
-      lcs[i * width + j] =
-        lineKey(oldLines[i]) === lineKey(newLines[j])
-          ? 1 + lcs[(i + 1) * width + j + 1]
-          : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
-  const matches: [number, number][] = [[-1, -1]];
-  let i = 0;
-  let j = 0;
-  while (i < oldLines.length && j < newLines.length) {
-    if (lineKey(oldLines[i]) === lineKey(newLines[j])) {
-      matches.push([i++, j++]);
-    } else if (lcs[(i + 1) * width + j] >= lcs[i * width + j + 1]) i++;
-    else j++;
-  }
-  matches.push([oldLines.length, newLines.length]);
+  const matches = matchLines(oldLines, newLines);
   for (let k = 1; k < matches.length; k++) {
     const [oldIndex, newIndex] = matches[k];
     const [oldStart, newStart] = matches[k - 1];

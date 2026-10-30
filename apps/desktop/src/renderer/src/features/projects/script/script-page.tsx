@@ -450,15 +450,17 @@ function ScriptSession({
             size="sm"
             onClick={() =>
               void navigator.clipboard
-                .writeText(state.document.blocks.map((block) => block.text).join('\n'))
+                .writeText(
+                  view === 'markdown'
+                    ? markdown.current.text
+                    : state.document.blocks.map((block) => block.text).join('\n'),
+                )
                 .catch(persistence.fail)
             }
           >
             复制全文
           </Button>
-          {state.status === 'error' && (
-            <Button onClick={() => void persistence.flush()}>重试保存</Button>
-          )}
+          {state.status === 'error' && <Button onClick={() => void flush()}>重试保存</Button>}
         </div>
       )}
       {running && view !== 'markdown' ? (
@@ -466,7 +468,7 @@ function ScriptSession({
           <div className="h-6 w-2/3 rounded-md bg-accent" />
           <div className="h-40 rounded-md bg-accent" />
         </div>
-      ) : state.document.blocks.length || view === 'markdown' ? (
+      ) : state.document.blocks.length || view === 'markdown' || editor ? (
         <ScriptEditor
           key={state.generation}
           document={state.document}

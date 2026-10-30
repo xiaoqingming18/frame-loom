@@ -166,6 +166,22 @@ it('偏好直接打开 Markdown，带段落定位强制样式且不改偏好', a
   expect(screen.queryByRole('textbox', { name: 'Markdown 原文' })).toBeNull();
   expect(setPreferences).not.toHaveBeenCalled();
 });
+it('Markdown 清空正文后仍可切回并一次撤销', async () => {
+  setup();
+  await screen.findByRole('textbox', { name: '剧本编辑区' });
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Markdown' }), { button: 0, ctrlKey: false });
+  const textarea = await screen.findByRole('textbox', { name: 'Markdown 原文' });
+  fireEvent.change(textarea, { target: { value: '' } });
+  fireEvent.mouseDown(screen.getByRole('tab', { name: '样式' }), { button: 0, ctrlKey: false });
+  await screen.findByRole('textbox', { name: '剧本编辑区' });
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '撤销' }).hasAttribute('disabled')).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+  await waitFor(() =>
+    expect(screen.getByRole('textbox', { name: '剧本编辑区' }).textContent).toContain('目标段落'),
+  );
+});
 it('转换时 Markdown 只读，前言按钮定位到开头，元素标记写偏好', async () => {
   const update = setup(undefined, {
     document: {

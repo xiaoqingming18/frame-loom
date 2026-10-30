@@ -485,8 +485,9 @@ export function retypeBlock(
   type: BlockType,
   newId: () => string = () => crypto.randomUUID(),
 ): ScriptBlock[] {
-  if (block.type === type) {
-    const { review: _review, ...unchanged } = block;
+  if (block.type === type && block.attrs) {
+    const unchanged = { ...block };
+    delete unchanged.review;
     return [unchanged];
   }
   const text =

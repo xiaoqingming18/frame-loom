@@ -119,3 +119,25 @@ it('连续保存沿用一行拆出的全部角色和对白段落', () => {
   expect(second.blocks.slice(-2)).toEqual(first.blocks.slice(-2));
   expect(second.blocks.slice(-2).map((block) => block.type)).toEqual(['character', 'dialogue']);
 });
+it('连续保存不因手工纠正的类型与规则不同而错位', () => {
+  const doc = ScriptDocument.parse({
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: [
+      { id: 'manual', type: 'action', text: '影娘：这是动作。' },
+      { id: 'other', type: 'action', text: '另一段。' },
+    ],
+  });
+  const md = renderScriptMarkdown(doc).text;
+  const firstText = md.replace('另一段。', '另一段变了。') + '\n影娘：新增对白\n';
+  const first = applyMarkdownEdit(doc, md, firstText).document;
+  const second = applyMarkdownEdit(
+    first,
+    firstText,
+    firstText.replace('另一段变了。', '再次修改。'),
+  ).document;
+  expect(second.blocks[0]).toEqual(doc.blocks[0]);
+  expect(second.blocks.map((block) => block.id)).toEqual(first.blocks.map((block) => block.id));
+  expect(second.blocks.at(-1)?.text).toBe('新增对白');
+});

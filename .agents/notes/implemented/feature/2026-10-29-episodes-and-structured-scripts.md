@@ -96,19 +96,20 @@ ScriptFile = {
   document: ScriptDocument,
 }  // passthrough
 ScriptSource = { text: string（1–200000 个字符）, importedAt: datetime }
-ScriptDocument = { schemaVersion: 1, blocks: ScriptBlock[]（最多 5000 个） }  // strict
+ScriptDocument = { schemaVersion: 2, preface: string, appendix: string, blocks: ScriptBlock[]（最多 5000 个） }  // strict，读取 v1 时迁移
 ScriptBlock = {
   id: BlockId,                     // /^[A-Za-z0-9_-]{1,64}$/，在文档内唯一
   type: BlockType,
   text: string,                    // 0–4000 个字符，不能含 \r 或 \n
-  attrs?: SceneAttrs | CharacterAttrs,  // 只有 scene 和 character 两种类型有 attrs
+  attrs?: SceneAttrs | CharacterAttrs | TagAttrs,  // scene、character、sound、production 必填
   src?: { line: int ≥ 0 },         // 转换时对应原文的行号（从 0 开始），编辑后不再维护
   review?: { reason: string（≤ 200 个字符）, options: ReviewOption[]（1–4 个） },
 }
 BlockType = 'act' | 'scene' | 'cast' | 'action' | 'character' | 'parenthetical'
-          | 'dialogue' | 'sound' | 'text' | 'transition' | 'note'
-SceneAttrs = { time: 'day' | 'night' | 'dawn' | 'dusk' | null, space: 'int' | 'ext' | 'intext' | null }
-CharacterAttrs = { delivery: 'vo' | 'os' | 'inner' | null }
+          | 'dialogue' | 'sound' | 'production' | 'text' | 'transition' | 'note'
+SceneAttrs = { time: 'day' | 'night' | 'dawn' | 'dusk' | null, space: 'int' | 'ext' | 'intext' | null, timeText: string | null, note: string | null, timecode: string | null }
+CharacterAttrs = { delivery: 'vo' | 'os' | 'inner' | null, extension: string | null }
+TagAttrs = { label: string }
 ReviewOption = { type: BlockType, character?: string（≤ 40 个字符）, text?: string }
 ```
 
@@ -122,6 +123,7 @@ ReviewOption = { type: BlockType, character?: string（≤ 40 个字符）, text
 | parenthetical | 括注 | 括 | 不含括号，括号由样式显示 |
 | dialogue | 对白 | 白 | 台词 |
 | sound | 音效／音乐 | 音 | 不含【音效】这类标记 |
+| production | 制作提示 | 制 | 不含标签，标签原文保存在 attrs.label |
 | text | 字幕／画面文字 | 字 | 不含「字幕：」这类前缀 |
 | transition | 转场 | 转 | 原样保留，例如「切至：」 |
 | note | 注释 | 注 | 不进入下游流程 |
@@ -179,10 +181,14 @@ StoryElement = {
 
 1. **split（切分）**：用 contracts 中的 `parseScriptText(text)` 规则解析器，把原文按行解析成段落，每个段落带上 `src.line` 和「确定／存疑」标记。
 2. **classify（归类）**：如果配置了默认文本模型，就把原文按行分批交给模型，只请模型对「存疑」的行做决定。没有默认文本模型时跳过这一步，存疑行保持规则解析的猜测，并带上 `review`。
+
+以上「只对存疑行做决定」及下文模型批次与决定范围，已由[导入修正笔记](2026-10-30-script-import-and-markdown-view.md#转换)部分取代：当前全部正文行交给模型，未返回决定视为认可 guess。
 3. **extract（提取）**：模型在同一批调用中顺带提取元素。没有模型时，这一步只有规则同步。
 4. **match（匹配）**：写入剧本，执行同步，计算统计数字。
 
 **规则解析器**按以下顺序识别各行（行先去掉首尾空白，空行跳过）：
+
+以下表格保留原有规则决策；当前 Markdown 预处理、独立角色行和前言附录使用[新规则表](2026-10-30-script-import-and-markdown-view.md#规则解析器替换原规则表)。
 
 | 顺序 | 识别条件 | 结果 | 置信 |
 | --- | --- | --- | --- |
@@ -208,6 +214,8 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
 
 1. 原文中每个非空行，至少被一个段落的 `src.line` 引用（集标题行也算被覆盖）。
 2. 正文类段落（action、parenthetical、dialogue、sound、text、note）的 `text`，必须是其 `src.line` 对应原文行的子串。
+
+第 2 条已由[行预处理与完整性检查](2026-10-30-script-import-and-markdown-view.md#行预处理)补充：当前校验 normalizeLine 后的子串，并覆盖 production、前言、附录与结构行。
 
 **模型调用入口**：`LlmService` 新增 `complete(modelId, { system, user }, signal): Promise<string>`，复用现有的 `prepare` 和 `run`。它以 `Context.systemPrompt` 加一条 user 消息发起调用，拼接所有 `text_delta` 后返回，不使用工具调用，单次超时沿用 60 秒。provider 错误按现有的 `connectionError` 抛出 `DomainError`。转换时使用 `ModelServicesRepository.defaults().chat` 指定的模型；默认模型为空、被禁用或不是文本模型时，视为「没有模型」，按纯规则转换，并记录一条警告。`maxOutput` 取模型能力卡中的值，没有填写时为 1024。
 
@@ -343,6 +351,7 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
   - 光标在段落末尾时按 Enter，新建下一段，类型取决于当前段：act → scene，scene → action，cast → action，action → action，character → dialogue，parenthetical → dialogue，dialogue → action，sound → action，text → action，transition → scene，note → action。
   - 在类型不是 action 的空段落中按 Enter，把该段改为 action，不新建段落。
   - 在空段落中按 Tab 或 Shift+Tab，按以下顺序循环切换类型：action → character → dialogue → parenthetical → scene → transition → sound → text → note → cast → act → action。在非空段落中按 Tab 不做任何操作，焦点也不离开编辑器。
+    此处原循环及类型菜单的幕入口，由[幕与类型切换](2026-10-30-script-import-and-markdown-view.md)部分取代：当前幕通过大纲插入，循环包含 production 并排除 act。
   - Ctrl+1～9 直接设为：1 scene，2 action，3 character，4 parenthetical，5 dialogue，6 sound，7 text，8 transition，9 note。
   - 在 action 段落中按 Enter 时，如果该段文本能被 `parseSceneHeading` 识别，并且至少有一个时间或内外词，就把它转为 scene 段落（文本为地点），再新建下一段。
   - 在 character 段落中按 Enter 时，解析文末的（OS）（VO）（画外音）（旁白）（内心）后缀，写入 delivery。
@@ -353,6 +362,7 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
 - **段落手柄**：鼠标悬停时，段落左侧出现手柄，显示该段类型的缩写。点击手柄打开类型菜单，按住可以拖动排序。
 - **存疑段落**：左侧显示 2px 黄色竖条，行尾有「存疑」徽标。点击徽标打开浮层，显示原因、原文行，以及各候选项按钮，例如「改为对白（角色：周屿）」「保持动作」。
 - **元素高亮**：正文中与元素匹配的词显示淡色下划线，四类元素分别用 pink、orange、blue、indigo 标签色。悬停时显示卡片（名称、类别、状态、出现次数），按住 Ctrl 点击，在右栏打开该元素。
+  此处默认行为由[元素高亮](2026-10-30-script-import-and-markdown-view.md#元素高亮)部分取代：当前默认关闭全部标记，只突出选中元素；工具栏可开启全部标记。
 - **选中文字**时，弹出浮动工具条：「标记为人物」「标记为道具」「标记为服装」「添加注释」。前三项调用新建元素接口，选中的文本必须为 1–40 个字符；最后一项在当前段之后插入一个 note 段落。
 - 多行纯文本粘贴到编辑器时，按行拆成多个段落，类型与当前段相同；当前段是 scene 时，拆出的段落改为 action。
 - 编辑停止 1 秒后自动保存。离开路由或关闭窗口时，先等待保存完成（与画布宿主相同）。遇到 409 时，显示「重新加载」和「复制全文」（把纯文本复制到剪贴板）。
@@ -375,7 +385,8 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
 | 项目设定、剧集摘要、页面 `episodeId` 的 schema | `packages/contracts/src/projects.ts` |
 | 剧本、设定库、转换状态、接口请求与响应的 schema | `packages/contracts/src/scripts.ts` |
 | 规则解析器、场标题解析、`findMentions`、场的推导 | `packages/contracts/src/script-parse.ts` |
-| 测试用样例剧本 | `packages/contracts/fixtures/script-sample-01.txt` |
+| Markdown 渲染与回写 | `packages/contracts/src/script-markdown.ts` |
+| 测试用样例剧本 | `packages/contracts/fixtures/script-sample-01.txt`、`script-sample-02.txt` |
 | 剧本与设定库文件的读写 | `ProjectStore` 新增 `readScript`、`writeScript`、`trashScript`、`restoreScript`、`readStory`、`writeStory` 六个方法，由 `LocalProjectStore` 实现，复用其中的 `atomicWrite` 和 revision 缓存 |
 | 剧集、剧本、设定库、转换 | `apps/engine/src/modules/scripts/`，导入 `ProjectsModule` 和 `ModelServicesModule` |
 | 文本补全 `LlmService.complete()` | `apps/engine/src/modules/llm/llm.service.ts`，由 `ModelServicesModule` 导出 |
