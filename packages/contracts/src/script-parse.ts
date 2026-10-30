@@ -125,6 +125,8 @@ export function parseSceneHeading(
   const timecode =
     normalized.boldRest?.match(code)?.[0] ?? normalized.content.match(code)?.[0] ?? null;
   let heading = normalized.boldHead ?? normalized.content.replace(code, '').trim();
+  if (new RegExp(`^【第\\s*${numeral}\\s*场.*】$`, 'u').test(heading))
+    heading = heading.slice(1, -1);
   const prefix = heading.match(scenePrefix)?.[0];
   const numbered = heading.match(/^\d+[.、．]\s*/u)?.[0];
   const words = heading
@@ -223,7 +225,7 @@ export function parseScriptText(text: string, newId: () => string = () => crypto
     const appendixStart = normalized.findIndex(
       (line, i) => i >= start && i > lastBoundary && line.kind === 'heading' && !isBoundary(i),
     );
-    if (appendixStart >= 0) end = appendixStart;
+    if (lastBoundary >= start && appendixStart >= 0) end = appendixStart;
   }
   const preface = lines
     .slice(0, bodyMarker >= 0 ? bodyMarker : start)

@@ -111,6 +111,33 @@ it('列表和动作不识别为场标题', () => {
   expect(parseSceneHeading('- 第一任新主人刷了一遍石灰')).toBeNull();
   expect(parseSceneHeading('他走到门口。')).toBeNull();
 });
+it('没有场或幕时，Markdown 标题不会把全文吞入附录', () => {
+  const text = '## 第一集完整剧本\n\n### 开始\n张扬：作业呢？\n\n动作。';
+  const result = parseScriptText(text);
+  expect(result.preface).toBe('');
+  expect(result.appendix).toBe('');
+  expect(result.blocks.some((block) => block.text === '作业呢？')).toBe(true);
+  expect(result.blocks.at(-1)?.text).toBe('动作。');
+  checkSourceIntegrity(text, result.blocks);
+  const marked = parseScriptText('## 正文标题\n动作。\n<!-- 附录 -->\n补充说明');
+  expect(marked.appendix).toBe('补充说明');
+  expect(marked.blocks.some((block) => block.text === '动作。')).toBe(true);
+});
+it('中文场标题允许外层方头括号，普通制作标签仍不是场', () => {
+  const text =
+    '## 第一集完整剧本\n\n### 【第一场：人间炼狱早自习】\n**时间**：清晨 7:15\n**地点**：教室（内景）\n\n**张扬**\n作业呢？\n\n### 【第二场：走廊】\n少年走出门。';
+  const result = parseScriptText(text);
+  expect(
+    result.blocks.filter((block) => block.type === 'scene').map((block) => block.text),
+  ).toEqual(['人间炼狱早自习', '走廊']);
+  expect(
+    result.blocks.some((block) => block.type === 'dialogue' && block.text === '作业呢？'),
+  ).toBe(true);
+  expect(result.appendix).toBe('');
+  expect(parseSceneHeading('**【画面】**')).toBeNull();
+  expect(parseSceneHeading('### 普通说明')).toBeNull();
+  checkSourceIntegrity(text, result.blocks);
+});
 it('真实样例逐段对照计划，前言、附录、角色表和元素准确', () => {
   const plan = `| 47 | scene | 城西卢宅·正屋 | time=dawn space=int timeText=清晨 note=多年以后 timecode=00:00–00:35 |  |
 | 49 | transition | 黑场。 |  |  |
