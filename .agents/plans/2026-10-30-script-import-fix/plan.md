@@ -39,7 +39,7 @@ Note: ../../notes/proposed/feature/2026-10-30-script-import-and-markdown-view.md
 | 编号 | 子计划 | 状态 | 依赖 | 交付物 |
 | --- | --- | --- | --- | --- |
 | 01 | [schema v2 与规则解析器](01-contracts-parser.md) | done | — | v2 schema 与迁移、`normalizeLine`、新规则表、场标题与角色表解析、`retypeBlock`/`retypeLine`、两份样例的预期测试 |
-| 02 | [Markdown 渲染与回写](02-contracts-markdown.md) | draft | 01 | `renderScriptMarkdown`、`applyMarkdownEdit` 与往返测试 |
+| 02 | [Markdown 渲染与回写](02-contracts-markdown.md) | done | 01 | `renderScriptMarkdown`、`applyMarkdownEdit` 与往返测试 |
 | 03 | [engine 转换、角色表与清理](03-engine.md) | draft | 01 | 全行交给模型、角色表入库、同步跳过存疑段落、待确认元素清理、v1 读取后写出 v2 |
 | 04 | [编辑器修正](04-desktop-editor.md) | draft | 01 | 幕的处理、类型切换重新解析、新排版、前言附录卡片、元素标记开关、偏好、结果提示文案 |
 | 05 | [Markdown 视图](05-desktop-markdown.md) | draft | 02、04 | 页签、Textarea 编辑、自动回写保存、切换回样式视图、偏好记忆 |
