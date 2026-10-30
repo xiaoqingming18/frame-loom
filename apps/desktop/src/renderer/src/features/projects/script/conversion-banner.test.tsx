@@ -60,7 +60,7 @@ it('转换阶段、取消和完成结果警告', async () => {
       }}
     />,
   );
-  expect(screen.getByText('已识别 7 场、60 段，新增 10 个待确认元素')).toBeTruthy();
+  expect(screen.getByText('已识别 7 场、60 段，新增 10 个元素')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: '查看' }));
   expect(props.view).toHaveBeenCalled();
   expect(screen.getByText('部分内容按规则识别')).toBeTruthy();

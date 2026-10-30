@@ -5,9 +5,14 @@ import { isHistoryTransaction } from '@tiptap/pm/history';
 import {
   parseCharacter,
   parseSceneHeading,
+  retypeBlock,
+  retypeLine,
+  normalizeLine,
+  type ScriptBlock,
   type BlockType,
   type ReviewOption,
 } from '@frame-loom/contracts';
+import { defaultBlockAttrs, fromEditorJson, toEditorJson } from './editor-model';
 
 export const TYPE_CYCLE: BlockType[] = [
   'action',
@@ -17,10 +22,10 @@ export const TYPE_CYCLE: BlockType[] = [
   'scene',
   'transition',
   'sound',
+  'production',
   'text',
   'note',
   'cast',
-  'act',
 ];
 export const NEXT_TYPE: Record<BlockType, BlockType> = {
   act: 'scene',
@@ -43,13 +48,21 @@ export const setBlockType =
     if (composing(view)) return false;
     const { $from } = state.selection;
     if ($from.depth < 1) return false;
-    const attrs = {
-      ...$from.parent.attrs,
-      type,
-      attrs: type === $from.parent.attrs.type ? ($from.parent.attrs.attrs as string | null) : null,
-      review: null,
-    };
-    dispatch?.(state.tr.setNodeMarkup($from.before(), undefined, attrs));
+    const block = fromEditorJson({ type: 'doc', content: [$from.parent.toJSON()] }).blocks[0];
+    const replacements = retypeBlock(block, type);
+    const nodes = replacements.map((block) =>
+      state.schema.nodeFromJSON(
+        toEditorJson({ schemaVersion: 2, preface: '', appendix: '', blocks: [block] }).content![0],
+      ),
+    );
+    const tr = state.tr.replaceWith($from.before(), $from.after(), nodes);
+    tr.setSelection(
+      TextSelection.create(
+        tr.doc,
+        $from.before() + nodes.slice(0, -1).reduce((size, node) => size + node.nodeSize, 0) + 1,
+      ),
+    );
+    dispatch?.(tr.scrollIntoView());
     return true;
   };
 export const cycleBlockType =
@@ -84,7 +97,13 @@ export const enterBlock: Command = (state, dispatch, view) => {
       attrs = {
         ...attrs,
         type: 'scene',
-        attrs: JSON.stringify({ time: heading.time, space: heading.space }),
+        attrs: JSON.stringify({
+          time: heading.time,
+          space: heading.space,
+          timeText: heading.timeText,
+          note: heading.note,
+          timecode: heading.timecode,
+        }),
       };
       tr.replaceWith(
         start,
@@ -98,7 +117,10 @@ export const enterBlock: Command = (state, dispatch, view) => {
   }
   if (atEnd && type === 'character') {
     const character = parseCharacter(block.textContent);
-    attrs = { ...attrs, attrs: JSON.stringify({ delivery: character.delivery }) };
+    attrs = {
+      ...attrs,
+      attrs: JSON.stringify({ delivery: character.delivery, extension: character.extension }),
+    };
     tr.replaceWith(
       start,
       start + block.nodeSize,
@@ -113,7 +135,7 @@ export const enterBlock: Command = (state, dispatch, view) => {
       block.type.create({
         id: crypto.randomUUID(),
         type: NEXT_TYPE[attrs.type as BlockType],
-        attrs: null,
+        attrs: JSON.stringify(defaultBlockAttrs(NEXT_TYPE[attrs.type as BlockType])) ?? null,
         src: null,
         review: null,
       }),
@@ -165,7 +187,13 @@ export const pasteLines =
         : (state.selection.$from.parent.attrs.type as BlockType);
     const nodes = lines.map((line) =>
       state.schema.nodes.scriptBlock.create(
-        { id: crypto.randomUUID(), type, attrs: null, src: null, review: null },
+        {
+          id: crypto.randomUUID(),
+          type,
+          attrs: JSON.stringify(defaultBlockAttrs(type)) ?? null,
+          src: null,
+          review: null,
+        },
         line ? state.schema.text(line) : undefined,
       ),
     );
@@ -189,28 +217,26 @@ export const applyReview =
     if (position < 0) return false;
     const node = state.doc.nodeAt(position)!;
     const type = option?.type ?? (node.attrs.type as BlockType);
-    const attrs = {
-      ...node.attrs,
-      type,
-      attrs: type === node.attrs.type ? (node.attrs.attrs as string | null) : null,
-      review: null,
-    };
-    const text = option?.text ?? node.textContent;
-    const nodes = [];
-    if (type === 'dialogue' && option?.character)
-      nodes.push(
-        node.type.create(
-          {
-            id: crypto.randomUUID(),
-            type: 'character',
-            attrs: null,
-            src: node.attrs.src as number | null,
-            review: null,
-          },
-          state.schema.text(option.character),
-        ),
-      );
-    nodes.push(node.type.create(attrs, text ? state.schema.text(text) : undefined));
+    const original = fromEditorJson({ type: 'doc', content: [node.toJSON()] }).blocks[0];
+    let replacements: ScriptBlock[];
+    if (!option) {
+      replacements = [{ ...original }];
+      delete replacements[0].review;
+    } else {
+      replacements =
+        option.type === 'dialogue' && option.character
+          ? retypeLine(normalizeLine(original.text), option.type, option.character)
+          : retypeBlock(original, type);
+      replacements[replacements.length - 1].id = original.id;
+      if (original.src)
+        replacements = replacements.map((block) => ({ ...block, src: original.src }));
+    }
+    const nodes = toEditorJson({
+      schemaVersion: 2,
+      preface: '',
+      appendix: '',
+      blocks: replacements,
+    }).content!.map((node) => state.schema.nodeFromJSON(node));
     dispatch?.(state.tr.replaceWith(position, position + node.nodeSize, nodes));
     return true;
   };

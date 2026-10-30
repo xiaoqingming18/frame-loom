@@ -114,7 +114,7 @@ export function ConversionBanner({
             <div className="flex flex-wrap items-center gap-2">
               <span>
                 已识别 {conversion.result.scenes} 场、{conversion.result.blocks} 段，新增{' '}
-                {conversion.result.addedElements} 个待确认元素
+                {conversion.result.addedElements} 个元素
               </span>
               <Button size="sm" variant="ghost" onClick={view}>
                 查看

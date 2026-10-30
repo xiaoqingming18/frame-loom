@@ -1,12 +1,11 @@
 import { Extension, type Extensions } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import Document from '@tiptap/extension-document';
 import Text from '@tiptap/extension-text';
 import UniqueID from '@tiptap/extension-unique-id';
 import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { BLOCK_LABELS, type BlockType } from '@frame-loom/contracts';
-import { ScriptBlockNode } from './editor-model';
+import { ScriptBlockNode, ScriptRootNode } from './editor-model';
 import {
   backspaceBlock,
   clearReviewPlugin,
@@ -70,7 +69,7 @@ const keyboard = Extension.create({
 });
 export function scriptExtensions(): Extensions {
   return [
-    Document.extend({ content: 'scriptBlock+' }),
+    ScriptRootNode,
     Text,
     ScriptBlockNode,
     UndoRedo,

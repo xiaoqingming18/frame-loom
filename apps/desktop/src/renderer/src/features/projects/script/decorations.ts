@@ -5,7 +5,12 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { findMentions, type BlockType, type ElementKind } from '@frame-loom/contracts';
 
 export type MentionTerm = { elementId: string; name: string; kind: ElementKind };
-type State = { decorations: DecorationSet; terms: MentionTerm[]; selected?: string };
+type State = {
+  decorations: DecorationSet;
+  terms: MentionTerm[];
+  selected?: string;
+  showAll: boolean;
+};
 export const scriptDecorationKey = new PluginKey<State>('scriptDecorations');
 export function blockDecorations(node: Node, pos: number, terms: MentionTerm[]): Decoration[] {
   if (node.attrs.type === 'note') return [];
@@ -50,12 +55,14 @@ export function createDecorations(compute = blockDecorations) {
   return new Plugin<State>({
     key: scriptDecorationKey,
     state: {
-      init: (_, state) => ({ terms: [], decorations: all(state.doc, []) }),
+      init: (_, state) => ({ terms: [], decorations: all(state.doc, []), showAll: false }),
       apply(tr, previous, oldState) {
         const selected = tr.getMeta('selectedElement') as string | undefined;
+        const showAll = tr.getMeta('scriptMentions') as boolean | undefined;
+        if (showAll !== undefined) return { ...previous, showAll };
         if (selected !== undefined) return { ...previous, selected };
         const terms = tr.getMeta('mentions') as MentionTerm[] | undefined;
-        if (terms) return { terms, decorations: all(tr.doc, terms), selected: previous.selected };
+        if (terms) return { ...previous, terms, decorations: all(tr.doc, terms) };
         if (!tr.docChanged) return previous;
         let decorations = previous.decorations.map(tr.mapping, tr.doc);
         const old = new Map<string, { node: Node; pos: number }>();
@@ -77,13 +84,26 @@ export function createDecorations(compute = blockDecorations) {
           );
           decorations = decorations.add(tr.doc, compute(node, pos, previous.terms));
         });
-        return { terms: previous.terms, decorations, selected: previous.selected };
+        return { ...previous, decorations };
       },
     },
     props: {
       decorations: (state) => {
         const value = scriptDecorationKey.getState(state);
-        if (!value?.selected) return value?.decorations;
+        if (!value) return;
+        const visible = value.showAll
+          ? value.decorations
+          : DecorationSet.create(
+              state.doc,
+              value.decorations
+                .find()
+                .filter(
+                  (decoration) =>
+                    !(decoration.spec as { mention?: boolean }).mention ||
+                    (decoration.spec as { elementId?: string }).elementId === value.selected,
+                ),
+            );
+        if (!value.selected) return visible;
         const selected = value.decorations
           .find()
           .filter(
@@ -93,7 +113,7 @@ export function createDecorations(compute = blockDecorations) {
           .map((decoration) =>
             Decoration.inline(decoration.from, decoration.to, { class: 'script-selected-mention' }),
           );
-        return value.decorations.add(state.doc, selected);
+        return visible.add(state.doc, selected);
       },
     },
   });

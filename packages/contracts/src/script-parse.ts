@@ -485,6 +485,10 @@ export function retypeBlock(
   type: BlockType,
   newId: () => string = () => crypto.randomUUID(),
 ): ScriptBlock[] {
+  if (block.type === type) {
+    const { review: _review, ...unchanged } = block;
+    return [unchanged];
+  }
   const text =
     block.type === 'scene'
       ? sceneText(block)

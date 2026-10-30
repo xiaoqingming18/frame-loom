@@ -5,10 +5,16 @@ import { Volume2, StickyNote } from 'lucide-react';
 import { Plugin } from '@tiptap/pm/state';
 import type { Node } from '@tiptap/pm/model';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import type { SceneAttrs, CharacterAttrs } from '@frame-loom/contracts';
+import {
+  SPACE_LABELS,
+  TIME_LABELS,
+  type SceneAttrs,
+  type CharacterAttrs,
+  type TagAttrs,
+} from '@frame-loom/contracts';
 
-const timeLabels = { day: '日', night: '夜', dawn: '晨', dusk: '昏' };
-const spaceLabels = { int: '内', ext: '外', intext: '内外' };
+const timeLabels = TIME_LABELS;
+const spaceLabels = SPACE_LABELS;
 const iconRoots = new WeakMap<HTMLElement, Root>();
 export const SceneChips = Extension.create<{ episodeNumber: number }>({
   name: 'sceneChips',
@@ -18,7 +24,11 @@ export const SceneChips = Extension.create<{ episodeNumber: number }>({
     const signature = (doc: Node) => {
       const values: unknown[] = [];
       doc.forEach((node) => {
-        if (['scene', 'character', 'sound', 'text', 'note'].includes(node.attrs.type as string))
+        if (
+          ['scene', 'character', 'sound', 'production', 'text', 'note'].includes(
+            node.attrs.type as string,
+          )
+        )
           values.push([node.attrs.id, node.attrs.type, node.attrs.attrs]);
       });
       return JSON.stringify(values);
@@ -32,7 +42,7 @@ export const SceneChips = Extension.create<{ episodeNumber: number }>({
           const number = scene;
           const attrs = node.attrs.attrs
             ? (JSON.parse(node.attrs.attrs as string) as SceneAttrs)
-            : { time: null, space: null };
+            : { time: null, space: null, timeText: null, note: null, timecode: null };
           decorations.push(
             Decoration.widget(
               pos + 1,
@@ -43,21 +53,11 @@ export const SceneChips = Extension.create<{ episodeNumber: number }>({
                 const badge = document.createElement('span');
                 badge.textContent = `${episodeNumber}-${number}`;
                 container.append(badge);
-                for (const field of ['time', 'space'] as const) {
+                for (const field of ['space'] as const) {
                   const button = document.createElement('button');
                   button.type = 'button';
-                  button.setAttribute(
-                    'aria-label',
-                    field === 'time' ? '切换场景时间' : '切换场景内外',
-                  );
-                  button.textContent =
-                    field === 'time'
-                      ? attrs.time
-                        ? timeLabels[attrs.time]
-                        : '时间'
-                      : attrs.space
-                        ? spaceLabels[attrs.space]
-                        : '内外';
+                  button.setAttribute('aria-label', '切换场景内外');
+                  button.textContent = attrs.space ? spaceLabels[attrs.space] : '内外';
                   button.addEventListener('mousedown', (event) => event.preventDefault());
                   button.addEventListener('click', () => {
                     if (!view.editable) return;
@@ -67,12 +67,10 @@ export const SceneChips = Extension.create<{ episodeNumber: number }>({
                     });
                     const current = currentPos < 0 ? null : view.state.doc.nodeAt(currentPos);
                     if (!current) return;
-                    const values =
-                      field === 'time'
-                        ? [null, 'day', 'night', 'dawn', 'dusk']
-                        : [null, 'int', 'ext', 'intext'];
+                    const values = [null, 'int', 'ext', 'intext'];
                     const next = {
                       ...attrs,
+                      timeText: null,
                       [field]: values[(values.indexOf(attrs[field]) + 1) % values.length],
                     };
                     view.dispatch(
@@ -89,45 +87,112 @@ export const SceneChips = Extension.create<{ episodeNumber: number }>({
               { key: `scene-${node.attrs.id}-${node.attrs.attrs}-${number}`, side: -1 },
             ),
           );
+          decorations.push(
+            Decoration.widget(
+              pos + node.nodeSize - 1,
+              (view) => {
+                const container = document.createElement('span');
+                container.className = 'script-scene-tail';
+                container.contentEditable = 'false';
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'script-chip';
+                button.setAttribute('aria-label', '切换场景时间');
+                button.textContent =
+                  attrs.timeText ?? (attrs.time ? timeLabels[attrs.time] : '时间');
+                button.addEventListener('mousedown', (event) => event.preventDefault());
+                button.addEventListener('click', () => {
+                  if (!view.editable) return;
+                  let position = -1;
+                  view.state.doc.forEach((current, pos) => {
+                    if (current.attrs.id === node.attrs.id) position = pos;
+                  });
+                  if (position < 0) return;
+                  const current = view.state.doc.nodeAt(position)!;
+                  const values: SceneAttrs['time'][] = [null, 'day', 'night', 'dawn', 'dusk'];
+                  view.dispatch(
+                    view.state.tr.setNodeMarkup(position, undefined, {
+                      ...current.attrs,
+                      attrs: JSON.stringify({
+                        ...attrs,
+                        timeText: null,
+                        time: values[(values.indexOf(attrs.time) + 1) % values.length],
+                      }),
+                    }),
+                  );
+                });
+                container.append(button);
+                for (const [text, className] of [
+                  [attrs.note, 'script-chip'],
+                  [attrs.timecode, 'script-chip font-mono'],
+                ])
+                  if (text) {
+                    const span = document.createElement('span');
+                    span.className = className!;
+                    span.textContent = text;
+                    container.append(span);
+                  }
+                return container;
+              },
+              { key: `tail-${node.attrs.id}-${node.attrs.attrs}` },
+            ),
+          );
         }
         if (node.attrs.type === 'character' && node.attrs.attrs) {
-          const { delivery } = JSON.parse(node.attrs.attrs as string) as CharacterAttrs;
-          if (delivery)
+          const { delivery, extension } = JSON.parse(node.attrs.attrs as string) as CharacterAttrs;
+          if (delivery || extension)
             decorations.push(
               Decoration.widget(
                 pos + node.nodeSize - 1,
                 () => {
                   const span = document.createElement('span');
                   span.className = 'script-chip';
-                  span.textContent = delivery.toUpperCase();
+                  span.textContent = [delivery?.toUpperCase(), extension]
+                    .filter(Boolean)
+                    .join(' · ');
                   return span;
                 },
-                { key: `${node.attrs.id}-${delivery}` },
+                { key: `${node.attrs.id}-${delivery}-${extension}` },
               ),
             );
         }
-        if (node.attrs.type === 'sound' || node.attrs.type === 'text' || node.attrs.type === 'note')
+        if (
+          node.attrs.type === 'sound' ||
+          node.attrs.type === 'production' ||
+          node.attrs.type === 'text' ||
+          node.attrs.type === 'note'
+        )
           decorations.push(
             Decoration.widget(
               pos + 1,
               () => {
                 const span = document.createElement('span');
                 if (node.attrs.type === 'text') span.textContent = '字幕 ';
-                else {
+                else if (node.attrs.type === 'production') {
+                  span.className = 'script-production-label';
+                  span.textContent = (JSON.parse(node.attrs.attrs as string) as TagAttrs).label;
+                } else {
                   const root = createRoot(span);
                   iconRoots.set(span, root);
                   root.render(
-                    createElement(node.attrs.type === 'sound' ? Volume2 : StickyNote, {
-                      size: 14,
-                      className: 'inline mr-1',
-                    }),
+                    createElement(
+                      'span',
+                      null,
+                      createElement(node.attrs.type === 'sound' ? Volume2 : StickyNote, {
+                        size: 14,
+                        className: 'inline mr-1',
+                      }),
+                      node.attrs.type === 'sound'
+                        ? (JSON.parse(node.attrs.attrs as string) as TagAttrs).label
+                        : null,
+                    ),
                   );
                 }
                 span.setAttribute('aria-hidden', 'true');
                 return span;
               },
               {
-                key: `prefix-${node.attrs.id}-${node.attrs.type}`,
+                key: `prefix-${node.attrs.id}-${node.attrs.type}-${node.attrs.attrs}`,
                 side: -1,
                 destroy: (node) => {
                   if (node instanceof HTMLElement) {

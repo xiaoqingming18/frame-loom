@@ -178,6 +178,20 @@
   padding: 8px;
   border-radius: 6px;
 }
+[data-script-paper] p[data-block-type='production'] {
+  color: var(--muted-foreground);
+}
+.script-production-label {
+  display: inline-block;
+  margin-right: 8px;
+  padding-inline: 6px;
+  border-radius: 4px;
+  background: var(--muted);
+  font-size: 12px;
+}
+.script-scene-tail {
+  user-select: none;
+}
 [data-script-paper] p.is-empty::before {
   content: attr(data-placeholder);
   color: var(--placeholder);

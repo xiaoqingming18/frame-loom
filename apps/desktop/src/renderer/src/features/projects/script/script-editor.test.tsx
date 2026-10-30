@@ -4,9 +4,40 @@ import type { Editor } from '@tiptap/core';
 import type { ScriptDocument } from '@frame-loom/contracts';
 import { ScriptEditor } from './script-editor';
 import { applyReview } from './script-commands';
+import { parseScriptText } from '@frame-loom/contracts';
+import sample from '../../../../../../../../packages/contracts/fixtures/script-sample-02.txt?raw';
 afterEach(cleanup);
 Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
+it('前言附录折叠、制作提示和场标题属性显示，类型选项排除幕', async () => {
+  const parsed = parseScriptText(sample);
+  const changed = vi.fn<(document: ScriptDocument) => void>();
+  render(
+    <ScriptEditor
+      document={{
+        schemaVersion: 2,
+        preface: parsed.preface,
+        appendix: parsed.appendix,
+        blocks: parsed.blocks,
+      }}
+      onChange={changed}
+      onError={vi.fn()}
+    />,
+  );
+  const editor = await screen.findByRole('textbox', { name: '剧本编辑区' });
+  for (const text of ['内景', '城西卢宅·正屋', '清晨', '多年以后', '00:00–00:35', '镜头'])
+    expect(editor.textContent).toContain(text);
+  expect(screen.queryByRole('option', { name: '幕' })).toBeNull();
+  const summary = screen.getByText('前言').closest('summary')!;
+  expect(summary.closest('details')!.open).toBe(false);
+  fireEvent.click(summary);
+  expect(summary.closest('details')!.textContent).toContain('一句话梗概');
+  fireEvent.click(screen.getAllByRole('button', { name: '切换场景时间' })[0]);
+  expect(changed.mock.lastCall?.[0].blocks[0].attrs).toMatchObject({
+    timeText: null,
+    time: 'dusk',
+  });
+});
 it('渲染类型、切换时间、切换类型及撤销重做', async () => {
   const changed = vi.fn<(document: ScriptDocument) => void>();
   render(

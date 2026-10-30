@@ -231,3 +231,29 @@ it('大纲菜单移动时读取最新正文', async () => {
   ]);
   expect(fromEditorJson(editor.getJSON()).blocks[2].text).toBe('新旧文字');
 });
+it('大纲插入分幕可一次撤销，移除只删幕', async () => {
+  const parsed = parseScriptText('第一幕\n1-1 日 内 书店\n动作\n2-1 夜 外 天台');
+  const doc: ScriptDocument = {
+    schemaVersion: 2,
+    preface: '',
+    appendix: '',
+    blocks: parsed.blocks,
+  };
+  const editor = make(doc);
+  render(<Outline editor={editor} document={doc} number={1} />);
+  fireEvent.keyDown(screen.getByRole('button', { name: '1-2 场菜单' }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: '在此场前插入分幕' }));
+  expect(fromEditorJson(editor.getJSON()).blocks.map((block) => block.type)).toEqual([
+    'act',
+    'scene',
+    'action',
+    'act',
+    'scene',
+  ]);
+  expect(fromEditorJson(editor.getJSON()).blocks[3].text).toBe('第2幕');
+  editor.commands.undo();
+  expect(fromEditorJson(editor.getJSON())).toEqual(doc);
+  fireEvent.keyDown(screen.getByRole('button', { name: '第一幕 幕菜单' }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: '移除分幕' }));
+  expect(fromEditorJson(editor.getJSON()).blocks).toEqual(doc.blocks.slice(1));
+});

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { expect, it, vi } from 'vitest';
 import { getSchema } from '@tiptap/core';
+import { DecorationSet } from '@tiptap/pm/view';
 import { EditorState } from '@tiptap/pm/state';
 import Document from '@tiptap/extension-document';
 import Text from '@tiptap/extension-text';
@@ -44,4 +45,47 @@ it('注释不匹配，不包含存疑装饰', () => {
     schema.text('林夏'),
   );
   expect(blockDecorations(node, 0, terms)).toEqual([]);
+});
+it('默认不显示下划线，选择一个元素或打开全部模式后才显示，存疑不受影响', () => {
+  const plugin = createDecorations();
+  let state = EditorState.create({
+    schema,
+    doc: schema.nodeFromJSON(
+      toEditorJson({
+        schemaVersion: 2,
+        preface: '',
+        appendix: '',
+        blocks: [
+          {
+            id: 'a',
+            type: 'action',
+            text: '林夏 天台',
+            review: { reason: '存疑', options: [{ type: 'action' }] },
+          },
+        ],
+      }),
+    ),
+    plugins: [plugin],
+  });
+  const allTerms = [...terms, { name: '天台', kind: 'location' as const, elementId: 'b' }];
+  state = state.apply(state.tr.setMeta('mentions', allTerms));
+  const visible = () => (plugin.props.decorations!.call(plugin, state) as DecorationSet).find();
+  expect(
+    visible().filter((decoration) => (decoration.spec as { mention?: boolean }).mention),
+  ).toHaveLength(0);
+  expect(
+    visible().some((decoration) =>
+      (decoration.spec as { key?: string }).key?.startsWith('review-'),
+    ),
+  ).toBe(true);
+  state = state.apply(state.tr.setMeta('selectedElement', 'a'));
+  expect(
+    visible()
+      .filter((decoration) => (decoration.spec as { mention?: boolean }).mention)
+      .map((decoration) => (decoration.spec as { elementId?: string }).elementId),
+  ).toEqual(['a']);
+  state = state.apply(state.tr.setMeta('scriptMentions', true));
+  expect(
+    visible().filter((decoration) => (decoration.spec as { mention?: boolean }).mention),
+  ).toHaveLength(2);
 });

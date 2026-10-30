@@ -61,7 +61,7 @@ describe('剧本键盘命令', () => {
       expect(editor.blocks[0].type).toBe(type);
     }
     editor.run(cycleBlockType(-1));
-    expect(editor.blocks[0].type).toBe('act');
+    expect(editor.blocks[0].type).toBe('cast');
     const nonempty = setup([{ id: 'a', type: 'action', text: '文字' }]);
     expect(nonempty.run(cycleBlockType(1))).toBe(true);
     expect(nonempty.blocks[0].type).toBe('action');
@@ -76,7 +76,8 @@ describe('剧本键盘命令', () => {
       },
     ]);
     editor.run(setBlockType(type));
-    expect(editor.blocks[0]).toEqual({ id: 'a', type, text: '' });
+    expect(editor.blocks[0]).toMatchObject({ id: 'a', type, text: '' });
+    expect(editor.blocks[0].review).toBeUndefined();
   });
   it('解析场标题和角色后缀', () => {
     const scene = setup([{ id: 'a', type: 'action', text: '1-8 夜 外 天台' }]);
@@ -85,7 +86,7 @@ describe('剧本键盘命令', () => {
       id: 'a',
       type: 'scene',
       text: '天台',
-      attrs: { time: 'night', space: 'ext', timeText: null, note: null, timecode: null },
+      attrs: { time: 'night', space: 'ext', timeText: '夜', note: null, timecode: null },
     });
     const character = setup([{ id: 'a', type: 'character', text: '店主（OS）' }]);
     character.run(enterBlock);
@@ -93,8 +94,28 @@ describe('剧本键盘命令', () => {
       id: 'a',
       type: 'character',
       text: '店主',
-      attrs: { delivery: 'os', extension: null },
+      attrs: { delivery: 'os', extension: 'OS' },
     });
+  });
+  it('类型切换重新解析属性，拆出对白可一次撤销', () => {
+    expect(TYPE_CYCLE).not.toContain('act');
+    expect(TYPE_CYCLE).toContain('production');
+    const scene = setup([{ id: 'a', type: 'action', text: '**1. 内景　X — 夜**' }]);
+    scene.run(setBlockType('scene'));
+    expect(scene.blocks[0]).toMatchObject({
+      text: 'X',
+      attrs: { time: 'night', space: 'int', timeText: '夜' },
+    });
+    const original: ScriptBlock = { id: 'a', type: 'action', text: '林夏：你好' };
+    const dialogue = setup([original]);
+    dialogue.run(setBlockType('character'));
+    expect(dialogue.blocks.map((block) => [block.type, block.text])).toEqual([
+      ['character', '林夏'],
+      ['dialogue', '你好'],
+    ]);
+    expect(dialogue.blocks[1].id).toBe('a');
+    dialogue.run(undo);
+    expect(dialogue.blocks).toEqual([original]);
   });
   it('中间拆分后半无来源，撤销恢复 id，重做仍唯一', () => {
     const original: ScriptBlock[] = [

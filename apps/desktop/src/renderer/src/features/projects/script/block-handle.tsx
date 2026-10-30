@@ -65,7 +65,7 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         {BLOCK_SHORT_LABELS[hover.type]}
       </button>
       <DropdownMenuContent>
-        {BLOCK_TYPES.map((type) => (
+        {BLOCK_TYPES.filter((type) => type !== 'act').map((type) => (
           <DropdownMenuItem
             key={type}
             onSelect={() => {

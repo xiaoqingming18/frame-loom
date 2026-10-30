@@ -120,6 +120,6 @@ it('事件流驱动运行锁定与成功结果刷新', async () => {
       result: { scenes: 7, blocks: 60, unsure: 3, addedElements: 10 },
     },
   });
-  expect(await screen.findByText('已识别 7 场、60 段，新增 10 个待确认元素')).toBeTruthy();
+  expect(await screen.findByText('已识别 7 场、60 段，新增 10 个元素')).toBeTruthy();
   await screen.findByRole('textbox', { name: '剧本编辑区' });
 });

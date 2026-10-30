@@ -36,6 +36,7 @@ export function ScriptEditor({
   overlays,
   elementsOpen,
   onElementsOpen,
+  onMarkdown,
 }: {
   document: ScriptDocument;
   onChange: (document: ScriptDocument) => void;
@@ -48,6 +49,7 @@ export function ScriptEditor({
   overlays?: (editor: Editor) => ReactNode;
   elementsOpen?: boolean;
   onElementsOpen?: (open: boolean) => void;
+  onMarkdown?: (region: 'preface' | 'appendix') => void;
 }) {
   const [help, setHelp] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState<boolean>();
@@ -100,7 +102,12 @@ export function ScriptEditor({
             editor.commands.focus();
           }}
         >
-          {BLOCK_TYPES.map((type) => (
+          {editor.state.selection.$from.parent.attrs.type === 'act' && (
+            <option value="act" disabled>
+              幕
+            </option>
+          )}
+          {BLOCK_TYPES.filter((type) => type !== 'act').map((type) => (
             <option key={type} value={type}>
               {BLOCK_LABELS[type]}
             </option>
@@ -169,7 +176,17 @@ export function ScriptEditor({
         </div>
         <div data-script-scroll className="min-h-0 min-w-0 flex-1 overflow-auto bg-muted/50">
           <div data-script-paper>
+            <SurroundingCard
+              title="前言"
+              content={document.preface}
+              onEdit={onMarkdown ? () => onMarkdown('preface') : undefined}
+            />
             <EditorContent editor={editor} />
+            <SurroundingCard
+              title="附录"
+              content={document.appendix}
+              onEdit={onMarkdown ? () => onMarkdown('appendix') : undefined}
+            />
           </div>
         </div>
         {right && (
@@ -181,5 +198,31 @@ export function ScriptEditor({
       {overlays?.(editor)}
       {help && <KeyboardHelp onClose={() => setHelp(false)} />}
     </>
+  );
+}
+
+function SurroundingCard({
+  title,
+  content,
+  onEdit,
+}: {
+  title: string;
+  content: string;
+  onEdit?: () => void;
+}) {
+  if (!content) return null;
+  return (
+    <details className="my-4 rounded-md border bg-muted/50 p-3 text-sm">
+      <summary className="cursor-pointer text-muted-foreground">
+        <strong className="mr-2 text-foreground">{title}</strong>
+        {content.split('\n').find((line) => line.trim())}
+      </summary>
+      <div className="mt-3 whitespace-pre-wrap">{content}</div>
+      {onEdit && (
+        <Button variant="outline" size="sm" className="mt-3" onClick={onEdit}>
+          在 Markdown 视图中编辑
+        </Button>
+      )}
+    </details>
   );
 }

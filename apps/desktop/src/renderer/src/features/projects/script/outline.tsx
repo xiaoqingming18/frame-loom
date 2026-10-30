@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
 } from '@frame-loom/ui/components/dropdown-menu';
 import { MoreHorizontal, Plus } from 'lucide-react';
-import { fromEditorJson } from './editor-model';
+import { fromEditorJson, defaultBlockAttrs } from './editor-model';
 
 type Scene = ReturnType<typeof deriveScenes>[number];
 type RowProps = {
@@ -59,8 +59,11 @@ const SceneRow = memo(
             {scene.number} {scene.location || '未命名场景'}
           </span>
           <span className="block text-xs text-muted-foreground">
-            {scene.time ? { day: '日', night: '夜', dawn: '晨', dusk: '昏' }[scene.time] : '时间'} ·{' '}
-            {scene.space ? { int: '内', ext: '外', intext: '内外' }[scene.space] : '内外'} ·{' '}
+            {scene.timeText ??
+              (scene.time
+                ? { day: '日', night: '夜', dawn: '晨', dusk: '昏' }[scene.time]
+                : '时间')}{' '}
+            · {scene.space ? { int: '内', ext: '外', intext: '内外' }[scene.space] : '内外'} ·{' '}
             {scene.characters.slice(0, 3).join('、')}
             {scene.characters.length > 3 ? ` +${scene.characters.length - 3}` : ''}
           </span>
@@ -72,6 +75,33 @@ const SceneRow = memo(
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
+            <DropdownMenuItem
+              onSelect={() => {
+                let pos = 0;
+                editor.state.doc.forEach((node, offset) => {
+                  if (node.attrs.id === scene.id) pos = offset;
+                });
+                const blocks = fromEditorJson(editor.getJSON()).blocks;
+                const acts = blocks
+                  .slice(
+                    0,
+                    blocks.findIndex((block) => block.id === scene.id),
+                  )
+                  .filter((block) => block.type === 'act').length;
+                const tr = editor.state.tr.insert(
+                  pos,
+                  editor.schema.nodes.scriptBlock.create(
+                    { id: crypto.randomUUID(), type: 'act' },
+                    editor.schema.text(`第${acts + 1}幕`),
+                  ),
+                );
+                tr.setSelection(TextSelection.create(tr.doc, pos + 1));
+                editor.view.dispatch(tr);
+                editor.view.focus();
+              }}
+            >
+              在此场前插入分幕
+            </DropdownMenuItem>
             <DropdownMenuItem
               disabled={!previousId}
               onSelect={() => previousId && move(scene.id, previousId)}
@@ -132,6 +162,29 @@ export function Outline({
           {scene.actId && scenes[index - 1]?.actId !== scene.actId && (
             <h3 className="mt-3 mb-2 text-xs text-muted-foreground">
               {document.blocks.find((block) => block.id === scene.actId)?.text}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`${document.blocks.find((block) => block.id === scene.actId)?.text} 幕菜单`}
+                  >
+                    <MoreHorizontal aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      editor.state.doc.forEach((node, pos) => {
+                        if (node.attrs.id === scene.actId)
+                          editor.view.dispatch(editor.state.tr.delete(pos, pos + node.nodeSize));
+                      });
+                    }}
+                  >
+                    移除分幕
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </h3>
           )}
           <SceneRow
@@ -153,7 +206,11 @@ export function Outline({
           const pos = editor.state.doc.content.size;
           const tr = editor.state.tr.insert(
             pos,
-            editor.schema.nodes.scriptBlock.create({ id: crypto.randomUUID(), type: 'scene' }),
+            editor.schema.nodes.scriptBlock.create({
+              id: crypto.randomUUID(),
+              type: 'scene',
+              attrs: JSON.stringify(defaultBlockAttrs('scene')),
+            }),
           );
           tr.setSelection(TextSelection.create(tr.doc, pos + 1));
           editor.view.dispatch(tr);

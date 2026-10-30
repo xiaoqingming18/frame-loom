@@ -1,26 +1,28 @@
 // @vitest-environment node
 import sample from '../../../../../../../../packages/contracts/fixtures/script-sample-01.txt?raw';
+import sample2 from '../../../../../../../../packages/contracts/fixtures/script-sample-02.txt?raw';
 import type { JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 import { getSchema } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
-import Document from '@tiptap/extension-document';
 import Text from '@tiptap/extension-text';
 import { BLOCK_TYPES, parseScriptText, type ScriptDocument } from '@frame-loom/contracts';
-import { fromEditorJson, ScriptBlockNode, toEditorJson } from './editor-model';
+import { fromEditorJson, ScriptBlockNode, ScriptRootNode, toEditorJson } from './editor-model';
 
-export const schema = getSchema([
-  Document.extend({ content: 'scriptBlock+' }),
-  Text,
-  ScriptBlockNode,
-]);
+export const schema = getSchema([ScriptRootNode, Text, ScriptBlockNode]);
 describe('剧本文档模型', () => {
   const documents: ScriptDocument[] = [
     { schemaVersion: 2, preface: '', appendix: '', blocks: parseScriptText(sample).blocks },
     {
       schemaVersion: 2,
-      preface: '',
-      appendix: '',
+      preface: parseScriptText(sample2).preface,
+      appendix: parseScriptText(sample2).appendix,
+      blocks: parseScriptText(sample2).blocks,
+    },
+    {
+      schemaVersion: 2,
+      preface: '前言',
+      appendix: '附录',
       blocks: BLOCK_TYPES.map((type, index) => ({
         id: `b${index}`,
         type,

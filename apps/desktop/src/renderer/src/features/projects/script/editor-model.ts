@@ -1,5 +1,12 @@
 import { Node, type JSONContent } from '@tiptap/core';
-import { ScriptDocument } from '@frame-loom/contracts';
+import Document from '@tiptap/extension-document';
+import { ScriptDocument, normalizeLine, retypeLine, type BlockType } from '@frame-loom/contracts';
+
+export const ScriptRootNode = Document.extend({
+  content: 'scriptBlock+',
+  addAttributes: () => ({ preface: { default: '' }, appendix: { default: '' } }),
+});
+export const defaultBlockAttrs = (type: BlockType) => retypeLine(normalizeLine(''), type)[0].attrs;
 
 export const ScriptBlockNode = Node.create({
   name: 'scriptBlock',
@@ -28,12 +35,16 @@ export const ScriptBlockNode = Node.create({
 export function toEditorJson(document: ScriptDocument): JSONContent {
   return {
     type: 'doc',
+    attrs: { preface: document.preface, appendix: document.appendix },
     content: document.blocks.map((block) => ({
       type: 'scriptBlock',
       attrs: {
         id: block.id,
         type: block.type,
-        attrs: block.attrs ? JSON.stringify(block.attrs) : null,
+        attrs:
+          block.attrs || defaultBlockAttrs(block.type)
+            ? JSON.stringify(block.attrs ?? defaultBlockAttrs(block.type))
+            : null,
         src: block.src?.line ?? null,
         review: block.review ? JSON.stringify(block.review) : null,
       },
@@ -44,7 +55,9 @@ export function toEditorJson(document: ScriptDocument): JSONContent {
 export function fromEditorJson(json: JSONContent): ScriptDocument {
   if (json.type !== 'doc') throw new Error('剧本根节点必须为 doc');
   return ScriptDocument.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
+    preface: (json.attrs?.preface as unknown) ?? '',
+    appendix: (json.attrs?.appendix as unknown) ?? '',
     blocks: (json.content ?? []).map((node) => {
       if (
         node.type !== 'scriptBlock' ||

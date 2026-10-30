@@ -12,9 +12,9 @@ import {
 } from '@frame-loom/contracts';
 import type { Editor } from '@tiptap/core';
 import { Button } from '@frame-loom/ui/components/button';
-import { commandWindow } from '@/lib/desktop-bridge';
+import { commandWindow, setPreferences } from '@/lib/desktop-bridge';
 import type { EngineClient } from '@/lib/engine-client';
-import { projectQuery, scriptQuery, storyQuery } from '@/lib/project-queries';
+import { preferencesQuery, projectQuery, scriptQuery, storyQuery } from '@/lib/project-queries';
 import { createScriptPersistence } from './script-persistence';
 import { ScriptEditor } from './script-editor';
 import { BlockHandle } from './block-handle';
@@ -101,6 +101,8 @@ function ScriptSession({
   number: number;
 }) {
   const queryClient = useQueryClient();
+  const preferences = useQuery(preferencesQuery());
+  const [preferenceBusy, setPreferenceBusy] = useState(false);
   const story = useQuery(storyQuery(client, projectId));
   const project = useQuery(projectQuery(client, projectId));
   const [importOpen, setImportOpen] = useState(false);
@@ -200,6 +202,12 @@ function ScriptSession({
   useEffect(() => {
     if (editor) editor.view.dispatch(editor.state.tr.setMeta('selectedElement', selected ?? ''));
   }, [editor, selected]);
+  useEffect(() => {
+    if (editor)
+      editor.view.dispatch(
+        editor.state.tr.setMeta('scriptMentions', preferences.data?.scriptMentions ?? false),
+      );
+  }, [editor, preferences.data?.scriptMentions]);
   async function mutate(path: string, method: string, body?: unknown) {
     const schema = z.union([z.object({ saved: z.literal(true) }), StoryElement]);
     await client.request(`/projects/${projectId}/story/${path}`, schema, { method, body });
@@ -259,6 +267,21 @@ function ScriptSession({
   }[state.status];
   const toolbar = (
     <>
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-pressed={preferences.data?.scriptMentions ?? false}
+        disabled={preferenceBusy}
+        onClick={() => {
+          setPreferenceBusy(true);
+          void setPreferences({ scriptMentions: !(preferences.data?.scriptMentions ?? false) })
+            .then((value) => queryClient.setQueryData(preferencesQuery().queryKey, value))
+            .catch(persistence.fail)
+            .finally(() => setPreferenceBusy(false));
+        }}
+      >
+        元素标记
+      </Button>
       <Button variant="ghost" size="sm" disabled={running} onClick={() => setImportOpen(true)}>
         重新导入
       </Button>
