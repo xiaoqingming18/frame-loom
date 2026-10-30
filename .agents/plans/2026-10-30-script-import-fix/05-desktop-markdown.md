@@ -1,6 +1,6 @@
 # Plan: Markdown 视图
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -23,7 +23,7 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 新建 `script/markdown-view.tsx`：
+- [x] T1 新建 `script/markdown-view.tsx`：
   - 页签使用 `@frame-loom/ui` 的 Tabs，放在工具栏的最左侧；
   - Markdown 视图隐藏大纲、纸面和元素栏，工具栏只保留页签、保存状态和快捷键帮助；
   - Textarea 使用等宽字体，最大宽度 900px，高度占满，`maxLength` 为 200000，可访问名称为「Markdown 原文」；
@@ -35,7 +35,7 @@ Parent: plan.md
   - 偏好为 markdown 时，直接显示 Markdown 视图；
   - 带 `?block=` 时显示样式视图，并且不写偏好；
   - 转换期间 Textarea 为只读。
-- [ ] T2 回写与保存：
+- [x] T2 回写与保存：
   - 进入 Markdown 视图时，记住 `oldDoc`、`oldText`；
   - 停止输入 1 秒后，调用 `applyMarkdownEdit`，把结果交给 `script-persistence` 保存（复用其中的 revision、409 冲突和离开拦截逻辑）；保存成功后更新 `oldDoc` 和 `oldText`，Textarea 中的文字不重新渲染；
   - `ScriptDocument.parse` 失败时，在 Textarea 上方显示错误（`role="alert"`），不保存，停留在 Markdown 视图；
@@ -46,7 +46,7 @@ Parent: plan.md
   - 409 冲突时，沿用现有的冲突界面；
   - 输入超出段落上限的内容时，显示错误，并且不发出保存请求；
   - 离开路由前，先完成回写和保存。
-- [ ] T3 切回样式视图：
+- [x] T3 切回样式视图：
   - 先完成待执行的回写（`flush`），再用一个 transaction 替换 Tiptap 的文档内容，并更新偏好；
   - 在样式视图中一次撤销，可以回到切换之前的内容；
   - 让前言和附录卡片中的「在 Markdown 视图中编辑」按钮可用：切换到 Markdown 视图，并把光标定位到前言或附录所在的位置。
@@ -65,16 +65,18 @@ Parent: plan.md
   - 在开发模式下，用完整的《影娘》剧本在 Markdown 视图中连续输入，记录是否有明显卡顿（只做主观记录）。
 
   本子计划不运行 e2e。
-- 实际：未执行。
+- 实际：desktop typecheck、定向 eslint 通过；renderer 剧本 9 文件 82 项通过；contracts Markdown 6 项通过。开发模式导入完整《影娘》，在 Textarea 中连续输入 30 次，操作耗时平均 10.3ms（9–14ms），未观察到明显停顿；回写和保存成功。数据和截图保存在 `.cache/scripts-fix/dev-results.json`、`dev-full-markdown.png`，已查看截图。
 
 ## 进度
 
 - 2026-10-30：创建子计划草稿。
+- 2026-10-30：完成双视图、自动保存、偏好、离开拦截、单次撤销和前言定位；完成开发模式联调。
 
 ## 发现与偏差
 
-无。
+- 保留同一个 Tiptap 实例，避免切换视图丢掉撤销历史。页签切换设并发保护，避免焦点和鼠标事件重复插入替换事务。
+- 连续保存时，原文本一行可能拆出角色与对白多个段落，旧行映射改为保存整组；补充回归测试，未改规格。
 
 ## 交接
 
-依赖 02、04，尚未开始。
+04、05 完成。06 继续生产构建 e2e、截图、小窗口和收尾；未执行全仓门禁。

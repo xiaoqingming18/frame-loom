@@ -1,6 +1,6 @@
 # Plan: 编辑器修正
 
-Status: active
+Status: done
 Parent: plan.md
 Note: ../../notes/implemented/architecture/2026-10-29-script-editor-tiptap.md
 
@@ -96,7 +96,7 @@ Note: ../../notes/implemented/architecture/2026-10-29-script-editor-tiptap.md
   - 在开发模式下，用 `script-sample-02.txt` 导入后，在明暗两种模式下各检查一次场标题、production、前言卡片和元素标记，看到的问题记入「发现与偏差」。
 
   本子计划不运行 e2e。
-- 实际：desktop typecheck、定向 eslint 通过；renderer 剧本单测 78 项通过。明暗界面检查待与 Markdown 视图联调一并完成，尚未声称通过。
+- 实际：desktop typecheck、定向 eslint 通过；renderer 剧本单测 78 项通过，05 联调后 82 项通过。开发模式（5173）真实导入样例 02，明暗主题场标题、时间码、production 标签、前言卡片及元素开关均可用；已查看 `.cache/scripts-fix/dev-styled-light.png` 和 `dev-styled-dark.png`，文字没有溢出，使用现有主题 token。
 
 ## 进度
 
@@ -109,4 +109,4 @@ Note: ../../notes/implemented/architecture/2026-10-29-script-editor-tiptap.md
 
 ## 交接
 
-代码与定向测试完成；明暗原生界面检查随 05 联调执行，通过后转 done。
+代码、定向测试和开发模式明暗原生界面检查完成。05 接通前言附录编辑，06 继续生产构建验收。

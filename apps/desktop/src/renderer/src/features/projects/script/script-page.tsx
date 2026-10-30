@@ -9,14 +9,19 @@ import {
   type ScriptResult,
   type ElementKind,
   EngineEvent,
+  applyMarkdownEdit,
+  renderScriptMarkdown,
 } from '@frame-loom/contracts';
 import type { Editor } from '@tiptap/core';
+import { closeHistory } from '@tiptap/pm/history';
 import { Button } from '@frame-loom/ui/components/button';
 import { commandWindow, setPreferences } from '@/lib/desktop-bridge';
 import type { EngineClient } from '@/lib/engine-client';
 import { preferencesQuery, projectQuery, scriptQuery, storyQuery } from '@/lib/project-queries';
 import { createScriptPersistence } from './script-persistence';
 import { ScriptEditor } from './script-editor';
+import { toEditorJson } from './editor-model';
+import { MarkdownView, ScriptViewTabs } from './markdown-view';
 import { BlockHandle } from './block-handle';
 import { ReviewPopover } from './review-popover';
 import { SelectionToolbar } from './selection-toolbar';
@@ -103,6 +108,19 @@ function ScriptSession({
   const queryClient = useQueryClient();
   const preferences = useQuery(preferencesQuery());
   const [preferenceBusy, setPreferenceBusy] = useState(false);
+  const [viewOverride, setViewOverride] = useState<'styled' | 'markdown' | null>(null);
+  const view = viewOverride ?? (blockId ? 'styled' : (preferences.data?.scriptView ?? 'styled'));
+  const [markdownText, setMarkdownText] = useState(
+    () => renderScriptMarkdown(initial.document).text,
+  );
+  const markdown = useRef({ oldDoc: initial.document, oldText: markdownText, text: markdownText });
+  const [markdownError, setMarkdownError] = useState<string | null>(null);
+  const [markdownDirty, setMarkdownDirty] = useState(false);
+  const [unsure, setUnsure] = useState(0);
+  const [markdownCursor, setMarkdownCursor] = useState<number>();
+  const applyingMarkdown = useRef(false);
+  const switchingView = useRef(false);
+  const pendingMarkdown = useRef<Promise<boolean> | null>(null);
   const story = useQuery(storyQuery(client, projectId));
   const project = useQuery(projectQuery(client, projectId));
   const [importOpen, setImportOpen] = useState(false);
@@ -135,13 +153,105 @@ function ScriptSession({
             queryKey: ['projects', projectId, 'episodes'],
             exact: true,
           });
-          if (result.addedElements)
-            void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'story'] });
+          void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'story'] });
         },
       ),
     [client, projectId, episodeId, queryClient, record],
   );
   const state = useSyncExternalStore(persistence.subscribe, persistence.getSnapshot);
+  async function flush() {
+    if (pendingMarkdown.current) {
+      if (!(await pendingMarkdown.current)) return false;
+      return flush();
+    }
+    const current = markdown.current;
+    if (view === 'markdown' && current.text !== current.oldText) {
+      const text = current.text;
+      const run = async () => {
+        try {
+          const result = applyMarkdownEdit(current.oldDoc, current.oldText, text);
+          setMarkdownError(null);
+          setUnsure(result.unsure.length);
+          persistence.change(result.document);
+          if (!(await persistence.flush())) return false;
+          markdown.current = {
+            oldDoc: result.document,
+            oldText: text,
+            text: markdown.current.text,
+          };
+          setMarkdownDirty(markdown.current.text !== text);
+          return true;
+        } catch (error) {
+          setMarkdownError(error instanceof Error ? error.message : 'Markdown 转换失败');
+          return false;
+        }
+      };
+      pendingMarkdown.current = run();
+      try {
+        return await pendingMarkdown.current;
+      } finally {
+        pendingMarkdown.current = null;
+      }
+    }
+    return persistence.flush();
+  }
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
+  useEffect(() => {
+    if (view !== 'markdown' || markdown.current.text === markdown.current.oldText || running)
+      return;
+    const timer = setTimeout(() => {
+      void flushRef.current();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [markdownText, view, running]);
+  async function changeView(next: 'styled' | 'markdown', region?: 'preface' | 'appendix') {
+    if (switchingView.current || (next === view && !region)) return;
+    switchingView.current = true;
+    try {
+      if (!(await flush())) return;
+      if (next === 'markdown') {
+        const document = persistence.getSnapshot().document;
+        const text = renderScriptMarkdown(document).text;
+        markdown.current = { oldDoc: document, oldText: text, text };
+        setMarkdownText(text);
+        setMarkdownDirty(false);
+        setMarkdownError(null);
+        setMarkdownCursor(
+          region === 'preface'
+            ? 0
+            : region === 'appendix'
+              ? text.indexOf('<!-- 附录 -->') + '<!-- 附录 -->\n\n'.length
+              : undefined,
+        );
+      } else if (editor) {
+        const document = persistence.getSnapshot().document;
+        const node = editor.schema.nodeFromJSON(toEditorJson(document));
+        applyingMarkdown.current = true;
+        try {
+          const tr = closeHistory(editor.state.tr)
+            .replaceWith(0, editor.state.doc.content.size, node.content)
+            .setDocAttribute('preface', document.preface)
+            .setDocAttribute('appendix', document.appendix);
+          editor.view.dispatch(tr);
+          editor.view.dispatch(closeHistory(editor.state.tr));
+        } finally {
+          applyingMarkdown.current = false;
+        }
+      }
+      setViewOverride(next);
+      try {
+        const value = await setPreferences({ scriptView: next });
+        queryClient.setQueryData(preferencesQuery().queryKey, value);
+      } catch (error) {
+        persistence.fail(error);
+      }
+    } finally {
+      switchingView.current = false;
+    }
+  }
   useEffect(() => {
     if (editor && focusBlank.current) {
       editor.commands.focus('start');
@@ -153,6 +263,19 @@ function ScriptSession({
       persistence.reset(initial);
     }
   }, [initial, persistence]);
+  useEffect(() => {
+    let generation = persistence.getSnapshot().generation;
+    return persistence.subscribe(() => {
+      const snapshot = persistence.getSnapshot();
+      if (generation === snapshot.generation) return;
+      generation = snapshot.generation;
+      const text = renderScriptMarkdown(snapshot.document).text;
+      markdown.current = { oldDoc: snapshot.document, oldText: text, text };
+      setMarkdownText(text);
+      setMarkdownDirty(false);
+      setMarkdownError(null);
+    });
+  }, [persistence]);
   useEffect(() => {
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout>;
@@ -221,19 +344,23 @@ function ScriptSession({
     mutate('elements', 'POST', { kind, name });
   useBlocker({
     shouldBlockFn: async ({ current, next }) =>
-      current.pathname !== next.pathname && !(await persistence.flush()),
+      current.pathname !== next.pathname && !(await flush()),
     enableBeforeUnload: false,
   });
   useEffect(() => {
     let closing = false;
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (allowClose.current || !persistence.hasPendingChanges()) return;
+      if (
+        allowClose.current ||
+        (!persistence.hasPendingChanges() && markdown.current.text === markdown.current.oldText)
+      )
+        return;
       event.preventDefault();
       event.returnValue = '剧本正在保存';
       if (closing) return;
       closing = true;
-      void persistence
-        .flush()
+      void flushRef
+        .current()
         .then(async (saved) => {
           closing = false;
           if (saved) {
@@ -306,7 +433,7 @@ function ScriptSession({
         projectId={projectId}
         episodeId={episodeId}
         revision={() => persistence.getRevision()}
-        flush={() => persistence.flush()}
+        flush={flush}
         changed={refresh}
         edit={() => setImportOpen(true)}
         view={() => setElementsOpen(true)}
@@ -334,18 +461,53 @@ function ScriptSession({
           )}
         </div>
       )}
-      {running ? (
+      {running && view !== 'markdown' ? (
         <div aria-label="剧本转换中" className="flex-1 animate-pulse space-y-6 p-10">
           <div className="h-6 w-2/3 rounded-md bg-accent" />
           <div className="h-40 rounded-md bg-accent" />
         </div>
-      ) : state.document.blocks.length ? (
+      ) : state.document.blocks.length || view === 'markdown' ? (
         <ScriptEditor
           key={state.generation}
           document={state.document}
-          onChange={(document) => persistence.change(document)}
+          onChange={(document) => {
+            if (!applyingMarkdown.current) persistence.change(document);
+          }}
           onError={persistence.fail}
           toolbar={toolbar}
+          locked={running}
+          tabs={
+            <ScriptViewTabs
+              view={view}
+              onChange={(next) => {
+                void changeView(next);
+              }}
+            />
+          }
+          saveStatus={
+            <span role="status" aria-label="剧本保存状态" className="text-xs text-muted-foreground">
+              {markdownDirty && state.status === 'saved' ? '等待保存…' : status}
+            </span>
+          }
+          markdown={
+            view === 'markdown' ? (
+              <MarkdownView
+                text={markdownText}
+                onChange={(text) => {
+                  markdown.current.text = text;
+                  setMarkdownDirty(true);
+                  setMarkdownText(text);
+                }}
+                readOnly={running}
+                error={markdownError}
+                unsure={unsure}
+                cursor={markdownCursor}
+              />
+            ) : undefined
+          }
+          onMarkdown={(region) => {
+            void changeView('markdown', region);
+          }}
           number={number}
           onEditor={setEditor}
           elementsOpen={elementsOpen}
@@ -420,7 +582,7 @@ function ScriptSession({
           profile={project.data?.profile}
           hasBlocks={!!state.document.blocks.length}
           text={initial.pendingImport?.text}
-          flush={() => persistence.flush()}
+          flush={flush}
           revision={() => persistence.getRevision()}
           onImported={refresh}
           onClose={() => setImportOpen(false)}

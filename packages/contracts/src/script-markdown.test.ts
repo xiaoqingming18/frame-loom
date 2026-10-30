@@ -16,11 +16,19 @@ const documentOf = (text: string) => {
 const content = (doc: ScriptDocument) => ({
   preface: doc.preface,
   appendix: doc.appendix,
-  blocks: doc.blocks.map(({ id: _id, src: _src, review: _review, ...block }) => block),
+  blocks: doc.blocks.map((block) => ({
+    type: block.type,
+    text: block.text,
+    ...(block.attrs ? { attrs: block.attrs } : {}),
+  })),
 });
 const withoutSource = (doc: ScriptDocument) => ({
   ...doc,
-  blocks: doc.blocks.map(({ src: _src, ...block }) => block),
+  blocks: doc.blocks.map((block) => {
+    const result = { ...block };
+    delete result.src;
+    return result;
+  }),
 });
 it.each([sample1, sample2])('样例渲染、解析和编辑无损往返', (sample) => {
   const doc = documentOf(sample);
@@ -101,4 +109,13 @@ it('自动保存后保留原文本行映射，超过段落上限拒绝回写', (
   expect(() =>
     applyMarkdownEdit(documentOf(''), '', Array(5001).fill('动作。').join('\n')),
   ).toThrow();
+});
+it('连续保存沿用一行拆出的全部角色和对白段落', () => {
+  const doc = documentOf('1-1 日 内 书房\n动作。');
+  const md = renderScriptMarkdown(doc).text;
+  const text = md + '\n影娘：你好\n';
+  const first = applyMarkdownEdit(doc, md, text).document;
+  const second = applyMarkdownEdit(first, text, text.replace('动作。', '新动作。')).document;
+  expect(second.blocks.slice(-2)).toEqual(first.blocks.slice(-2));
+  expect(second.blocks.slice(-2).map((block) => block.type)).toEqual(['character', 'dialogue']);
 });

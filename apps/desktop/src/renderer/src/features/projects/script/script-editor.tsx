@@ -37,6 +37,9 @@ export function ScriptEditor({
   elementsOpen,
   onElementsOpen,
   onMarkdown,
+  tabs,
+  markdown,
+  saveStatus,
 }: {
   document: ScriptDocument;
   onChange: (document: ScriptDocument) => void;
@@ -50,6 +53,9 @@ export function ScriptEditor({
   elementsOpen?: boolean;
   onElementsOpen?: (open: boolean) => void;
   onMarkdown?: (region: 'preface' | 'appendix') => void;
+  tabs?: ReactNode;
+  markdown?: ReactNode;
+  saveStatus?: ReactNode;
 }) {
   const [help, setHelp] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState<boolean>();
@@ -80,7 +86,7 @@ export function ScriptEditor({
     onTransaction: () => render((value) => value + 1),
   });
   useEffect(() => {
-    editor?.setEditable(!locked);
+    editor?.setEditable(!locked, false);
   }, [editor, locked]);
   useEffect(() => {
     onEditor?.(editor);
@@ -90,75 +96,82 @@ export function ScriptEditor({
   return (
     <>
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-card px-4 py-2">
-        <NativeSelect
-          aria-label="段落类型"
-          className="w-28"
-          disabled={locked}
-          value={(editor.state.selection.$from.parent.attrs.type as string) ?? 'action'}
-          onChange={(event) => {
-            editor.commands.command(({ state, dispatch, view }) =>
-              setBlockType(event.target.value as BlockType)(state, dispatch, view),
-            );
-            editor.commands.focus();
-          }}
-        >
-          {editor.state.selection.$from.parent.attrs.type === 'act' && (
-            <option value="act" disabled>
-              幕
-            </option>
-          )}
-          {BLOCK_TYPES.filter((type) => type !== 'act').map((type) => (
-            <option key={type} value={type}>
-              {BLOCK_LABELS[type]}
-            </option>
-          ))}
-        </NativeSelect>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="撤销"
-          disabled={locked || !editor.can().undo()}
-          onClick={() => editor.chain().focus().undo().run()}
-        >
-          <Undo2 aria-hidden />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="重做"
-          disabled={locked || !editor.can().redo()}
-          onClick={() => editor.chain().focus().redo().run()}
-        >
-          <Redo2 aria-hidden />
-        </Button>
-        <div data-script-toolbar-wide className="flex items-center gap-2">
-          {toolbar}
-        </div>
-        <div data-script-toolbar-more>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                更多
+        {tabs}
+        {markdown ? (
+          saveStatus
+        ) : (
+          <>
+            <NativeSelect
+              aria-label="段落类型"
+              className="w-28"
+              disabled={locked}
+              value={(editor.state.selection.$from.parent.attrs.type as string) ?? 'action'}
+              onChange={(event) => {
+                editor.commands.command(({ state, dispatch, view }) =>
+                  setBlockType(event.target.value as BlockType)(state, dispatch, view),
+                );
+                editor.commands.focus();
+              }}
+            >
+              {editor.state.selection.$from.parent.attrs.type === 'act' && (
+                <option value="act" disabled>
+                  幕
+                </option>
+              )}
+              {BLOCK_TYPES.filter((type) => type !== 'act').map((type) => (
+                <option key={type} value={type}>
+                  {BLOCK_LABELS[type]}
+                </option>
+              ))}
+            </NativeSelect>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="撤销"
+              disabled={locked || !editor.can().undo()}
+              onClick={() => editor.chain().focus().undo().run()}
+            >
+              <Undo2 aria-hidden />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="重做"
+              disabled={locked || !editor.can().redo()}
+              onClick={() => editor.chain().focus().redo().run()}
+            >
+              <Redo2 aria-hidden />
+            </Button>
+            <div data-script-toolbar-wide className="flex items-center gap-2">
+              {toolbar}
+            </div>
+            <div data-script-toolbar-more>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    更多
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="p-2">{toolbar}</DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setOutlineOpen(outlineRef.current?.offsetWidth === 0)}
+            >
+              大纲
+            </Button>
+            {right && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onElementsOpen?.(elementsRef.current?.offsetWidth === 0)}
+              >
+                元素栏
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="p-2">{toolbar}</DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setOutlineOpen(outlineRef.current?.offsetWidth === 0)}
-        >
-          大纲
-        </Button>
-        {right && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onElementsOpen?.(elementsRef.current?.offsetWidth === 0)}
-          >
-            元素栏
-          </Button>
+            )}
+          </>
         )}
         <Button
           className="ml-auto"
@@ -170,7 +183,8 @@ export function ScriptEditor({
           ?
         </Button>
       </div>
-      <div data-script-layout className="relative flex min-h-0 flex-1">
+      {markdown}
+      <div data-script-layout className={markdown ? 'hidden' : 'relative flex min-h-0 flex-1'}>
         <div ref={outlineRef} data-script-outline data-open={outlineOpen}>
           <Outline editor={editor} document={document} number={number} />
         </div>
@@ -195,7 +209,7 @@ export function ScriptEditor({
           </div>
         )}
       </div>
-      {overlays?.(editor)}
+      {!markdown && overlays?.(editor)}
       {help && <KeyboardHelp onClose={() => setHelp(false)} />}
     </>
   );

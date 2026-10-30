@@ -85,17 +85,17 @@ export function renderScriptMarkdown(document: ScriptDocument): {
   return { text: lines.join('\n'), lineBlocks };
 }
 const lineKey = (text: string) => text.replace(/^\*\*\d+\.\s*/u, '**');
-function mapOldLines(document: ScriptDocument, text: string): (ScriptBlock | undefined)[] {
+function mapOldLines(document: ScriptDocument, text: string): ScriptBlock[][] {
   const rendered = renderScriptMarkdown(document);
   if (rendered.text === text) {
     const byId = new Map(document.blocks.map((block) => [block.id, block]));
-    return rendered.lineBlocks.map((id) => (id ? byId.get(id) : undefined));
+    return rendered.lineBlocks.map((id) => (id ? [byId.get(id)!] : []));
   }
   // 自动保存后文本不重新渲染；依照原行解析顺序匹配当前文档。
   const parsed = parseScriptText(text);
-  const byLine: (ScriptBlock | undefined)[] = [];
+  const byLine: ScriptBlock[][] = [];
   for (const [index, block] of parsed.blocks.entries())
-    byLine[block.src!.line] = document.blocks[index];
+    (byLine[block.src!.line] ??= []).push(document.blocks[index]);
   return byLine;
 }
 export function applyMarkdownEdit(
@@ -135,21 +135,26 @@ export function applyMarkdownEdit(
   for (let k = 1; k < matches.length; k++) {
     const [oldIndex, newIndex] = matches[k];
     const [oldStart, newStart] = matches[k - 1];
-    if (previous[oldIndex]) byLine.set(newIndex, [previous[oldIndex]!]);
+    if (previous[oldIndex]?.length) byLine.set(newIndex, previous[oldIndex]);
     if (oldIndex - oldStart === newIndex - newStart)
       for (let offset = 1; offset < oldIndex - oldStart; offset++) {
         const oldBlock = previous[oldStart + offset];
         const current = byLine.get(newStart + offset);
-        if (oldBlock && current?.length === 1) {
-          const { review: _review, ...block } = current[0];
-          byLine.set(newStart + offset, [{ ...block, id: oldBlock.id }]);
+        if (oldBlock?.length === 1 && current?.length === 1) {
+          const block = { ...current[0] };
+          delete block.review;
+          byLine.set(newStart + offset, [{ ...block, id: oldBlock[0].id }]);
         }
       }
   }
   const blocks = [...byLine.entries()]
     .sort(([a], [b]) => a - b)
     .flatMap(([, blocks]) => blocks)
-    .map(({ src: _src, ...block }) => block);
+    .map((block) => {
+      const result = { ...block };
+      delete result.src;
+      return result;
+    });
   const document = ScriptDocument.parse({
     schemaVersion: 2,
     preface: parsed.preface,
