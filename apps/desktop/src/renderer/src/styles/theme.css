@@ -52,6 +52,64 @@
   --canvas-dock-shadow: 0 4px 16px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
   --canvas-bar-shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
   --canvas-node-shadow: 0 4px 12px rgb(0 0 0 / 0.05);
+  /* 生成卡片：按用户提供的三个明暗参考页保留氛围、胶囊和粒子原值。 */
+  --canvas-generation-card-bg: #ffffff;
+
+  --canvas-generation-tag-bg: rgba(255, 255, 255, 0.75);
+  --canvas-generation-tag-border: rgba(0, 0, 0, 0.08);
+  --canvas-generation-tag-color: rgba(0, 0, 0, 0.75);
+  --canvas-generation-tag-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  --canvas-generation-dot-bg: #333;
+  --canvas-generation-dot-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
+  --canvas-generation-cancel-color: rgba(0, 0, 0, 0.35);
+  --canvas-generation-cancel-hover: rgba(0, 0, 0, 0.8);
+
+  --canvas-generation-noise-blend: multiply;
+  --canvas-generation-noise-opacity: 0.03;
+
+  --canvas-generation-aura-bg: radial-gradient(
+    ellipse at center,
+    rgba(145, 155, 195, 0.13) 0%,
+    transparent 62%
+  );
+  --canvas-generation-blob1-bg: radial-gradient(
+    circle,
+    rgba(168, 184, 232, 0.16) 0%,
+    transparent 70%
+  );
+  --canvas-generation-blob2-bg: radial-gradient(
+    circle,
+    rgba(206, 178, 222, 0.14) 0%,
+    transparent 70%
+  );
+  --canvas-generation-blob-blur: 38px;
+  --canvas-generation-blob-opacity: 0.85;
+  --canvas-generation-drift-x1: 16%;
+  --canvas-generation-drift-y1: 9%;
+  --canvas-generation-drift-x2: -14%;
+  --canvas-generation-drift-y2: -11%;
+
+  --canvas-generation-sheen-opacity: 0;
+  --canvas-generation-sheen-bg: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.035) 45%,
+    rgba(255, 255, 255, 0.055) 50%,
+    rgba(255, 255, 255, 0.035) 55%,
+    transparent 100%
+  );
+
+  --canvas-generation-streak-color: #2a2a2e;
+  --canvas-generation-streak-glow: none;
+  --canvas-generation-rain-line-bg: rgba(0, 0, 0, 0.05);
+  --canvas-generation-drop-gradient: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(0, 0, 0, 0.35),
+    transparent
+  );
+  --canvas-generation-drop-glow: none;
+  --canvas-generation-audio-rgb: 28, 33, 45;
   /* 项目标签：色点和徽标文字使用前景色，徽标使用对应浅底色。 */
   --tag-red: #b91c1c;
   --tag-red-bg: #fee2e2;
@@ -126,6 +184,55 @@
     --canvas-dock-shadow: 0 4px 16px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.06);
     --canvas-bar-shadow: 0 1px 3px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(255 255 255 / 0.05);
     --canvas-node-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+    --canvas-generation-card-bg: #16161b;
+
+    --canvas-generation-tag-bg: rgba(36, 36, 42, 0.72);
+    --canvas-generation-tag-border: rgba(255, 255, 255, 0.09);
+    --canvas-generation-tag-color: rgba(255, 255, 255, 0.8);
+    --canvas-generation-tag-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    --canvas-generation-dot-bg: #dcdce2;
+    --canvas-generation-dot-shadow: 0 0 0 2px rgba(255, 255, 255, 0.07);
+    --canvas-generation-cancel-color: rgba(255, 255, 255, 0.35);
+    --canvas-generation-cancel-hover: rgba(255, 255, 255, 0.85);
+
+    --canvas-generation-noise-blend: screen;
+    --canvas-generation-noise-opacity: 0.02;
+
+    --canvas-generation-aura-bg: radial-gradient(
+      ellipse at center,
+      rgba(205, 215, 235, 0.05) 0%,
+      transparent 66%
+    );
+    --canvas-generation-blob1-bg: radial-gradient(
+      circle,
+      rgba(190, 205, 228, 0.045) 0%,
+      transparent 72%
+    );
+    --canvas-generation-blob2-bg: radial-gradient(
+      circle,
+      rgba(170, 182, 200, 0.035) 0%,
+      transparent 72%
+    );
+    --canvas-generation-blob-blur: 52px;
+    --canvas-generation-blob-opacity: 0.7;
+    --canvas-generation-drift-x1: 7%;
+    --canvas-generation-drift-y1: 4%;
+    --canvas-generation-drift-x2: -6%;
+    --canvas-generation-drift-y2: -5%;
+
+    --canvas-generation-sheen-opacity: 1;
+
+    --canvas-generation-streak-color: rgba(214, 224, 242, 0.95);
+    --canvas-generation-streak-glow: drop-shadow(0 0 3px rgba(170, 190, 220, 0.45));
+    --canvas-generation-rain-line-bg: rgba(255, 255, 255, 0.05);
+    --canvas-generation-drop-gradient: linear-gradient(
+      to bottom,
+      transparent,
+      rgba(205, 214, 230, 0.5),
+      transparent
+    );
+    --canvas-generation-drop-glow: drop-shadow(0 0 2px rgba(160, 180, 210, 0.22));
+    --canvas-generation-audio-rgb: 228, 238, 254;
     --tag-red: #f87171;
     --tag-red-bg: #451a1a;
     --tag-orange: #fb923c;

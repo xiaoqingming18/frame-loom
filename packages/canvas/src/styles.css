@@ -303,3 +303,329 @@
     box-shadow: 0 1px 0 var(--border);
   }
 }
+
+@layer components {
+  .canvas-generation-noise {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+    opacity: var(--canvas-generation-noise-opacity);
+    mix-blend-mode: var(--canvas-generation-noise-blend);
+    background-image: url('./nodes/generation-noise.svg?no-inline');
+  }
+
+  /* ================= 状态胶囊标签 ================= */
+  .canvas-generation-tag {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: var(--canvas-generation-tag-bg);
+    border: 1px solid var(--canvas-generation-tag-border);
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--canvas-generation-tag-color);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    box-shadow: var(--canvas-generation-tag-shadow);
+  }
+  .canvas-generation-tag .canvas-generation-dot {
+    width: 4px;
+    height: 4px;
+    background: var(--canvas-generation-dot-bg);
+    border-radius: 50%;
+    box-shadow: var(--canvas-generation-dot-shadow);
+    animation: canvas-generation-pulse 2s ease-in-out infinite;
+  }
+  .canvas-generation-tag .canvas-generation-cancel {
+    color: var(--canvas-generation-cancel-color);
+    margin-left: 2px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .canvas-generation-tag .canvas-generation-cancel:hover {
+    color: var(--canvas-generation-cancel-hover);
+  }
+
+  @keyframes canvas-generation-pulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.8);
+    }
+  }
+
+  /* =====================================================================
+     底层氛围
+     ===================================================================== */
+  .canvas-generation-ambient {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    z-index: 1;
+  }
+  .canvas-generation-aura {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 78%;
+    height: 165%;
+    transform: translate(-50%, -50%);
+    background: var(--canvas-generation-aura-bg);
+    animation: canvas-generation-breathe 9s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+  @keyframes canvas-generation-breathe {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) scale(0.92);
+      opacity: 0.55;
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(1.06);
+      opacity: 1;
+    }
+  }
+  .canvas-generation-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(var(--canvas-generation-blob-blur));
+    opacity: var(--canvas-generation-blob-opacity);
+    will-change: transform;
+  }
+  .canvas-generation-blob.canvas-generation-blob-one {
+    width: 60%;
+    height: 130%;
+    left: -12%;
+    top: -15%;
+    background: var(--canvas-generation-blob1-bg);
+    animation: canvas-generation-drift1 20s ease-in-out infinite alternate;
+  }
+  .canvas-generation-blob.canvas-generation-blob-two {
+    width: 60%;
+    height: 130%;
+    right: -12%;
+    bottom: -15%;
+    background: var(--canvas-generation-blob2-bg);
+    animation: canvas-generation-drift2 24s ease-in-out infinite alternate;
+  }
+  @keyframes canvas-generation-drift1 {
+    0% {
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      transform: translate(var(--canvas-generation-drift-x1), var(--canvas-generation-drift-y1))
+        scale(1.06);
+    }
+  }
+  @keyframes canvas-generation-drift2 {
+    0% {
+      transform: translate(0, 0) scale(1.03);
+    }
+    100% {
+      transform: translate(var(--canvas-generation-drift-x2), var(--canvas-generation-drift-y2))
+        scale(1);
+    }
+  }
+  .canvas-generation-sheen {
+    position: absolute;
+    top: -40%;
+    left: -70%;
+    width: 45%;
+    height: 180%;
+    transform: rotate(20deg);
+    background: var(--canvas-generation-sheen-bg);
+    filter: blur(24px);
+    opacity: var(--canvas-generation-sheen-opacity);
+    animation: canvas-generation-sheenMove 26s ease-in-out infinite;
+    will-change: transform;
+  }
+  @keyframes canvas-generation-sheenMove {
+    0% {
+      transform: rotate(20deg) translateX(0);
+    }
+    50% {
+      transform: rotate(20deg) translateX(360%);
+    }
+    100% {
+      transform: rotate(20deg) translateX(0);
+    }
+  }
+
+  /* =====================================================================
+     05 · 粒子隧道（无中心光晕）
+     ===================================================================== */
+  .canvas-generation-tunnel {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+  }
+
+  /* 外层负责位移+缩放（Web Animations API 控制），内层负责旋转 */
+  .canvas-generation-streak {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    will-change: transform, opacity;
+  }
+  .canvas-generation-streak b {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 3px;
+    /* 尾端透明，头部实色：实色端指向运动方向（朝中心） */
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--canvas-generation-streak-color) 100%
+    );
+    filter: var(--canvas-generation-streak-glow);
+    backface-visibility: hidden;
+  }
+
+  .canvas-generation-rain {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: space-around;
+    padding: 0 5%;
+  }
+  .canvas-generation-rain i {
+    width: 1.5px;
+    height: 100%;
+    background: var(--canvas-generation-rain-line-bg);
+    position: relative;
+    overflow: hidden;
+    border-radius: 1px;
+  }
+  .canvas-generation-rain i .canvas-generation-drop {
+    position: absolute;
+    top: -30%;
+    left: 0;
+    width: 100%;
+    height: 30%;
+    background: var(--canvas-generation-drop-gradient);
+    animation: canvas-generation-rainDrop 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    will-change: transform, opacity;
+    filter: var(--canvas-generation-drop-glow);
+  }
+  @keyframes canvas-generation-rainDrop {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(400%);
+      opacity: 0;
+    }
+  }
+
+  .canvas-generation-active {
+    position: absolute;
+    inset: 0;
+    isolation: isolate;
+    font-family:
+      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .canvas-generation-animation {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--canvas-generation-card-bg);
+  }
+  .canvas-generation-tag {
+    line-height: normal;
+  }
+  .canvas-generation-tag p {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+  }
+  .canvas-generation-tag .canvas-generation-cancel {
+    border: 0;
+    padding: 0;
+    background: none;
+    font: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+  }
+  .canvas-generation-cancel:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .canvas-generation-cancel:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+  }
+  .canvas-generation-details {
+    position: absolute;
+    z-index: 20;
+    top: 58px;
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: end;
+    gap: 8px;
+    overflow-y: auto;
+    color: var(--canvas-generation-tag-color);
+    font-size: 12px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .canvas-generation-active:hover .canvas-generation-details,
+  .canvas-generation-active:focus-within .canvas-generation-details,
+  .canvas-generation-details:has([role='alert'], [role='status']) {
+    opacity: 1;
+  }
+  .canvas-generation-details > div:has(p, details, button) {
+    flex-shrink: 0;
+    border: 1px solid var(--canvas-generation-tag-border);
+    border-radius: 12px;
+    padding: 6px;
+    background: var(--canvas-generation-tag-bg);
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+  }
+  .canvas-generation-spectrum {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+  }
+  .canvas-generation-spectrum canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .canvas-generation-animation *,
+    .canvas-generation-dot {
+      animation-duration: 8s !important;
+      animation-timing-function: linear !important;
+    }
+  }
+}
