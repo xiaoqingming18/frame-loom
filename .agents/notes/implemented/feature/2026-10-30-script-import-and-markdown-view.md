@@ -2,6 +2,8 @@
 
 Status: implemented
 
+2026-11-01 用户已确认后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)，其中移除 Markdown 双向编辑、旧分类和前言附录，改由模型返回标准 JSON。代码尚未实施；本篇保留现有功能事实、原文保真教训及历史验收，不改写成新方案已经完成。
+
 ## Problem
 
 [剧集与结构化剧本](../../implemented/feature/2026-10-29-episodes-and-structured-scripts.md)上线后，用户导入了一份真实的 Markdown 剧本《影娘》（844 行，约 3 万字），识别结果几乎不可用：

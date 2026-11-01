@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>剧本编辑器</title>
+<style>
+:root{
+  --bg:#ffffff;
+  --ink:#1a1a1a;
+  --ink-2:#404040;
+  --ink-3:#737373;
+  --faint:#a3a3a3;
+  --ghost:#d4d4d4;
+  --line:#e6e6e6;
+  --line-2:#f1f1f1;
+  --focus-bg:#f6f6f6;
+  --focus-line:#dcdcdc;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  font-size:15px;
+  display:flex;flex-direction:column;
+  height:100vh;overflow:hidden;
+}
+
+/* ============ 主区 ============ */
+.main{flex:1;display:flex;min-height:0;}
+
+/* ============ 大纲 ============ */
+.outline{
+  width:258px;flex:0 0 258px;
+  background:#fbfbfb;
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+
+.ol-top{
+  flex:0 0 auto;
+  padding:18px 14px 12px;
+  border-bottom:1px solid var(--line-2);
+}
+.ol-head{
+  display:flex;align-items:baseline;gap:8px;
+  padding:0 4px;
+  user-select:none;
+}
+.ol-head-t{font-size:11.5px;letter-spacing:2.4px;color:var(--ink-3);font-weight:700;}
+.ol-head-c{font-size:11px;color:var(--ghost);letter-spacing:.5px;margin-left:auto;}
+.ol-caret{display:none;font-size:10px;color:var(--ghost);margin-left:6px;}
+
+.ol-list{flex:1;overflow-y:auto;padding:8px 0 24px;}
+.ol-empty{
+  padding:22px 18px;font-size:12px;color:var(--ghost);line-height:1.7;
+}
+.ol-item{
+  display:grid;grid-template-columns:auto 1fr;gap:2px 8px;align-items:baseline;
+  width:100%;text-align:left;
+  border:0;border-left:2px solid transparent;
+  background:none;padding:9px 14px 9px 12px;
+  font-family:inherit;cursor:pointer;
+  transition:background .12s,border-color .12s;
+}
+.ol-item:hover{background:#f2f2f2;}
+.ol-item.active{background:#ededed;border-left-color:var(--ink);}
+.ol-no{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11px;color:var(--faint);font-weight:600;letter-spacing:.4px;
+}
+.ol-item.active .ol-no{color:var(--ink-2);}
+.ol-loc{
+  font-size:13px;color:var(--ink);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ol-tag{
+  grid-column:1 / -1;
+  font-size:11px;color:var(--ink-3);letter-spacing:.5px;margin-top:1px;
+}
+
+.ol-add{
+  flex:0 0 auto;
+  border:0;border-top:1px solid var(--line-2);
+  background:#fff;padding:13px 18px;
+  font-family:inherit;font-size:12px;letter-spacing:.5px;
+  color:var(--ink-3);cursor:pointer;text-align:left;
+  transition:.15s;
+}
+.ol-add:hover{color:var(--ink);background:#f6f6f6;}
+
+/* ============ 文档滚动容器 ============ */
+.doc-wrap{flex:1;overflow-y:auto;min-width:0;background:#fff;}
+.doc{
+  max-width:720px;
+  margin:0 auto;
+  padding:56px 40px 240px;
+}
+
+/* ============ 可编辑 ============ */
+.ce{
+  outline:none;border-radius:3px;
+  transition:background .12s, box-shadow .12s;
+  white-space:pre-wrap;word-break:break-word;
+  padding:1px 2px;margin:-1px -2px;
+}
+.ce:hover{background:rgba(0,0,0,.035);}
+.ce:focus{background:var(--focus-bg);box-shadow:0 0 0 1px var(--focus-line);}
+.ce:empty::before{content:attr(data-ph);color:var(--ghost);pointer-events:none;font-weight:400;}
+
+/* ============ 标题 ============ */
+.doc-title{
+  text-align:center;
+  font-size:25px;font-weight:800;
+  letter-spacing:1.5px;line-height:1.6;
+  margin-bottom:6px;
+}
+.doc-title .ce{padding:0 3px;margin:0;}
+.doc-sub{
+  text-align:center;font-size:14.5px;
+  color:var(--ink-3);letter-spacing:1px;
+  margin-bottom:48px;font-weight:500;
+}
+
+/* ============ 元信息 ============ */
+.meta-row{
+  display:grid;grid-template-columns:76px 1fr;
+  gap:14px;align-items:baseline;
+  padding:4px 0;line-height:1.75;
+}
+.meta-k{
+  font-size:11px;letter-spacing:1.5px;
+  color:var(--faint);font-weight:600;
+  user-select:none;
+}
+.meta-v{font-size:13.5px;color:var(--ink-2);min-height:1.7em;}
+
+/* ============ 集分隔 ============ */
+.ep-mark{
+  display:flex;align-items:center;gap:18px;
+  margin:60px 0 30px;
+  font-size:11.5px;letter-spacing:5px;color:var(--faint);font-weight:600;
+  user-select:none;
+}
+.ep-mark::before,.ep-mark::after{
+  content:"";flex:1;height:1px;
+  background:linear-gradient(90deg,transparent,var(--line),transparent);
+}
+
+/* ============ 场景 ============ */
+.scene{
+  position:relative;
+  padding-left:18px;margin-left:-20px;
+  border-left:2px solid transparent;
+  margin-bottom:46px;
+  transition:border-color .18s;
+}
+.scene:hover{border-left-color:var(--line);}
+.scene:focus-within{border-left-color:var(--focus-line);}
+.scene[data-flash="1"]{animation:flash 1s ease;}
+@keyframes flash{
+  0%{background:rgba(37,99,235,.06);}
+  100%{background:transparent;}
+}
+
+/* slugline */
+.slug{
+  display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+  padding-bottom:9px;border-bottom:1px solid var(--line);
+  margin-bottom:11px;
+}
+.slug-num{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.5px;font-weight:700;
+  color:var(--ink);
+  letter-spacing:.6px;
+  padding:2px 4px;margin:0;
+  min-width:2.6em;
+}
+.slug-dot{color:var(--ghost);font-size:11px;user-select:none;}
+.slug-loc{
+  font-size:15px;font-weight:700;letter-spacing:.5px;
+  color:var(--ink);min-width:4em;padding:0 4px;margin:0;
+}
+.tog{
+  border:0;cursor:pointer;font-family:inherit;
+  font-size:11px;font-weight:700;letter-spacing:1.5px;
+  padding:2px 9px;border-radius:4px;
+  transition:.15s;user-select:none;
+  background:#f0f0f0;color:var(--ink-2);
+}
+.tog:hover{background:#e6e6e6;}
+
+/* 人物 / 氛围 */
+.s-meta{
+  display:flex;align-items:baseline;gap:9px;
+  padding:5px 0;line-height:1.8;
+}
+.s-meta .mk{
+  flex:0 0 auto;
+  min-width:3.4em;text-align:center;
+  font-size:11px;letter-spacing:1.5px;
+  color:var(--ink-3);font-weight:700;
+  background:#f2f2f2;border-radius:4px;
+  padding:1px 6px;user-select:none;
+}
+.s-meta .mv{
+  flex:1;min-width:0;
+  font-size:13.5px;color:var(--ink-3);
+  padding:0 2px;margin:0;
+}
+
+/* ============ 内容行 ============ */
+.beats{margin-top:12px;}
+.line{
+  position:relative;
+  padding:5px 96px 5px 0;
+  font-size:14.5px;
+  line-height:1.95;
+  border-radius:4px;
+  transition:background .12s;
+}
+.line:hover{background:#fafafa;}
+
+.line.action .marker{
+  color:var(--ghost);font-size:11px;
+  margin-right:7px;user-select:none;
+  display:inline-block;vertical-align:1px;
+}
+.line.action .txt{
+  display:inline;font-size:14.5px;line-height:1.95;color:var(--ink-2);
+}
+
+.line.dialogue{color:var(--ink);}
+.spk{
+  font-weight:700;font-size:14.5px;letter-spacing:.4px;
+  color:hsl(var(--h,220),35%,36%);
+}
+.emo{font-size:12px;color:var(--faint);letter-spacing:.3px;}
+.emo .ce{font-size:12px;color:var(--ink-3);}
+.emo .ce:empty::before{color:var(--ghost);font-size:12px;}
+.colon{color:var(--ghost);margin:0 3px 0 1px;user-select:none;}
+.line.dialogue .txt{font-size:14.5px;line-height:1.95;}
+
+.line-tools{
+  position:absolute;right:0;top:50%;
+  transform:translateY(-50%);
+  display:flex;gap:2px;
+  opacity:0;pointer-events:none;
+  transition:opacity .15s;
+}
+.line:hover .line-tools,
+.line:focus-within .line-tools{opacity:1;pointer-events:auto;}
+.lt{
+  width:21px;height:21px;padding:0;
+  display:grid;place-items:center;
+  border:0;border-radius:4px;
+  background:#f0f0f0;color:var(--faint);
+  font-size:11px;line-height:1;font-family:inherit;
+  cursor:pointer;transition:.12s;
+}
+.lt:hover{background:#e2e2e2;color:var(--ink-2);}
+.lt.del:hover{background:#fee2e2;color:#dc2626;}
+
+.s-tools{
+  display:flex;align-items:center;gap:18px;
+  padding:10px 0 0;margin-top:6px;
+  font-size:12px;
+  opacity:.4;transition:opacity .18s;
+}
+.scene:hover .s-tools,
+.s-tools:focus-within{opacity:1;}
+.s-tools button{
+  border:0;background:none;padding:2px 0;
+  font-family:inherit;font-size:12px;
+  color:var(--ink-3);cursor:pointer;
+  transition:color .12s;letter-spacing:.3px;
+}
+.s-tools button:hover{color:var(--ink);}
+.s-tools button.danger:hover{color:#dc2626;}
+.s-tools .grow{flex:1;}
+
+.beats:empty::after{
+  content:"还没有内容，按 Enter 或点击下方按钮添加。";
+  display:block;font-size:12.5px;color:var(--ghost);padding:6px 0;
+}
+
+.add-scene{
+  display:block;width:100%;
+  border:1px dashed var(--line);
+  background:none;border-radius:8px;
+  padding:16px 0;margin-top:8px;
+  text-align:center;
+  font-family:inherit;font-size:12.5px;letter-spacing:.5px;
+  color:var(--faint);
+  cursor:pointer;transition:.15s;
+}
+.add-scene:hover{color:var(--ink-2);border-color:var(--ghost);background:#fcfcfc;}
+
+.end-block{
+  margin-top:56px;padding-top:30px;
+  border-top:1px solid var(--line);
+}
+
+.doc-foot{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-top:40px;
+  font-size:11.5px;color:var(--ghost);
+  letter-spacing:1px;
+}
+.doc-foot b{color:var(--ink-3);font-weight:600;}
+.doc-foot .sp{color:var(--line);}
+
+/* ============ Toast ============ */
+.toast{
+  position:fixed;left:50%;bottom:32px;
+  transform:translate(-50%,16px);
+  background:var(--ink);color:#fff;
+  font-size:12.5px;letter-spacing:.5px;
+  padding:9px 20px;border-radius:7px;
+  opacity:0;pointer-events:none;transition:.22s;
+  z-index:99;
+  box-shadow:0 8px 28px rgba(0,0,0,.18);
+}
+.toast.show{opacity:1;transform:translate(-50%,0);}
+
+/* ============ 滚动条 ============ */
+::-webkit-scrollbar{width:11px;height:11px;}
+::-webkit-scrollbar-thumb{
+  background:#dcdcdc;border-radius:8px;
+  border:3px solid transparent;background-clip:content-box;
+}
+::-webkit-scrollbar-thumb:hover{background:#c4c4c4;background-clip:content-box;}
+::-webkit-scrollbar-track{background:transparent;}
+::selection{background:#dbeafe;color:var(--ink);}
+
+/* ============ 响应式 ============ */
+@media (max-width:900px){
+  .doc{padding:42px 22px 200px;}
+  .doc-title{font-size:20px;letter-spacing:.8px;}
+  .doc-sub{margin-bottom:32px;}
+  .meta-row{grid-template-columns:62px 1fr;gap:10px;}
+  .meta-k{font-size:10.5px;letter-spacing:1px;}
+  .scene{padding-left:12px;margin-left:-14px;margin-bottom:34px;}
+  .line{padding-right:0;padding-bottom:9px;}
+  .line-tools{position:static;transform:none;opacity:1;pointer-events:auto;margin-top:5px;justify-content:flex-end;}
+  .ep-mark{letter-spacing:3px;margin:42px 0 24px;}
+}
+
+/* 窄屏：大纲变为顶部可折叠栏 */
+@media (max-width:820px){
+  .main{flex-direction:column;}
+
+  .outline{
+    width:100%;flex:0 0 auto;
+    border-right:0;
+    border-bottom:1px solid var(--line);
+    background:#fbfbfb;
+  }
+  .ol-top{padding:12px 14px 8px;}
+  .ol-head{padding:0 2px;cursor:pointer;}
+  .ol-caret{display:inline-block;transition:transform .18s;}
+  body.show-outline .ol-caret{transform:rotate(180deg);}
+
+  .ol-list{
+    flex:0 0 auto;
+    max-height:0;
+    overflow:hidden;
+    padding:0;
+    transition:max-height .22s ease;
+  }
+  body.show-outline .ol-list{
+    max-height:38vh;
+    overflow-y:auto;
+    padding:6px 0 10px;
+    border-top:1px solid var(--line-2);
+  }
+
+  .ol-add{
+    border-top:1px solid var(--line-2);
+    padding:11px 18px;
+  }
+
+  .doc-wrap{flex:1;min-height:0;}
+}
+</style>
+</head>
+<body>
+
+<div class="main">
+
+  <!-- 场次大纲 -->
+  <aside class="outline" id="outline">
+    <div class="ol-top">
+      <div class="ol-head" id="olHead">
+        <span class="ol-head-t">场次大纲</span>
+        <span class="ol-head-c" id="olCount"></span>
+        <span class="ol-caret">▾</span>
+      </div>
+    </div>
+    <div class="ol-list" id="olList"></div>
+    <button class="ol-add" id="olAdd">＋ 添加场次</button>
+  </aside>
+
+  <!-- 文档 -->
+  <div class="doc-wrap" id="docWrap">
+    <main class="doc" id="doc">
+
+      <!-- 标题 -->
+      <div class="doc-title">
+        《<span class="ce" contenteditable="true" spellcheck="false"
+           data-path="meta.series" data-ph="剧名"></span>》第<span class="ce"
+           contenteditable="true" spellcheck="false" data-path="meta.episode"
+           data-ph="1" style="display:inline-block;min-width:1.2em;text-align:center;"></span>集剧本
+      </div>
+      <div class="doc-sub ce" contenteditable="true" spellcheck="false"
+           data-path="meta.title" data-ph="本集标题"></div>
+
+      <!-- 元信息 -->
+      <div class="meta">
+        <div class="meta-row">
+          <span class="meta-k">剧名</span>
+          <span class="meta-v ce" contenteditable="true" spellcheck="false"
+                data-path="meta.series" data-ph="剧名"></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-k">类型</span>
+          <span class="meta-v ce" contenteditable="true" spellcheck="false"
+                data-path="meta.genre" data-ph="都市 / 悬疑 / 轻科幻"></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-k">画风</span>
+          <span class="meta-v ce" contenteditable="true" spellcheck="false"
+                data-path="meta.style" data-ph="写实赛璐璐，冷暖对比强烈的都市夜景"></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-k">单集时长</span>
+          <span class="meta-v ce" contenteditable="true" spellcheck="false"
+                data-path="meta.duration_text" data-ph="13分钟"></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-k">核心冲突</span>
+          <span class="meta-v ce" contenteditable="true" spellcheck="false"
+                data-path="meta.core_conflict" data-ph="一句话核心冲突"></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-k">开场钩子</span>
+          <span class="meta-v ce" contenteditable="true" spellcheck="false"
+                data-path="meta.hook_start" data-ph="开场钩子"></span>
+        </div>
+      </div>
+
+      <!-- 集分隔 -->
+      <div class="ep-mark"><span>第 <span id="epLabel">1</span> 集</span></div>
+
+      <!-- 场景容器 -->
+      <div id="scenes"></div>
+
+      <button class="add-scene" id="btnAddScene">＋ 添加场次</button>
+
+      <!-- 结尾 -->
+      <div class="end-block">
+        <div class="meta-row">
+          <span class="meta-k">结尾钩子</span>
+          <span class="meta-v ce" contenteditable="true" spellcheck="false"
+                data-path="meta.hook_end" data-ph="本集结尾钩子"></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-k">时长预估</span>
+          <span class="meta-v" id="durText" style="color:var(--ink-3);font-size:13.5px;"></span>
+        </div>
+      </div>
+
+      <!-- 页脚 -->
+      <footer class="doc-foot" id="foot"></footer>
+
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================
+   0. 工具
+   ===================================================== */
+const $ = id => document.getElementById(id);
+const docEl   = $('doc');
+const docWrap = $('docWrap');
+const scenesEl = $('scenes');
+const olList  = $('olList');
+const STORAGE = 'script-editor-white-v4';
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+));
+
+const pathArr = s => String(s).split('.').map(k => /^\d+$/.test(k) ? +k : k);
+const getPath = (o, p) => p.reduce((x, k) => (x == null ? x : x[k]), o);
+function setPath(o, p, v){
+  let cur = o;
+  for (let i = 0; i < p.length - 1; i++){
+    const k = p[i];
+    if (cur[k] == null) cur[k] = typeof p[i+1] === 'number' ? [] : {};
+    cur = cur[k];
+  }
+  cur[p[p.length-1]] = v;
+}
+
+function hashHue(str){
+  let h = 0;
+  for (const ch of String(str || '?')) h = (h * 31 + ch.codePointAt(0)) % 99991;
+  return 200 + (h % 140);
+}
+
+function parseDuration(text){
+  if (!text) return 0;
+  const s = String(text);
+  const clock = s.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/);
+  if (clock) return (+clock[1]) * 60 + (+clock[2]);
+  let total = 0;
+  const min = s.match(/(\d+(?:\.\d+)?)\s*分/);
+  const sec = s.match(/(\d+(?:\.\d+)?)\s*秒/);
+  if (min) total += parseFloat(min[1]) * 60;
+  if (sec) total += parseFloat(sec[1]);
+  if (!min && !sec){
+    const n = s.match(/(\d+)/);
+    if (n) total = +n[1];
+  }
+  return Math.round(total);
+}
+function fmtDuration(sec){
+  if (!sec) return '';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  if (m && s) return `${m} 分 ${s} 秒`;
+  if (m) return `${m} 分钟`;
+  return `${s} 秒`;
+}
+
+let toastTimer = null;
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1700);
+}
+
+/* =====================================================
+   1. 数据
+   ===================================================== */
+function newScene(id){
+  return {
+    scene_id: id || '1-1',
+    location: '',
+    time_of_day: '日',
+    interior: true,
+    characters: [],
+    atmosphere: '',
+    beats: []
+  };
+}
+
+const SAMPLE = {
+  meta:{
+    series:'深夜便利店的她',
+    episode:1,
+    title:'凌晨三点的第七位客人',
+    genre:'都市 / 悬疑 / 轻科幻',
+    style:'写实赛璐璐，冷暖对比强烈的都市夜景，冷白光与霓虹紫',
+    duration_text:'13分钟',
+    duration_sec:780,
+    core_conflict:'便利店员林夏发现，每晚三点进店的客人都在重复同一天',
+    hook_start:'凌晨三点整，便利店的自动门在没有客人的情况下自行滑开',
+    hook_end:'收银机自动吐出一张空白收据，纸面上慢慢浮现出明天的日期'
+  },
+  scenes:[
+    {
+      scene_id:'1-1',
+      location:'便利店',
+      time_of_day:'夜',
+      interior:true,
+      characters:['林夏','西装男'],
+      atmosphere:'冷白的灯管嗡嗡作响，货架整齐得过分，窗外雨声不断，店内安静得能听见冰柜的运转声。',
+      beats:[
+        {type:'action', content:'△ 林夏趴在收银台上打盹，头顶的灯管闪了两下。'},
+        {type:'action', content:'△ 墙上的电子钟跳到 03:00。'},
+        {type:'action', content:'△ 玻璃门自动滑开，一个浑身湿透的西装男走了进来，脚步无声。'},
+        {type:'dialogue', speaker:'林夏', emotion:'惊醒，强打精神', line:'欢迎光临。'},
+        {type:'dialogue', speaker:'西装男', emotion:'声音沙哑', line:'……还是老样子。'},
+        {type:'dialogue', speaker:'林夏', emotion:'疑惑地眨眼', line:'您说什么？'},
+        {type:'action', content:'△ 西装男径直走向冷藏柜，拿起一罐黑咖啡，动作熟练得像走过千百遍。'}
+      ]
+    },
+    {
+      scene_id:'1-2',
+      location:'便利店收银台',
+      time_of_day:'夜',
+      interior:true,
+      characters:['林夏','西装男'],
+      atmosphere:'两人隔着一米宽的收银台，雨声被玻璃隔在外面，空气像凝住了一样。',
+      beats:[
+        {type:'dialogue', speaker:'西装男', emotion:'把咖啡放在台面上，低声', line:'第三次了。'},
+        {type:'dialogue', speaker:'林夏', emotion:'皱眉', line:'先生，您说的是什么第三次？'},
+        {type:'dialogue', speaker:'西装男', emotion:'抬头，眼神疲惫', line:'你每次都会问这句话。'},
+        {type:'action', content:'△ 收银机屏幕突然跳出一行乱码，随后恢复正常。'},
+        {type:'dialogue', speaker:'林夏', emotion:'后退半步', line:'您……认识我？'},
+        {type:'dialogue', speaker:'西装男', emotion:'苦笑', line:'比你想象的熟。'}
+      ]
+    }
+  ]
+};
+
+const clone = o => JSON.parse(JSON.stringify(o));
+let data = clone(SAMPLE);
+let activeSi = 0;
+
+/* =====================================================
+   2. 渲染场景
+   ===================================================== */
+function renderScenes(){
+  scenesEl.innerHTML = data.scenes.map((sc, si) => sceneHTML(sc, si)).join('');
+  refreshOutline();
+}
+
+function sceneHTML(sc, si){
+  const P = `scenes.${si}`;
+  const beats = sc.beats.map((b, bi) => beatHTML(b, si, bi)).join('');
+  const chars = Array.isArray(sc.characters) ? sc.characters.join('、') : '';
+
+  return `
+  <section class="scene" data-si="${si}" id="scene-${si}">
+    <div class="slug">
+      <span class="ce slug-num" contenteditable="true" spellcheck="false"
+        data-path="${P}.scene_id" data-ph="1-1">${esc(sc.scene_id)}</span>
+      <span class="slug-dot">·</span>
+      <button class="tog" data-act="toggle-io" data-si="${si}">
+        ${sc.interior ? '内' : '外'}
+      </button>
+      <span class="ce slug-loc" contenteditable="true" spellcheck="false"
+        data-path="${P}.location" data-ph="地点">${esc(sc.location)}</span>
+      <button class="tog time" data-act="toggle-time" data-si="${si}">
+        ${esc(sc.time_of_day)}
+      </button>
+    </div>
+
+    <div class="s-meta">
+      <span class="mk">人物</span>
+      <span class="mv ce" contenteditable="true" spellcheck="false"
+        data-path="${P}.characters" data-type="list" data-ph="角色A、角色B">${esc(chars)}</span>
+    </div>
+    <div class="s-meta">
+      <span class="mk">氛围</span>
+      <span class="mv ce" contenteditable="true" spellcheck="false"
+        data-path="${P}.atmosphere" data-ph="场景氛围描述">${esc(sc.atmosphere)}</span>
+    </div>
+
+    <div class="beats">${beats}</div>
+
+    <div class="s-tools">
+      <button data-act="add-action" data-si="${si}">＋ 动作</button>
+      <button data-act="add-dialogue" data-si="${si}">＋ 对白</button>
+      <span class="grow"></span>
+      <button data-act="move-scene-up" data-si="${si}" title="上移场次">↑</button>
+      <button data-act="move-scene-down" data-si="${si}" title="下移场次">↓</button>
+      <button data-act="del-scene" data-si="${si}" class="danger" title="删除场次">删除</button>
+    </div>
+  </section>`;
+}
+
+function beatHTML(b, si, bi){
+  const P = `scenes.${si}.beats.${bi}`;
+  const tools = `
+    <div class="line-tools">
+      <button class="lt" data-act="move-beat-up" data-si="${si}" data-bi="${bi}" title="上移">↑</button>
+      <button class="lt" data-act="move-beat-down" data-si="${si}" data-bi="${bi}" title="下移">↓</button>
+      <button class="lt" data-act="toggle-beat" data-si="${si}" data-bi="${bi}" title="切换动作/对白">⇄</button>
+      <button class="lt del" data-act="del-beat" data-si="${si}" data-bi="${bi}" title="删除">×</button>
+    </div>`;
+
+  if (b.type === 'action'){
+    const txt = String(b.content || '').replace(/^[△▲]\s*/, '');
+    return `
+      <div class="line action" data-bi="${bi}">
+        <span class="marker">△</span><span class="ce txt" contenteditable="true"
+          spellcheck="false" data-path="${P}.content" data-ph="动作描述">${esc(txt)}</span>
+        ${tools}
+      </div>`;
+  }
+
+  const hue = hashHue(b.speaker);
+  return `
+    <div class="line dialogue" data-bi="${bi}" style="--h:${hue}">
+      <span class="ce spk" contenteditable="true" spellcheck="false"
+        data-path="${P}.speaker" data-ph="角色">${esc(b.speaker)}</span><span class="emo">（<span class="ce"
+        contenteditable="true" spellcheck="false" data-path="${P}.emotion"
+        data-ph="情绪">${esc(b.emotion)}</span>）</span><span class="colon">：</span><span class="ce txt"
+        contenteditable="true" spellcheck="false" data-path="${P}.line"
+        data-ph="台词">${esc(b.line)}</span>
+      ${tools}
+    </div>`;
+}
+
+/* =====================================================
+   3. 大纲
+   ===================================================== */
+function outlineItemHTML(sc, si){
+  return `
+    <button class="ol-item" data-si="${si}">
+      <span class="ol-no">${esc(sc.scene_id || '—')}</span>
+      <span class="ol-loc">${esc(sc.location || '未命名地点')}</span>
+      <span class="ol-tag">${sc.interior ? '内' : '外'} · ${esc(sc.time_of_day || '日')}　${sc.beats.length} 条</span>
+    </button>`;
+}
+
+function refreshOutline(){
+  const keep = olList.scrollTop;
+  olList.innerHTML = data.scenes.length
+    ? data.scenes.map((sc, si) => outlineItemHTML(sc, si)).join('')
+    : '<div class="ol-empty">暂无场次</div>';
+  olList.scrollTop = keep;
+  $('olCount').textContent = data.scenes.length + ' 场';
+
+  activeSi = Math.min(Math.max(activeSi, 0), data.scenes.length - 1);
+  olList.querySelectorAll('.ol-item').forEach((it, i) => {
+    it.classList.toggle('active', i === activeSi);
+  });
+}
+
+function patchOutline(si){
+  const item = olList.querySelector(`.ol-item[data-si="${si}"]`);
+  if (!item) return;
+  const sc = data.scenes[si];
+  item.querySelector('.ol-no').textContent = sc.scene_id || '—';
+  item.querySelector('.ol-loc').textContent = sc.location || '未命名地点';
+  item.querySelector('.ol-tag').textContent =
+    `${sc.interior ? '内' : '外'} · ${sc.time_of_day || '日'}　${sc.beats.length} 条`;
+}
+
+function setActive(si){
+  if (si === activeSi) return;
+  activeSi = si;
+  olList.querySelectorAll('.ol-item').forEach((it, i) => {
+    it.classList.toggle('active', i === si);
+  });
+}
+
+function scrollToScene(si, smooth = true){
+  const el = scenesEl.querySelector(`.scene[data-si="${si}"]`);
+  if (!el) return;
+  const top = el.getBoundingClientRect().top
+            - docWrap.getBoundingClientRect().top
+            + docWrap.scrollTop - 20;
+  docWrap.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+  setActive(si);
+
+  el.dataset.flash = '1';
+  setTimeout(() => { delete el.dataset.flash; }, 1000);
+
+  if (window.matchMedia('(max-width:820px)').matches){
+    document.body.classList.remove('show-outline');
+  }
+}
+
+let scrollRaf = null;
+docWrap.addEventListener('scroll', () => {
+  if (scrollRaf) return;
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = null;
+    const threshold = docWrap.getBoundingClientRect().top + 90;
+    let idx = 0;
+    scenesEl.querySelectorAll('.scene').forEach((n, i) => {
+      if (n.getBoundingClientRect().top <= threshold) idx = i;
+    });
+    setActive(idx);
+  });
+}, { passive: true });
+
+olList.addEventListener('click', e => {
+  const item = e.target.closest('.ol-item');
+  if (!item) return;
+  scrollToScene(+item.dataset.si);
+});
+
+/* 窄屏折叠开关 */
+$('olHead').addEventListener('click', () => {
+  if (window.matchMedia('(max-width:820px)').matches){
+    document.body.classList.toggle('show-outline');
+  }
+});
+
+/* =====================================================
+   4. 元信息同步
+   ===================================================== */
+function displayVal(el, v){
+  return el.dataset.type === 'list'
+    ? (Array.isArray(v) ? v.join('、') : (v || ''))
+    : (v == null ? '' : String(v));
+}
+
+function fillMeta(){
+  docEl.querySelectorAll('[data-path^="meta."]').forEach(el => {
+    const v = getPath(data, pathArr(el.dataset.path));
+    const d = displayVal(el, v);
+    if (el.textContent !== d) el.textContent = d;
+  });
+}
+
+function syncPath(pathStr, exceptEl){
+  const val = getPath(data, pathArr(pathStr));
+  docEl.querySelectorAll(`[data-path="${pathStr}"]`).forEach(el => {
+    if (el === exceptEl) return;
+    const d = displayVal(el, val);
+    if (el.textContent !== d) el.textContent = d;
+  });
+}
+
+function updateHints(){
+  const ep = data.meta.episode || 1;
+  $('epLabel').textContent = ep;
+
+  const durSec = data.meta.duration_sec || 0;
+  $('durText').textContent = durSec ? `${fmtDuration(durSec)}（${durSec} 秒）` : '—';
+
+  const beatCount = data.scenes.reduce((a, s) => a + s.beats.length, 0);
+  $('foot').innerHTML =
+    `<span>第 <b>${ep}</b> 集</span><span class="sp">·</span>` +
+    `<span><b>${data.scenes.length}</b> 场</span><span class="sp">·</span>` +
+    `<span><b>${beatCount}</b> 条内容</span><span class="sp">·</span>` +
+    `<span>时长 <b>${durSec ? fmtDuration(durSec) : '未填'}</b></span>`;
+}
+
+function renderAll(){
+  fillMeta();
+  renderScenes();
+  updateHints();
+}
+
+/* =====================================================
+   5. 焦点
+   ===================================================== */
+function focusPath(path, placeEnd = true){
+  requestAnimationFrame(() => {
+    const el = docEl.querySelector(`[data-path="${path}"]`);
+    if (!el) return;
+    el.focus();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(!placeEnd);
+    const s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  });
+}
+
+function caretAtStart(el){
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return false;
+  const r = sel.getRangeAt(0);
+  if (!r.collapsed) return false;
+  if (r.startOffset !== 0) return false;
+  return el.contains(r.startContainer) || el === r.startContainer;
+}
+
+/* =====================================================
+   6. 输入
+   ===================================================== */
+docEl.addEventListener('input', e => {
+  const el = e.target.closest('[data-path]');
+  if (!el) return;
+
+  if (el.innerHTML === '<br>' || el.innerHTML === '<div><br></div>'){
+    el.innerHTML = '';
+  }
+
+  const pathStr = el.dataset.path;
+  const p = pathArr(pathStr);
+  const key = p.join('.');
+  let text = el.textContent;
+
+  /* 集数 */
+  if (key === 'meta.episode'){
+    const n = text.replace(/\D/g, '').slice(0, 3);
+    if (text !== n) el.textContent = n;
+    data.meta.episode = n ? parseInt(n, 10) : 1;
+    updateHints();
+    save();
+    return;
+  }
+
+  /* 时长 */
+  if (key === 'meta.duration_text'){
+    data.meta.duration_text = text;
+    data.meta.duration_sec = parseDuration(text);
+    syncPath(pathStr, el);
+    updateHints();
+    save();
+    return;
+  }
+
+  /* 人物列表 */
+  if (el.dataset.type === 'list'){
+    data.scenes[p[1]].characters = text
+      .split(/[、,，\/]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    save();
+    return;
+  }
+
+  /* 动作内容 */
+  if (p[0] === 'scenes' && p[2] === 'beats' && p[4] === 'content'){
+    if (/^[△▲]/.test(text)){
+      text = text.replace(/^[△▲]\s*/, '');
+      el.textContent = text;
+    }
+    data.scenes[p[1]].beats[p[3]].content = text;
+    save();
+    return;
+  }
+
+  /* 普通文本 */
+  setPath(data, p, text);
+
+  /* 说话人颜色 */
+  if (p[0] === 'scenes' && p[2] === 'beats' && p[4] === 'speaker'){
+    const line = el.closest('.line');
+    if (line) line.style.setProperty('--h', hashHue(text));
+  }
+
+  syncPath(pathStr, el);
+
+  /* 更新大纲 */
+  if (p[0] === 'scenes'){
+    patchOutline(p[1]);
+  }
+
+  save();
+});
+
+/* Enter / Backspace */
+docEl.addEventListener('keydown', e => {
+  if (e.isComposing) return;
+
+  const el = e.target.closest('[data-path]');
+  if (!el) return;
+
+  if (e.key === 'Enter'){
+    e.preventDefault();
+
+    const p = pathArr(el.dataset.path);
+    if (p[0] !== 'scenes' || p[2] !== 'beats') return;
+
+    const si = p[1], bi = p[3];
+    const cur = data.scenes[si].beats[bi];
+    if (!cur) return;
+
+    const nb = cur.type === 'dialogue'
+      ? { type:'dialogue', speaker:'', emotion:'', line:'' }
+      : { type:'action', content:'' };
+
+    data.scenes[si].beats.splice(bi + 1, 0, nb);
+    renderScenes();
+    save();
+
+    const field = cur.type === 'dialogue' ? 'speaker' : 'content';
+    focusPath(`scenes.${si}.beats.${bi + 1}.${field}`);
+    return;
+  }
+
+  if (e.key === 'Backspace'){
+    const p = pathArr(el.dataset.path);
+    if (p[0] !== 'scenes' || p[2] !== 'beats') return;
+    if (!caretAtStart(el)) return;
+
+    const si = p[1], bi = p[3];
+    const b = data.scenes[si].beats[bi];
+    if (!b) return;
+
+    const empty = b.type === 'action'
+      ? !String(b.content || '').trim()
+      : (!String(b.speaker || '').trim() &&
+         !String(b.line || '').trim() &&
+         !String(b.emotion || '').trim());
+
+    if (!empty) return;
+
+    e.preventDefault();
+    data.scenes[si].beats.splice(bi, 1);
+    renderScenes();
+    save();
+
+    const prev = data.scenes[si].beats[bi - 1];
+    if (prev){
+      const f = prev.type === 'dialogue' ? 'line' : 'content';
+      focusPath(`scenes.${si}.beats.${bi - 1}.${f}`);
+    } else {
+      focusPath(`scenes.${si}.location`);
+    }
+  }
+});
+
+/* 粘贴清理 */
+docEl.addEventListener('paste', e => {
+  const el = e.target.closest('[data-path]');
+  if (!el) return;
+  e.preventDefault();
+  const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, txt.replace(/\s*\n+\s*/g, ' '));
+});
+
+/* 人物列表失焦规范化 */
+docEl.addEventListener('focusout', e => {
+  const el = e.target.closest('[data-path]');
+  if (!el) return;
+  if (el.dataset.type === 'list'){
+    syncPath(el.dataset.path, null);
+  }
+});
+
+/* =====================================================
+   7. 结构操作
+   ===================================================== */
+function nextSceneId(){
+  const ep = data.meta.episode || 1;
+  let max = 0;
+  data.scenes.forEach(s => {
+    const m = String(s.scene_id).match(/^\d+\s*-\s*(\d+)$/);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return `${ep}-${max + 1}`;
+}
+
+function addScene(){
+  const si = data.scenes.length;
+  data.scenes.push(newScene(nextSceneId()));
+  renderScenes();
+  updateHints();
+  save();
+  focusPath(`scenes.${si}.location`);
+  setTimeout(() => scrollToScene(si), 60);
+  toast('已添加场次');
+}
+
+docEl.addEventListener('click', e => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const act = btn.dataset.act;
+  const si = btn.dataset.si != null ? +btn.dataset.si : null;
+  const bi = btn.dataset.bi != null ? +btn.dataset.bi : null;
+
+  switch(act){
+
+    case 'toggle-io': {
+      const sc = data.scenes[si];
+      sc.interior = !sc.interior;
+      btn.textContent = sc.interior ? '内' : '外';
+      patchOutline(si);
+      save();
+      break;
+    }
+
+    case 'toggle-time': {
+      const sc = data.scenes[si];
+      sc.time_of_day = sc.time_of_day === '日' ? '夜' : '日';
+      btn.textContent = sc.time_of_day;
+      patchOutline(si);
+      save();
+      break;
+    }
+
+    case 'move-scene-up': {
+      if (si > 0){
+        const a = data.scenes;
+        [a[si-1], a[si]] = [a[si], a[si-1]];
+        activeSi = si - 1;
+        renderScenes(); updateHints(); save();
+      }
+      break;
+    }
+
+    case 'move-scene-down': {
+      if (si < data.scenes.length - 1){
+        const a = data.scenes;
+        [a[si+1], a[si]] = [a[si], a[si+1]];
+        activeSi = si + 1;
+        renderScenes(); updateHints(); save();
+      }
+      break;
+    }
+
+    case 'del-scene': {
+      if (data.scenes.length === 1){ toast('至少保留一个场次'); return; }
+      if (!confirm('删除这个场次？')) return;
+      data.scenes.splice(si, 1);
+      activeSi = Math.min(activeSi, data.scenes.length - 1);
+      renderScenes(); updateHints(); save();
+      toast('场次已删除');
+      break;
+    }
+
+    case 'add-action': {
+      data.scenes[si].beats.push({ type:'action', content:'' });
+      renderScenes(); save();
+      focusPath(`scenes.${si}.beats.${data.scenes[si].beats.length - 1}.content`);
+      break;
+    }
+
+    case 'add-dialogue': {
+      data.scenes[si].beats.push({ type:'dialogue', speaker:'', emotion:'', line:'' });
+      renderScenes(); save();
+      focusPath(`scenes.${si}.beats.${data.scenes[si].beats.length - 1}.speaker`);
+      break;
+    }
+
+    case 'move-beat-up': {
+      const a = data.scenes[si].beats;
+      if (bi > 0){
+        [a[bi-1], a[bi]] = [a[bi], a[bi-1]];
+        renderScenes(); save();
+      }
+      break;
+    }
+
+    case 'move-beat-down': {
+      const a = data.scenes[si].beats;
+      if (bi < a.length - 1){
+        [a[bi+1], a[bi]] = [a[bi], a[bi+1]];
+        renderScenes(); save();
+      }
+      break;
+    }
+
+    case 'del-beat': {
+      data.scenes[si].beats.splice(bi, 1);
+      renderScenes(); updateHints(); save();
+      break;
+    }
+
+    case 'toggle-beat': {
+      const arr = data.scenes[si].beats;
+      const b = arr[bi];
+      if (b.type === 'action'){
+        arr[bi] = {
+          type:'dialogue', speaker:'', emotion:'',
+          line: String(b.content || '').replace(/^[△▲]\s*/, '')
+        };
+      } else {
+        arr[bi] = {
+          type:'action',
+          content: b.line ? '△ ' + b.line : ''
+        };
+      }
+      renderScenes(); save();
+      break;
+    }
+  }
+});
+
+/* 添加场次按钮 */
+$('btnAddScene').addEventListener('click', addScene);
+$('olAdd').addEventListener('click', addScene);
+
+/* =====================================================
+   8. 保存
+   ===================================================== */
+let saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try{ localStorage.setItem(STORAGE, JSON.stringify(data)); }catch(e){}
+  }, 350);
+}
+
+/* =====================================================
+   9. 启动
+   ===================================================== */
+(function init(){
+  let loaded = null;
+  try{
+    const raw = localStorage.getItem(STORAGE);
+    if (raw) loaded = JSON.parse(raw);
+  }catch(e){}
+
+  if (loaded && loaded.meta && Array.isArray(loaded.scenes) && loaded.scenes.length){
+    data = loaded;
+  } else {
+    data = clone(SAMPLE);
+  }
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

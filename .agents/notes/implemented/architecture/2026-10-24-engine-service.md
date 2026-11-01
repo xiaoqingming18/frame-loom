@@ -2,6 +2,8 @@
 
 Status: implemented
 
+2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)需要独立的项目数据库生命周期。代码尚未实施；现有应用级数据库、鉴权与部署边界继续有效，本轮不会把剧本写入应用级数据库。
+
 ## Problem
 
 [桌面架构](2026-10-24-desktop-stack-and-process-model.md)中的 engine 需要独立验证：数据库迁移必须先于监听，HTTP 只能由持有令牌的应用访问，生产部署必须带齐 SQLite 原生模块与共享契约。仅通过开发目录启动，无法证明安装包中的独立服务可用。

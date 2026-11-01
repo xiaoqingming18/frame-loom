@@ -2,6 +2,8 @@
 
 Status: implemented
 
+2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)复用本篇模型服务，仅为剧本全文解析增加必要的有界调用选项；代码尚未实施，不改变渠道、协议选路和画布生成能力。
+
 ## Problem
 
 模型服务是画布生成、后续 Agent 与 TTS 的共同基建。现有实现经三轮演进（[模型管理](../../proposed/architecture/2026-10-24-model-management.md)、[接入路由](../../rejected/architecture/2026-10-27-model-service-protocol-routing.md)、[配置与模型演进](../../rejected/architecture/2026-10-27-model-service-experience-and-evolution.md)），留下以下结构性问题（2026-10-28 源码调查）：

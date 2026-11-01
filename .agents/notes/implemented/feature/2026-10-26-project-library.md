@@ -2,6 +2,8 @@
 
 Status: implemented
 
+2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)将仅把剧集／剧本／设定域从项目 JSON 改为项目 SQLite，并清除旧剧本域内容。代码尚未实施；本篇画布、媒体、资产和本机登记的决定继续有效，不把整个项目存储改成 SQLite。
+
 ## Problem
 
 左栏「项目库」目前只有一个静态空状态页（`routes/projects.tsx`）。画布只能在「画布测试」页里用固定 id `lab` 打开，数据存在 engine 的 `canvas_documents` 表，媒体全部放在全局 `<userData>/media/`，没有项目这一层。用户要把「项目 → 创作页（画布）→ 项目资产」作为正式的创作组织方式：

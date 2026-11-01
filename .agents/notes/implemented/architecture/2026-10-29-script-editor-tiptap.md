@@ -2,6 +2,8 @@
 
 Status: implemented
 
+2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)继续使用本篇 Tiptap 依赖和 feature 边界，但将替代扁平节点模型与旧编辑交互。方案已确认、代码未实施；输入法、撤销、稳定身份与 CSP 的既有教训继续适用。
+
 ## Problem
 
 [剧集与结构化剧本](../feature/2026-10-29-episodes-and-structured-scripts.md)要求编辑器内的文档就是标准剧本格式：一个扁平的带类型段落列表，每个段落有稳定 id，并且要支持编剧软件式的键盘规则、段落手柄拖动、存疑标记、元素下划线高亮、人物自动补全和撤销重做。选型前仓库没有富文本编辑器依赖。手写 `contenteditable` 要自己处理输入法组字、选区、撤销和粘贴，风险过高。
