@@ -2,7 +2,7 @@
 
 Status: implemented
 
-2026-11-01 用户已确认后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)，其中移除 Markdown 双向编辑、旧分类和前言附录，改由模型返回标准 JSON。代码尚未实施；本篇保留现有功能事实、原文保真教训及历史验收，不改写成新方案已经完成。
+2026-11-01 用户已确认后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)，其中移除 Markdown 双向编辑、旧分类和前言附录，改由模型返回标准 JSON。新路径已实施，自动模型模拟、来源保真和失败隔离测试通过；真实模型逐场校对仍未完成。本篇保留旧功能历史及原文保真教训，不将旧实现描述为当前入口。
 
 ## Problem
 
@@ -72,6 +72,7 @@ TagAttrs = { label: string（1–8 个字符） }               // sound 和 pro
   - 没有 attrs 的 sound 补为 `{ label: '音效' }`。
 
   迁移写在 `ScriptDocument` schema 中（参照 `CanvasDocument` 的 transform 写法），engine 和 desktop 都只调用这一个 schema。
+
 - `production` 的 `text` 是标签之后的内容。它属于「正文类」：参与原文完整性检查、元素匹配和下游流程。
 - 新增本机偏好：`DesktopPreferences` 加入 `scriptView: 'styled' | 'markdown'`（缺省为 styled）和 `scriptMentions: boolean`（缺省为 false），读写沿用现有的 `preferences:get` 和 `preferences:set`，主进程代码不需要修改。
 
@@ -119,28 +120,28 @@ TagAttrs = { label: string（1–8 个字符） }               // sound 和 pro
 
 对正文中的每一行按以下顺序判断，命中第一条就停止：
 
-| 顺序 | 条件（基于 `normalizeLine` 的结果） | 结果 | 置信 |
-| --- | --- | --- | --- |
-| 1 | 空行 | 跳过 | — |
-| 2 | 结构行；或者 `content` 匹配 `^第\s*[0-9一二三四五六七八九十百]+\s*集` | 不生成段落，计入覆盖 | 确定 |
-| 3 | `content` 匹配 `^第[0-9一二三四五六七八九十]+幕` 或 `^ACT\s+\S+` | act，text 为 content | 确定 |
-| 4 | 场标题，见下文「场标题解析」 | scene | 见下文 |
-| 5 | `kind` 为 quote | note，text 为 content | 确定 |
-| 6 | `kind` 为 table | note，text 为 content | 确定 |
-| 7 | `kind` 为 heading（规则 3、4 以外，且不是附录的开头） | note，text 为 content | 确定 |
-| 8 | `content` 匹配 `^(人物\|出场人物\|角色)[:：]` → cast（同原规则）；匹配 `^(字幕\|画面字幕\|屏幕文字\|黑屏字幕)(:\|：)(.*)$` → text，去掉前缀 | 见左 | 确定 |
-| 9 | `content` 以 `△▲※` 开头 | action，去掉标记 | 确定 |
-| 10 | `content` 匹配 `^【(音效\|音乐\|BGM\|音\|配乐)】(.*)$` 或 `^\[(音效\|SFX)\]\s*(.*)$` | sound，label 为括号内文字（`[音效]` 和 `[SFX]` 的 label 都记为「音效」），text 为后面的内容 | 确定 |
-| 11 | `content` 匹配 `^【([^】]{1,8})】(.*)$` | production，label 为括号内文字，text 为后面的内容（可以为空） | 确定 |
-| 12 | **独立角色行**：`kind` 为 plain；下一行（原文中的下一行）不为空；并且满足以下两种情况之一：一是 `boldHead` 是合法名字，`boldRest` 为空或是一整个括号（全角或半角括号包住全部内容，括号内不含括号）；二是没有粗体，`content` 等于某个已知名字，或等于「已知名字＋一整个括号」 | character：text 为名字，`extension` 为括号内文字（没有括号时为 null），`delivery` 从 extension 推导（含「画外」「OS」→ os，含「旁白」「VO」→ vo，含「内心」「心声」→ inner，否则为 null）。然后把紧随其后的每一个非空行纳入这一组，直到遇到空行、结构行、幕或场标题为止：整行是括号的生成 parenthetical（text 为括号内文字），其余生成 dialogue（text 为 content） | 确定 |
-| 13 | `content` 匹配 `^(切至\|切到\|切入\|硬切\|叠化\|淡入\|淡出\|划入\|划出\|转场\|黑场\|CUT TO\|FADE IN\|FADE OUT\|DISSOLVE TO)`，且 `content` 不超过 12 个字符 | transition，text 为 content | 确定 |
-| 14 | `content` 整行是括号，括号内是转场词（闪回、回忆、切至、切到、叠化、淡入、淡出、转场） | transition（同原规则 9） | 存疑 |
-| 15 | `kind` 为 list | action，text 为 content，**不做对白识别** | 确定 |
-| 16 | `kind` 为 plain，`content` 匹配 `^NAME([（(][^）)]*[）)])?[:：]\s*(\S.*)$`，冒号后的内容去掉空白后不为空，并且 NAME 不是停用词 | 名字是已知名字时：character（NAME 后面的括号内文字写入 `extension`，`delivery` 的推导方式同规则 12），再拆出 parenthetical（如有）和 dialogue（同原规则 10），确定；不是已知名字、但这份剧本使用独立角色行写法时：action（全文），候选项为 dialogue（角色＝NAME，text＝冒号后的内容）和 action，存疑；其余情况沿用原规则 10（NAME 超过 4 个字符时存疑） | 见左 |
-| 17 | 整行是括号，上一段是 character、parenthetical 或 dialogue | parenthetical | 确定 |
-| 18 | 整行是括号（其他情况） | note，text 为 content | 确定 |
-| 19 | 以「已知名字＋空白＋内容」开头，没有冒号 | 同原规则 12 | 存疑 |
-| 20 | 其他行 | action，沿用原规则 13（本场有以 △ 开头的行时存疑） | 见左 |
+| 顺序 | 条件（基于 `normalizeLine` 的结果）                                                                                                                                                                                                                                          | 结果                                                                                                                                                                                                                                                                                                                                                               | 置信   |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| 1    | 空行                                                                                                                                                                                                                                                                         | 跳过                                                                                                                                                                                                                                                                                                                                                               | —      |
+| 2    | 结构行；或者 `content` 匹配 `^第\s*[0-9一二三四五六七八九十百]+\s*集`                                                                                                                                                                                                        | 不生成段落，计入覆盖                                                                                                                                                                                                                                                                                                                                               | 确定   |
+| 3    | `content` 匹配 `^第[0-9一二三四五六七八九十]+幕` 或 `^ACT\s+\S+`                                                                                                                                                                                                             | act，text 为 content                                                                                                                                                                                                                                                                                                                                               | 确定   |
+| 4    | 场标题，见下文「场标题解析」                                                                                                                                                                                                                                                 | scene                                                                                                                                                                                                                                                                                                                                                              | 见下文 |
+| 5    | `kind` 为 quote                                                                                                                                                                                                                                                              | note，text 为 content                                                                                                                                                                                                                                                                                                                                              | 确定   |
+| 6    | `kind` 为 table                                                                                                                                                                                                                                                              | note，text 为 content                                                                                                                                                                                                                                                                                                                                              | 确定   |
+| 7    | `kind` 为 heading（规则 3、4 以外，且不是附录的开头）                                                                                                                                                                                                                        | note，text 为 content                                                                                                                                                                                                                                                                                                                                              | 确定   |
+| 8    | `content` 匹配 `^(人物\|出场人物\|角色)[:：]` → cast（同原规则）；匹配 `^(字幕\|画面字幕\|屏幕文字\|黑屏字幕)(:\|：)(.*)$` → text，去掉前缀                                                                                                                                  | 见左                                                                                                                                                                                                                                                                                                                                                               | 确定   |
+| 9    | `content` 以 `△▲※` 开头                                                                                                                                                                                                                                                      | action，去掉标记                                                                                                                                                                                                                                                                                                                                                   | 确定   |
+| 10   | `content` 匹配 `^【(音效\|音乐\|BGM\|音\|配乐)】(.*)$` 或 `^\[(音效\|SFX)\]\s*(.*)$`                                                                                                                                                                                         | sound，label 为括号内文字（`[音效]` 和 `[SFX]` 的 label 都记为「音效」），text 为后面的内容                                                                                                                                                                                                                                                                        | 确定   |
+| 11   | `content` 匹配 `^【([^】]{1,8})】(.*)$`                                                                                                                                                                                                                                      | production，label 为括号内文字，text 为后面的内容（可以为空）                                                                                                                                                                                                                                                                                                      | 确定   |
+| 12   | **独立角色行**：`kind` 为 plain；下一行（原文中的下一行）不为空；并且满足以下两种情况之一：一是 `boldHead` 是合法名字，`boldRest` 为空或是一整个括号（全角或半角括号包住全部内容，括号内不含括号）；二是没有粗体，`content` 等于某个已知名字，或等于「已知名字＋一整个括号」 | character：text 为名字，`extension` 为括号内文字（没有括号时为 null），`delivery` 从 extension 推导（含「画外」「OS」→ os，含「旁白」「VO」→ vo，含「内心」「心声」→ inner，否则为 null）。然后把紧随其后的每一个非空行纳入这一组，直到遇到空行、结构行、幕或场标题为止：整行是括号的生成 parenthetical（text 为括号内文字），其余生成 dialogue（text 为 content） | 确定   |
+| 13   | `content` 匹配 `^(切至\|切到\|切入\|硬切\|叠化\|淡入\|淡出\|划入\|划出\|转场\|黑场\|CUT TO\|FADE IN\|FADE OUT\|DISSOLVE TO)`，且 `content` 不超过 12 个字符                                                                                                                  | transition，text 为 content                                                                                                                                                                                                                                                                                                                                        | 确定   |
+| 14   | `content` 整行是括号，括号内是转场词（闪回、回忆、切至、切到、叠化、淡入、淡出、转场）                                                                                                                                                                                       | transition（同原规则 9）                                                                                                                                                                                                                                                                                                                                           | 存疑   |
+| 15   | `kind` 为 list                                                                                                                                                                                                                                                               | action，text 为 content，**不做对白识别**                                                                                                                                                                                                                                                                                                                          | 确定   |
+| 16   | `kind` 为 plain，`content` 匹配 `^NAME([（(][^）)]*[）)])?[:：]\s*(\S.*)$`，冒号后的内容去掉空白后不为空，并且 NAME 不是停用词                                                                                                                                               | 名字是已知名字时：character（NAME 后面的括号内文字写入 `extension`，`delivery` 的推导方式同规则 12），再拆出 parenthetical（如有）和 dialogue（同原规则 10），确定；不是已知名字、但这份剧本使用独立角色行写法时：action（全文），候选项为 dialogue（角色＝NAME，text＝冒号后的内容）和 action，存疑；其余情况沿用原规则 10（NAME 超过 4 个字符时存疑）            | 见左   |
+| 17   | 整行是括号，上一段是 character、parenthetical 或 dialogue                                                                                                                                                                                                                    | parenthetical                                                                                                                                                                                                                                                                                                                                                      | 确定   |
+| 18   | 整行是括号（其他情况）                                                                                                                                                                                                                                                       | note，text 为 content                                                                                                                                                                                                                                                                                                                                              | 确定   |
+| 19   | 以「已知名字＋空白＋内容」开头，没有冒号                                                                                                                                                                                                                                     | 同原规则 12                                                                                                                                                                                                                                                                                                                                                        | 存疑   |
+| 20   | 其他行                                                                                                                                                                                                                                                                       | action，沿用原规则 13（本场有以 △ 开头的行时存疑）                                                                                                                                                                                                                                                                                                                 | 见左   |
 
 - **合法名字**：1–12 个字符，不包含空白、冒号、括号，也不包含 `，。！？、；“”"'…—·`。
 - **停用词**：时间、地点、人物、字幕、备注、注、反打、特写、近景、中景、远景、全景、镜头、画面、场景、片名、景别，以及规则 13 中的全部转场词。
@@ -154,7 +155,7 @@ TagAttrs = { label: string（1–8 个字符） }               // sound 和 pro
    - **A**：H 以原有的前缀开头，即 `\d+[-－—.]\d+`、`第N场`、`场景N`、`场N`、`INT`、`EXT`；
    - **B**：H 以 `\d+[.、．]\s*` 开头，并且其后的部分去掉末尾括号、按空白和破折号切词后，至少有一个词恰好是内外词，或者恰好是时间词集中的词。时间词集为：日、白天、夜、夜晚、晨、清晨、昏、黄昏、傍晚、正午、中午、上午、下午、午后、拂晓、黎明、凌晨、深夜、阴天；
    - **C**：有 `boldHead`，并且 `boldHead` 以 `\d+[.、．]` 开头，或者有时间码；同时不满足规则 12。
-3. 从 H 中去掉序号或前缀后，如果剩余部分以一整个全角或半角括号结尾，就把括号内的文字放进 `note`。然后按 `\s*[—–－]+\s*` 或 ` - ` 切成两部分：前半部分按空白（包括全角空格）切词，其中的内外词决定 `space`，其余的词用一个空格连起来作为 `location`；后半部分整体作为 `timeText`。没有破折号时，逐词判断：恰好是内外词的决定 `space`，恰好是时间词集中的词作为 `timeText`，其余的词用一个空格连起来作为 `location`。
+3. 从 H 中去掉序号或前缀后，如果剩余部分以一整个全角或半角括号结尾，就把括号内的文字放进 `note`。然后按 `\s*[—–－]+\s*` 或 `-` 切成两部分：前半部分按空白（包括全角空格）切词，其中的内外词决定 `space`，其余的词用一个空格连起来作为 `location`；后半部分整体作为 `timeText`。没有破折号时，逐词判断：恰好是内外词的决定 `space`，恰好是时间词集中的词作为 `timeText`，其余的词用一个空格连起来作为 `location`。
 4. **内外词**：内景、内 → int；外景、外 → ext；内景／外景、外景／内景、内外、INT./EXT → intext；INT → int；EXT → ext。
 5. **时间映射**：`timeText` 按以下顺序判断，命中第一条就停止：
    1. 含「夜」→ night；
@@ -185,6 +186,7 @@ TagAttrs = { label: string（1–8 个字符） }               // sound 和 pro
   - 在所有剧集的前言和附录中，名称和别名也都没有出现。
 
   已确认的元素从不自动删除。其他元素的 `suggestedMergeInto` 如果指向被删除的元素，同时清除。这一步复用出现位置的缓存，缓存中增加每集前言和附录的匹配结果。
+
 - 用户现有项目中已经生成的错误元素，在重新导入或修改对应文字之后，会被这条规则清理。不另外写迁移。
 
 ### 段落类型切换
@@ -270,6 +272,7 @@ contracts 提供 `retypeBlock(block, type, newId): ScriptBlock[]`。编辑器的
   - note：`> {text}`。
 
   spaceLabel 的对应关系为：int 为「内景」，ext 为「外景」，intext 为「内景／外景」。时间的中文名为：day 日，night 夜，dawn 清晨，dusk 黄昏。
+
 - **段落之间的分隔**：
   - 第一个段落前面不加分隔；
   - scene 和 act 前面加「空行、`---`、空行」；
@@ -296,14 +299,14 @@ contracts 提供 `retypeBlock(block, type, newId): ScriptBlock[]`。编辑器的
 
 ### 代码位置
 
-| 内容 | 位置 |
-| --- | --- |
-| schema v2 与迁移 | `packages/contracts/src/scripts.ts` |
-| `normalizeLine`、规则解析器、场标题解析、角色表解析、`retypeBlock`、`retypeLine` | `packages/contracts/src/script-parse.ts` |
-| `renderScriptMarkdown`、`applyMarkdownEdit` | `packages/contracts/src/script-markdown.ts` |
-| 偏好字段 | `packages/contracts/src/desktop.ts` |
-| 转换、角色表入库、同步与清理 | `apps/engine/src/modules/scripts/` |
-| 编辑器各项改动 | `apps/desktop/src/renderer/src/features/projects/script/` |
+| 内容                                                                             | 位置                                                      |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| schema v2 与迁移                                                                 | `packages/contracts/src/scripts.ts`                       |
+| `normalizeLine`、规则解析器、场标题解析、角色表解析、`retypeBlock`、`retypeLine` | `packages/contracts/src/script-parse.ts`                  |
+| `renderScriptMarkdown`、`applyMarkdownEdit`                                      | `packages/contracts/src/script-markdown.ts`               |
+| 偏好字段                                                                         | `packages/contracts/src/desktop.ts`                       |
+| 转换、角色表入库、同步与清理                                                     | `apps/engine/src/modules/scripts/`                        |
+| 编辑器各项改动                                                                   | `apps/desktop/src/renderer/src/features/projects/script/` |
 
 ### 相关笔记核对
 

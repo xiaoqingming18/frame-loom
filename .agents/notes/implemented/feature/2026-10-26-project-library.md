@@ -2,7 +2,7 @@
 
 Status: implemented
 
-2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)将仅把剧集／剧本／设定域从项目 JSON 改为项目 SQLite，并清除旧剧本域内容。代码尚未实施；本篇画布、媒体、资产和本机登记的决定继续有效，不把整个项目存储改成 SQLite。
+2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)已将剧集／剧本／设定域改为项目 SQLite，并增加首次旧项目限定清理；本篇描述的 `project.json` 剧集摘要、JSON 剧本回收等仅属于旧版历史。画布、媒体、资产和本机登记仍沿用本篇决定，不把整个项目存储改成 SQLite；加固目录版烟测已通过，真实模型、原生输入法和同缩放原型对照仍待验收。
 
 ## Problem
 
@@ -70,12 +70,12 @@ Status: implemented
 
 ### 概念与关系
 
-| 概念 | 实体 | 说明 |
-| --- | --- | --- |
-| 项目 | 本地文件夹，加上项目库注册表中的一行 | 以文件夹为准，注册表只用于列表、搜索、排序和定位 |
-| 创作页 | 项目内的一个页面文件 | 一页一张画布，按创建顺序排列 |
-| 项目资产 | 项目根目录下的用户文件和文件夹 | 用户可以直接在资源管理器中管理 |
-| 项目媒体 | `.frameloom/media/` 下按内容寻址的文件 | 画布节点引用的上传文件和生成产物 |
+| 概念     | 实体                                   | 说明                                             |
+| -------- | -------------------------------------- | ------------------------------------------------ |
+| 项目     | 本地文件夹，加上项目库注册表中的一行   | 以文件夹为准，注册表只用于列表、搜索、排序和定位 |
+| 创作页   | 项目内的一个页面文件                   | 一页一张画布，按创建顺序排列                     |
+| 项目资产 | 项目根目录下的用户文件和文件夹         | 用户可以直接在资源管理器中管理                   |
+| 项目媒体 | `.frameloom/media/` 下按内容寻址的文件 | 画布节点引用的上传文件和生成产物                 |
 
 - 画布包不感知项目。desktop 按「项目 + 创作页」实现 `CanvasHost`，画布 id 就是创作页 id。
 - 资产和媒体之间是复制关系，不是链接：资产导入画布时按内容复制进媒体库，画布产物「保存到项目资产」时导出为一个真实文件。用户在资源管理器中改名或删除资产，不会让画布断图；代价是同一个文件可能存两份。
@@ -109,7 +109,13 @@ Status: implemented
   "createdAt": "<ISO>",
   "updatedAt": "<ISO>",
   "pages": [
-    { "id": "<uuid>", "name": "第一集", "createdAt": "<ISO>", "updatedAt": "<ISO>", "coverSha256": null }
+    {
+      "id": "<uuid>",
+      "name": "第一集",
+      "createdAt": "<ISO>",
+      "updatedAt": "<ISO>",
+      "coverSha256": null
+    }
   ],
   "tags": [
     { "id": "builtin-prop", "name": "道具", "color": "blue", "builtin": true },
@@ -197,16 +203,16 @@ Status: implemented
 
 - 接口（路径都是相对项目根目录、使用 `/` 分隔的字符串，engine 按上文规则校验）：
 
-  | 能力 | 接口 |
-  | --- | --- |
-  | 列目录 | `GET /projects/:id/assets?path=` → 名称、类型（目录／文件）、大小、修改时间、媒体类别（image／video／audio／other） |
-  | 搜索 | `GET /projects/:id/assets/search?q=` → 全项目递归、名称不区分大小写子串匹配，结果带所在目录；最多 500 条并提示「结果过多，请细化关键词」；跳过 `.frameloom`、链接和无权限目录 |
-  | 新建文件夹 | `POST /projects/:id/assets/folders { path, name }`，同名时报错 |
-  | 上传 | `POST /projects/:id/assets/files?path=&name=`，二进制流，单文件上限 4 GiB；先用 `statfs` 检查剩余空间，写入 `tmp/` 后硬链接发布并移除临时链接，同名时按「名称 (2).ext」递增；返回最终名称 |
-  | 重命名 | `PATCH /projects/:id/assets { path, name }`，同名时报错 |
-  | 移动 | `POST /projects/:id/assets/move { path, toFolder }`，同名时报错，不能移入自身或子目录 |
-  | 从资产导入媒体 | `POST /projects/:id/media/from-asset { path }` → MediaFile，仅限图片和视频 |
-  | 保存到资产 | `POST /projects/:id/assets/from-media { sha256, folder, name }`，同名时自动改名 |
+  | 能力           | 接口                                                                                                                                                                                      |
+  | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 列目录         | `GET /projects/:id/assets?path=` → 名称、类型（目录／文件）、大小、修改时间、媒体类别（image／video／audio／other）                                                                       |
+  | 搜索           | `GET /projects/:id/assets/search?q=` → 全项目递归、名称不区分大小写子串匹配，结果带所在目录；最多 500 条并提示「结果过多，请细化关键词」；跳过 `.frameloom`、链接和无权限目录             |
+  | 新建文件夹     | `POST /projects/:id/assets/folders { path, name }`，同名时报错                                                                                                                            |
+  | 上传           | `POST /projects/:id/assets/files?path=&name=`，二进制流，单文件上限 4 GiB；先用 `statfs` 检查剩余空间，写入 `tmp/` 后硬链接发布并移除临时链接，同名时按「名称 (2).ext」递增；返回最终名称 |
+  | 重命名         | `PATCH /projects/:id/assets { path, name }`，同名时报错                                                                                                                                   |
+  | 移动           | `POST /projects/:id/assets/move { path, toFolder }`，同名时报错，不能移入自身或子目录                                                                                                     |
+  | 从资产导入媒体 | `POST /projects/:id/media/from-asset { path }` → MediaFile，仅限图片和视频                                                                                                                |
+  | 保存到资产     | `POST /projects/:id/assets/from-media { sha256, folder, name }`，同名时自动改名                                                                                                           |
 
 - 删除资产（文件或文件夹）进入系统回收站，由主进程执行，确认框写明「将移到回收站」。
 - 上传队列在 renderer：最多 2 个并发，显示进度，可以取消和重试。组件 Effect 成对启动与清理队列，确保 StrictMode 重放后仍可接收文件；文件拖入时明确声明复制反馈。回归覆盖与根因见[资产上传修复](../bug-fix/2026-10-28-project-assets-upload-drop.md)。资源管理器拖入的文件夹本期跳过，并提示「暂不支持上传文件夹」。离开项目详情页时，如果还有未完成的上传，先确认「离开将取消剩余上传」。
@@ -227,12 +233,12 @@ Status: implemented
 
 ### 路由与界面
 
-| 路由 | 内容 |
-| --- | --- |
-| `/projects` | 项目库 |
+| 路由                                                            | 内容                                                                          |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `/projects`                                                     | 项目库                                                                        |
 | `/projects/$projectId?tab=episodes\|pages\|story\|assets&path=` | 项目详情。默认 `tab=episodes`；`path` 是资产当前目录；后退可回到原 Tab 和目录 |
-| `/projects/$projectId/pages/$pageId` | 画布页，铺满主区。外壳的全出血判断由 `/canvas-lab` 改为匹配此路由 |
-| `/projects/$projectId/episodes/$episodeId?block=` | 剧本页，铺满主区；可定位到指定段落 |
+| `/projects/$projectId/pages/$pageId`                            | 画布页，铺满主区。外壳的全出血判断由 `/canvas-lab` 改为匹配此路由             |
+| `/projects/$projectId/episodes/$episodeId?block=`               | 剧本页，铺满主区；可定位到指定段落                                            |
 
 - 代码放在 `features/projects/`：项目库、详情页、资产、画布宿主与持久化（由 `features/canvas-lab` 迁入后删除原目录），对外导出查询选项给侧栏使用。侧栏属于 `app/shell`，可以导入 feature。服务端数据用 Query；画布持久化继续由独立会话持有 revision。
 - 项目库对齐快照：

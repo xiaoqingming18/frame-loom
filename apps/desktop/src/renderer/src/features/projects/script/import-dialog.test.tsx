@@ -1,18 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { emptyScriptDocument } from '@frame-loom/contracts';
 import type { EngineClient } from '@/lib/engine-client';
-import type { ProjectProfile } from '@frame-loom/contracts';
 import { ImportDialog } from './import-dialog';
 afterEach(cleanup);
-const profile: ProjectProfile = { form: 'short', medium: 'live', genres: ['都市'], aspect: null };
-function setup(options: { complete?: boolean; hasBlocks?: boolean; flush?: boolean } = {}) {
-  const request = vi
-    .fn()
-    .mockImplementation((path: string) =>
-      Promise.resolve(path === '/models' ? [] : path === '/model-defaults' ? { chat: null } : {}),
-    );
-  const flush = vi.fn().mockResolvedValue(options.flush ?? true);
+function setup(enabled: boolean, hasScenes = false) {
+  const flush = vi.fn().mockResolvedValue(true),
+    close = vi.fn(),
+    imported = vi.fn().mockResolvedValue(undefined);
+  const submit = vi.fn<() => Promise<unknown>>().mockResolvedValue({});
+  const request = vi.fn((path: string) =>
+    path === '/models'
+      ? Promise.resolve([{ id: 'chat', displayName: '文本模型', enabled }])
+      : path === '/model-defaults'
+        ? Promise.resolve({ chat: 'chat' })
+        : submit(),
+  );
   render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -21,57 +25,50 @@ function setup(options: { complete?: boolean; hasBlocks?: boolean; flush?: boole
         client={{ request } as unknown as EngineClient}
         projectId="p"
         episodeId="e"
-        profile={options.complete ? profile : undefined}
-        hasBlocks={options.hasBlocks ?? false}
+        meta={
+          emptyScriptDocument({ name: '剧名', episode: { number: 1, title: '', duration_sec: 0 } })
+            .meta
+        }
+        hasScenes={hasScenes}
+        text="原文"
         flush={flush}
-        revision={() => 5}
-        onImported={vi.fn().mockResolvedValue(undefined)}
-        onClose={vi.fn()}
+        revision={() => 7}
+        onImported={imported}
+        onClose={close}
       />
     </QueryClientProvider>,
   );
-  fireEvent.change(screen.getByLabelText('剧本原文'), { target: { value: '△原文' } });
-  return { request, flush };
+  return { request, submit, flush, close, imported };
 }
-it('补齐三项后导入带 profile，无默认模型提示', async () => {
-  const { request } = setup();
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: '开始转换' }).disabled).toBe(true);
-  fireEvent.click(screen.getByRole('radio', { name: '短剧' }));
-  fireEvent.click(screen.getByRole('radio', { name: '真人实拍' }));
-  fireEvent.click(screen.getByRole('button', { name: '都市' }));
-  expect(
-    screen.getByText('未设置默认文本模型，将仅按规则识别，可在 设置 → 默认模型 中配置'),
-  ).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: '开始转换' }));
-  await waitFor(() =>
-    expect(request).toHaveBeenCalledWith(
-      expect.stringContaining('/script/import'),
-      expect.anything(),
-      { method: 'POST', body: { revision: 5, text: '△原文', profile } },
-    ),
-  );
+it('I03 无可用模型禁止导入，无无关设定补全要求', async () => {
+  const s = setup(false);
+  await screen.findByText(/请在设置中配置可用的默认文本模型/);
+  expect(screen.getByRole('button', { name: '开始解析' }).hasAttribute('disabled')).toBe(true);
+  expect(screen.queryByLabelText('制作媒介')).toBeNull();
+  expect(s.submit).not.toHaveBeenCalled();
 });
-it('完整设定不重复提交 profile，已有段落二次确认', async () => {
-  const { request } = setup({ complete: true, hasBlocks: true });
-  fireEvent.click(screen.getByRole('button', { name: '开始转换' }));
-  expect(screen.getByText('将替换本集全部段落，设定库元素保留')).toBeTruthy();
-  expect(
-    request.mock.calls.filter(([path]) => (path as string).includes('/script/import')),
-  ).toHaveLength(0);
-  fireEvent.click(screen.getByRole('button', { name: '确认替换并转换' }));
-  await waitFor(() =>
-    expect(request).toHaveBeenCalledWith(
-      expect.stringContaining('/script/import'),
-      expect.anything(),
-      { method: 'POST', body: { revision: 5, text: '△原文' } },
-    ),
+it('I04 替换需明确确认，先保存草稿；失败保留原文，重试成功关闭', async () => {
+  const s = setup(true, true);
+  await screen.findByText(/使用 文本模型/);
+  fireEvent.change(screen.getByLabelText('剧本原文'), {
+    target: { value: '完整原文，不要改写。' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '开始解析' }));
+  expect(s.flush).not.toHaveBeenCalled();
+  s.flush.mockResolvedValueOnce(false);
+  fireEvent.click(screen.getByRole('button', { name: '确认替换并解析' }));
+  await screen.findByText('请先完成组字并处理草稿保存问题');
+  expect(s.submit).not.toHaveBeenCalled();
+  expect(screen.getByLabelText<HTMLTextAreaElement>('剧本原文').value).toBe('完整原文，不要改写。');
+  s.submit.mockRejectedValueOnce(new Error('连接失败'));
+  fireEvent.click(screen.getByRole('button', { name: '确认替换并解析' }));
+  await screen.findByText('连接失败');
+  expect(s.close).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '确认替换并解析' }));
+  await waitFor(() => expect(s.close).toHaveBeenCalledOnce());
+  expect(s.request).toHaveBeenLastCalledWith(
+    '/projects/p/episodes/e/script/import',
+    expect.anything(),
+    { method: 'POST', body: { revision: 7, text: '完整原文，不要改写。' } },
   );
-});
-it('flush 失败不发送导入请求', async () => {
-  const { request } = setup({ complete: true, flush: false });
-  fireEvent.click(screen.getByRole('button', { name: '开始转换' }));
-  await screen.findByRole('alert');
-  expect(
-    request.mock.calls.filter(([path]) => (path as string).includes('/script/import')),
-  ).toHaveLength(0);
 });

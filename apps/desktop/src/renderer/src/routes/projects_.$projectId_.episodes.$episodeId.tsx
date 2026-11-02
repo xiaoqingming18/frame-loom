@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { BlockId } from '@frame-loom/contracts';
+import { ScriptId } from '@frame-loom/contracts';
 import { ScriptPage } from '@/features/projects/script/script-page';
 
 export const Route = createFileRoute('/projects_/$projectId_/episodes/$episodeId')({
   validateSearch: (search: Record<string, unknown>): { block?: string } => {
-    const block = BlockId.safeParse(search.block);
+    const block = ScriptId.safeParse(search.block);
     return block.success ? { block: block.data } : {};
   },
   component: EpisodeRoute,

@@ -23,10 +23,17 @@ export const DesktopPreferences = z.strictObject({
   projectLocation: z.string().min(1).max(4096).optional(),
   projectSort: ProjectSort.optional(),
   assetView: AssetView.optional(),
-  scriptView: z.enum(['styled', 'markdown']).optional(),
-  scriptMentions: z.boolean().optional(),
 });
 export type DesktopPreferences = z.infer<typeof DesktopPreferences>;
+export function readDesktopPreferences(value: unknown): DesktopPreferences {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const preferences = Object.fromEntries(
+      Object.entries(value).filter(([key]) => key !== 'scriptView' && key !== 'scriptMentions'),
+    );
+    return DesktopPreferences.parse(preferences);
+  }
+  return DesktopPreferences.parse(value);
+}
 export const DesktopPreferencesUpdate = DesktopPreferences.omit({ version: true }).partial();
 export type DesktopPreferencesUpdate = z.infer<typeof DesktopPreferencesUpdate>;
 export const PickDirectoryRequest = z.strictObject({

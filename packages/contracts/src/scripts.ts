@@ -1,244 +1,154 @@
 import { z } from 'zod';
-import { EpisodeSummary, ProjectProfile } from './projects.js';
+import { EpisodeSummary, type ProjectProfile } from './projects.js';
 
-export const BLOCK_TYPES = [
-  'act',
-  'scene',
-  'cast',
-  'action',
-  'character',
-  'parenthetical',
-  'dialogue',
-  'sound',
-  'production',
-  'text',
-  'transition',
-  'note',
-] as const;
-export const BlockType = z.enum(BLOCK_TYPES);
-export type BlockType = z.infer<typeof BlockType>;
-export const BLOCK_LABELS: Record<BlockType, string> = {
-  act: '幕',
-  scene: '场标题',
-  cast: '出场人物',
-  action: '动作',
-  character: '角色',
-  parenthetical: '括注',
-  dialogue: '对白',
-  sound: '音效／音乐',
-  production: '制作提示',
-  text: '字幕／画面文字',
-  transition: '转场',
-  note: '注释',
+export const ScriptId = z.string().uuid();
+const Text = z.string().max(200000);
+export function normalizeAction(content: string): string {
+  return content.replace(/^(?:\s*△\s*)+/u, '');
+}
+export const ScriptMeta = z.strictObject({
+  series: z.string().max(80),
+  episode: z.number().int().min(1).max(9999),
+  title: z.string().max(80),
+  genre: z.string().max(100),
+  duration_sec: z.number().int().nonnegative(),
+  style: z.string().max(2000),
+  core_conflict: Text,
+  hook_start: Text,
+  hook_end: Text,
+});
+export type ScriptMeta = z.infer<typeof ScriptMeta>;
+export const ActionBeat = z.strictObject({
+  type: z.literal('action'),
+  content: Text.transform(normalizeAction),
+});
+export const DialogueBeat = z.strictObject({
+  type: z.literal('dialogue'),
+  speaker: z.string().max(40),
+  emotion: z.string().max(200),
+  line: Text,
+});
+export const ScriptBeat = z.discriminatedUnion('type', [ActionBeat, DialogueBeat]);
+export type ScriptBeat = z.infer<typeof ScriptBeat>;
+const SceneFields = {
+  scene_id: z.string().regex(/^\d{1,4}-\d+$/u),
+  location: z.string().max(200),
+  time_of_day: z.enum(['日', '夜']),
+  interior: z.boolean(),
+  characters: z.array(z.string().min(1).max(40)).max(200),
+  atmosphere: z.string().max(2000),
 };
-export const BLOCK_SHORT_LABELS: Record<BlockType, string> = {
-  act: '幕',
-  scene: '场',
-  cast: '人',
-  action: '动',
-  character: '角',
-  parenthetical: '括',
-  dialogue: '白',
-  sound: '音',
-  production: '制',
-  text: '字',
-  transition: '转',
-  note: '注',
-};
-export const BlockId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
-export const SceneTime = z.enum(['day', 'night', 'dawn', 'dusk']);
-export type SceneTime = z.infer<typeof SceneTime>;
-export const SceneSpace = z.enum(['int', 'ext', 'intext']);
-export const SceneAttrs = z.strictObject({
-  time: SceneTime.nullable(),
-  space: SceneSpace.nullable(),
-  timeText: z.string().max(20).nullable(),
-  note: z.string().max(40).nullable(),
-  timecode: z.string().max(40).nullable(),
+export const ScriptScene = z.strictObject({
+  ...SceneFields,
+  beats: z.array(ScriptBeat).max(10000),
 });
-export type SceneAttrs = z.infer<typeof SceneAttrs>;
-export const CharacterAttrs = z.strictObject({
-  delivery: z.enum(['vo', 'os', 'inner']).nullable(),
-  extension: z.string().max(80).nullable(),
+export type ScriptScene = z.infer<typeof ScriptScene>;
+export const ScriptDocument = z.strictObject({
+  meta: ScriptMeta,
+  scenes: z.array(ScriptScene).max(5000),
 });
-export type CharacterAttrs = z.infer<typeof CharacterAttrs>;
-export const TagAttrs = z.strictObject({ label: z.string().min(1).max(8) });
-export type TagAttrs = z.infer<typeof TagAttrs>;
-const BlockText = z
-  .string()
-  .max(4000)
-  .refine((text) => !/[\r\n]/u.test(text), '段落文字不能含换行');
-export const ReviewOption = z.strictObject({
-  type: BlockType,
-  character: z.string().max(40).optional(),
-  text: BlockText.optional(),
-});
-export type ReviewOption = z.infer<typeof ReviewOption>;
-export const ScriptBlock = z
-  .strictObject({
-    id: BlockId,
-    type: BlockType,
-    text: BlockText,
-    attrs: z.union([SceneAttrs, CharacterAttrs, TagAttrs]).optional(),
-    src: z.strictObject({ line: z.number().int().nonnegative() }).optional(),
-    review: z
-      .strictObject({ reason: z.string().max(200), options: z.array(ReviewOption).min(1).max(4) })
-      .optional(),
-  })
-  .superRefine((block, ctx) => {
-    if (
-      !(
-        block.type === 'scene'
-          ? SceneAttrs
-          : block.type === 'character'
-            ? CharacterAttrs
-            : block.type === 'sound' || block.type === 'production'
-              ? TagAttrs
-              : z.undefined()
-      ).safeParse(block.attrs).success
-    )
-      ctx.addIssue({ code: 'custom', message: 'attrs 与段落类型不匹配' });
-  });
-export type ScriptBlock = z.infer<typeof ScriptBlock>;
-const LegacyBlock = z
-  .strictObject({
-    ...ScriptBlock.shape,
-    type: z.enum(BLOCK_TYPES.filter((type) => type !== 'production')),
-    attrs: z
-      .union([
-        SceneAttrs.pick({ time: true, space: true }),
-        CharacterAttrs.pick({ delivery: true }),
-      ])
-      .optional(),
-  })
-  .superRefine((block, ctx) => {
-    if (
-      block.attrs !== undefined &&
-      !(
-        block.type === 'scene'
-          ? SceneAttrs.pick({ time: true, space: true })
-          : block.type === 'character'
-            ? CharacterAttrs.pick({ delivery: true })
-            : z.never()
-      ).safeParse(block.attrs).success
-    )
-      ctx.addIssue({ code: 'custom', message: 'attrs 与段落类型不匹配' });
-  });
-const DocumentV2 = z.strictObject({
-  schemaVersion: z.literal(2),
-  preface: z.string().max(50000),
-  appendix: z.string().max(50000),
-  blocks: z.array(ScriptBlock).max(5000),
-});
-export const ScriptDocument = z
-  .union([
-    DocumentV2,
-    z
-      .strictObject({ schemaVersion: z.literal(1), blocks: z.array(LegacyBlock).max(5000) })
-      .transform((doc): z.input<typeof DocumentV2> => ({
-        schemaVersion: 2 as const,
-        preface: '',
-        appendix: '',
-        blocks: doc.blocks.map(({ attrs, ...block }) => ({
-          ...block,
-          ...(block.type === 'scene'
-            ? {
-                attrs: {
-                  time: null,
-                  space: null,
-                  ...attrs,
-                  timeText: null,
-                  note: null,
-                  timecode: null,
-                },
-              }
-            : block.type === 'character'
-              ? { attrs: { delivery: null, ...attrs, extension: null } }
-              : block.type === 'sound'
-                ? { attrs: { label: '音效' } }
-                : {}),
-        })),
-      }))
-      .pipe(DocumentV2),
-  ])
-  .refine(
-    (doc) => new Set(doc.blocks.map((block) => block.id)).size === doc.blocks.length,
-    '段落 id 重复',
-  );
 export type ScriptDocument = z.infer<typeof ScriptDocument>;
-export const ScriptSource = z.strictObject({
-  text: z.string().min(1).max(200000),
-  importedAt: z.string().datetime(),
+export const EditableScriptBeat = z.discriminatedUnion('type', [
+  ActionBeat.extend({ id: ScriptId }),
+  DialogueBeat.extend({ id: ScriptId }),
+]);
+export type EditableScriptBeat = z.infer<typeof EditableScriptBeat>;
+export const EditableScriptScene = z.strictObject({
+  ...SceneFields,
+  id: ScriptId,
+  beats: z.array(EditableScriptBeat).max(10000),
 });
-export type ScriptSource = z.infer<typeof ScriptSource>;
-export const ScriptFile = z
-  .object({
-    format: z.literal('frame-loom-script'),
-    formatVersion: z.literal(1),
-    id: z.string().uuid(),
-    revision: z.number().int().positive(),
-    source: ScriptSource.nullable(),
-    pendingImport: ScriptSource.nullable(),
-    convertedAt: z.string().datetime().nullable(),
-    document: ScriptDocument,
-  })
-  .passthrough()
-  .refine(
-    (file) => new TextEncoder().encode(JSON.stringify(file)).byteLength <= 4 * 1024 * 1024,
-    '剧本文件不能超过 4 MiB',
-  );
-export type ScriptFile = z.infer<typeof ScriptFile>;
-export const ElementKind = z.enum(['character', 'location', 'prop', 'costume']);
-export type ElementKind = z.infer<typeof ElementKind>;
-export const ElementName = z.string().trim().min(1).max(40);
-const ElementAttrs = z.strictObject({
-  gender: z.string().max(200).optional(),
-  ageRange: z.string().max(200).optional(),
-  appearance: z.string().max(200).optional(),
-  personality: z.string().max(200).optional(),
-  space: SceneSpace.optional(),
-  times: z.array(SceneTime).optional(),
-});
-export const StoryElement = z.strictObject({
-  id: z.string().uuid(),
-  kind: ElementKind,
-  name: ElementName,
-  aliases: z.array(ElementName).max(20),
-  status: z.enum(['pending', 'confirmed']),
-  description: z.string().max(2000),
-  attrs: ElementAttrs,
-  suggestedMergeInto: z.string().uuid().optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-});
-export type StoryElement = z.infer<typeof StoryElement>;
-export const IgnoredElement = z.strictObject({ kind: ElementKind, name: ElementName });
-export const StoryFile = z
-  .object({
-    format: z.literal('frame-loom-story'),
-    formatVersion: z.literal(1),
-    revision: z.number().int().nonnegative(),
-    elements: z.array(StoryElement).max(2000),
-    ignored: z.array(IgnoredElement).max(2000),
-  })
-  .passthrough()
-  .superRefine((story, ctx) => {
-    const terms = new Set<string>();
+export type EditableScriptScene = z.infer<typeof EditableScriptScene>;
+export const EditableScriptDocument = z
+  .strictObject({ meta: ScriptMeta, scenes: z.array(EditableScriptScene).max(5000) })
+  .superRefine((doc, ctx) => {
     const ids = new Set<string>();
-    for (const element of story.elements) {
-      if (ids.has(element.id)) ctx.addIssue({ code: 'custom', message: '元素 id 重复' });
-      ids.add(element.id);
-      for (const name of [element.name, ...element.aliases]) {
-        const key = `${element.kind}:${name.toLowerCase()}`;
-        if (terms.has(key)) ctx.addIssue({ code: 'custom', message: '同类元素名称或别名重复' });
-        terms.add(key);
+    for (const scene of doc.scenes) {
+      for (const node of [scene, ...scene.beats]) {
+        if (ids.has(node.id)) ctx.addIssue({ code: 'custom', message: '场次或内容 id 重复' });
+        ids.add(node.id);
       }
     }
   });
-export type StoryFile = z.infer<typeof StoryFile>;
+export type EditableScriptDocument = z.infer<typeof EditableScriptDocument>;
+export type ScriptContext = {
+  name: string;
+  profile?: Pick<ProjectProfile, 'genres' | 'style'>;
+  episode: Pick<EpisodeSummary, 'number' | 'title' | 'duration_sec'>;
+};
+export function projectScriptMeta(meta: ScriptMeta, context: ScriptContext): ScriptMeta {
+  return {
+    ...meta,
+    series: context.name,
+    genre: context.profile?.genres.join(' / ') ?? '',
+    style: context.profile?.style ?? '',
+    episode: context.episode.number,
+    title: context.episode.title,
+    duration_sec: context.episode.duration_sec,
+  };
+}
+export function projectScriptDocument(
+  doc: EditableScriptDocument,
+  context: ScriptContext,
+): EditableScriptDocument {
+  return {
+    meta: projectScriptMeta(doc.meta, context),
+    scenes: doc.scenes.map((scene, index) => ({
+      ...scene,
+      scene_id: `${context.episode.number}-${index + 1}`,
+    })),
+  };
+}
+export function standardScriptDocument(doc: EditableScriptDocument): ScriptDocument {
+  return ScriptDocument.parse({
+    meta: doc.meta,
+    scenes: doc.scenes.map(({ id, beats, ...scene }) => {
+      void id;
+      return {
+        ...scene,
+        beats: beats.map(({ id, ...beat }) => {
+          void id;
+          return beat;
+        }),
+      };
+    }),
+  });
+}
+export function createEditableScript(
+  doc: ScriptDocument,
+  newId: () => string = () => crypto.randomUUID(),
+): EditableScriptDocument {
+  return EditableScriptDocument.parse({
+    meta: doc.meta,
+    scenes: doc.scenes.map((scene) => ({
+      ...scene,
+      id: newId(),
+      beats: scene.beats.map((beat) => ({ ...beat, id: newId() })),
+    })),
+  });
+}
+export function emptyScriptDocument(context: ScriptContext): EditableScriptDocument {
+  return {
+    meta: projectScriptMeta(
+      {
+        series: '',
+        episode: 1,
+        title: '',
+        genre: '',
+        duration_sec: 0,
+        style: '',
+        core_conflict: '',
+        hook_start: '',
+        hook_end: '',
+      },
+      context,
+    ),
+    scenes: [],
+  };
+}
 export const ConversionState = z.strictObject({
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
-  stage: z.enum(['split', 'classify', 'extract', 'match']).nullable(),
+  stage: z.enum(['locating', 'parsing', 'validating', 'applying']).nullable(),
   done: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
   warnings: z.array(z.string()),
@@ -246,14 +156,17 @@ export const ConversionState = z.strictObject({
   result: z
     .strictObject({
       scenes: z.number().int().nonnegative(),
-      blocks: z.number().int().nonnegative(),
-      unsure: z.number().int().nonnegative(),
+      beats: z.number().int().nonnegative(),
       addedElements: z.number().int().nonnegative(),
     })
     .nullable(),
 });
 export type ConversionState = z.infer<typeof ConversionState>;
-export const EpisodeCreateRequest = EpisodeSummary.pick({ number: true, title: true });
+export const EpisodeCreateRequest = EpisodeSummary.pick({
+  number: true,
+  title: true,
+  duration_sec: true,
+});
 export type EpisodeCreateRequest = z.infer<typeof EpisodeCreateRequest>;
 export const EpisodeUpdateRequest = EpisodeCreateRequest.partial().refine(
   (patch) => Object.keys(patch).length > 0,
@@ -266,12 +179,15 @@ export const EpisodeResult = EpisodeSummary.extend({
 });
 export type EpisodeResult = z.infer<typeof EpisodeResult>;
 export const EpisodeListResult = z.array(EpisodeResult);
-export const ScriptResult = ScriptFile.safeExtend({ conversion: ConversionState.nullable() });
-export type ScriptResult = z.infer<typeof ScriptResult>;
-export const ScriptSaveRequest = z.strictObject({
+export const ScriptResult = z.strictObject({
+  id: ScriptId,
   revision: z.number().int().positive(),
-  document: ScriptDocument,
+  document: EditableScriptDocument,
+  conversion: ConversionState.nullable(),
+  source: z.string().nullable(),
 });
+export type ScriptResult = z.infer<typeof ScriptResult>;
+export const ScriptSaveRequest = ScriptResult.pick({ revision: true, document: true });
 export type ScriptSaveRequest = z.infer<typeof ScriptSaveRequest>;
 export const ScriptSaveResult = z.strictObject({
   revision: z.number().int().positive(),
@@ -280,8 +196,7 @@ export const ScriptSaveResult = z.strictObject({
 export type ScriptSaveResult = z.infer<typeof ScriptSaveResult>;
 export const ScriptImportRequest = z.strictObject({
   revision: z.number().int().positive(),
-  text: ScriptSource.shape.text.optional(),
-  profile: ProjectProfile.optional(),
+  text: z.string().min(1).max(200000).optional(),
 });
 export type ScriptImportRequest = z.infer<typeof ScriptImportRequest>;
 export const ScriptImportResult = z.strictObject({
@@ -289,10 +204,66 @@ export const ScriptImportResult = z.strictObject({
   conversion: ConversionState,
 });
 export type ScriptImportResult = z.infer<typeof ScriptImportResult>;
-export const StoryElementResult = StoryElement.extend({
+
+export const ElementKind = z.enum(['character', 'location', 'prop', 'costume']);
+export type ElementKind = z.infer<typeof ElementKind>;
+export const ElementName = z.string().trim().min(1).max(200);
+const List = z.array(z.string().max(200)).max(100);
+export const CharacterProfile = z.strictObject({
+  age: z.string().max(200).optional(),
+  gender: z.string().max(200).optional(),
+  appearance: List.optional(),
+  personality: List.optional(),
+  signatureActions: List.optional(),
+  signatureProps: List.optional(),
+});
+export const LocationProfile = z.strictObject({
+  spaceType: z.string().max(200).optional(),
+  eraRegion: z.string().max(200).optional(),
+  layout: z.string().max(2000).optional(),
+  visualAnchors: List.optional(),
+  colorsMaterials: z.string().max(2000).optional(),
+  signatureFurnishings: List.optional(),
+  notes: z.string().max(2000).optional(),
+});
+export const ElementAttrs = z.union([CharacterProfile, LocationProfile, z.strictObject({})]);
+export type ElementAttrs = z.infer<typeof ElementAttrs>;
+export function elementAttrsSchema(kind: ElementKind) {
+  return kind === 'character'
+    ? CharacterProfile
+    : kind === 'location'
+      ? LocationProfile
+      : z.strictObject({});
+}
+export function elementNameKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+export const StoryElement = z
+  .strictObject({
+    id: ScriptId,
+    kind: ElementKind,
+    name: ElementName,
+    aliases: z.array(ElementName).max(100),
+    status: z.enum(['pending', 'confirmed']),
+    description: z.string().max(2000),
+    attrs: ElementAttrs,
+    manuallyEdited: z.boolean(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .superRefine((element, ctx) => {
+    if (!elementAttrsSchema(element.kind).safeParse(element.attrs).success)
+      ctx.addIssue({ code: 'custom', message: '资料字段与设定类别不匹配' });
+    const names = [element.name, ...element.aliases].map(elementNameKey);
+    if (new Set(names).size !== names.length)
+      ctx.addIssue({ code: 'custom', message: '名称与别名重复' });
+  });
+export type StoryElement = z.infer<typeof StoryElement>;
+export const IgnoredElement = z.strictObject({ kind: ElementKind, name: ElementName });
+export const StoryElementResult = StoryElement.safeExtend({
   mentions: z.number().int().nonnegative(),
   episodes: z.array(
-    z.strictObject({ episodeId: z.string().uuid(), scenes: z.number().int().nonnegative() }),
+    z.strictObject({ episodeId: ScriptId, scenes: z.number().int().nonnegative() }),
   ),
 });
 export const StoryResult = z.strictObject({
@@ -304,32 +275,32 @@ export type StoryResult = z.infer<typeof StoryResult>;
 export const StoryOccurrencesResult = z
   .array(
     z.strictObject({
-      episodeId: z.string().uuid(),
-      blockId: BlockId,
-      sceneId: BlockId.nullable(),
+      episodeId: ScriptId,
+      sceneId: ScriptId,
+      beatId: ScriptId.nullable(),
       excerpt: z.string().max(80),
     }),
   )
   .max(200);
 export type StoryOccurrencesResult = z.infer<typeof StoryOccurrencesResult>;
-export const StoryElementCreateRequest = StoryElement.pick({ kind: true, name: true });
+export const StoryElementCreateRequest = z.strictObject({ kind: ElementKind, name: ElementName });
 export type StoryElementCreateRequest = z.infer<typeof StoryElementCreateRequest>;
-export const StoryElementUpdateRequest = StoryElement.pick({
-  name: true,
-  aliases: true,
-  description: true,
-  attrs: true,
-  status: true,
-})
+export const StoryElementUpdateRequest = z
+  .strictObject(StoryElement.shape)
+  .pick({ name: true, aliases: true, description: true, attrs: true, status: true })
   .partial()
   .refine((patch) => Object.keys(patch).length > 0, '至少修改一个字段');
 export type StoryElementUpdateRequest = z.infer<typeof StoryElementUpdateRequest>;
-export const StoryElementMergeRequest = z.strictObject({ into: z.string().uuid() });
+export const StoryElementMergeRequest = z.strictObject({
+  into: ScriptId,
+  attrs: ElementAttrs.optional(),
+  description: z.string().max(2000).optional(),
+});
 export type StoryElementMergeRequest = z.infer<typeof StoryElementMergeRequest>;
 export const StoryRestoreRequest = IgnoredElement;
 export type StoryRestoreRequest = z.infer<typeof StoryRestoreRequest>;
 export const StoryBatchRequest = z.strictObject({
-  ids: z.array(z.string().uuid()).max(500),
+  ids: z.array(ScriptId).max(500),
   action: z.enum(['confirm', 'ignore']),
 });
 export type StoryBatchRequest = z.infer<typeof StoryBatchRequest>;

@@ -1,89 +1,84 @@
 import fs from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
+  ProjectSummary,
   EpisodeSummary,
+  ScriptResult,
+  StoryResult,
   ProjectManifest,
   ProjectPageSummary,
-  ProjectSummary,
-  ScriptResult,
+  createEditableScript,
+  ScriptDocument,
 } from '@frame-loom/contracts';
 import { testEngine } from '../../testing/test-engine.js';
 import { ProjectStore } from '../projects/project-store.js';
-import { ProjectMediaService } from '../projects/project-media.service.js';
+import { ProjectScriptDatabase } from '../projects/project-script-database.js';
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  for (const close of cleanups.splice(0).reverse()) await close();
 });
 async function setup() {
   const s = await testEngine();
   cleanups.push(() => s.close());
-  const profile = { form: 'short', medium: 'live', genres: ['悬疑'], aspect: null };
   const project = ProjectSummary.parse(
     await (
-      await s.request('/projects', 'POST', { name: '剧本测试', location: s.directory, profile })
+      await s.request('/projects', 'POST', {
+        name: '新剧本',
+        location: s.directory,
+        profile: { form: null, medium: null, genres: ['都市'], aspect: null, style: '冷色' },
+      })
     ).json(),
   );
   const base = `/projects/${project.id}`;
-  const episode = EpisodeSummary.parse(
-    await (await s.request(`${base}/episodes`, 'POST', { number: 1, title: '重逢' })).json(),
-  );
+  const response = await s.request(`${base}/episodes`, 'POST', {
+    number: 1,
+    title: '重逢',
+    duration_sec: 120,
+  });
+  const episode = EpisodeSummary.parse(await response.json());
   const url = `${base}/episodes/${episode.id}`;
-  return { s, project, profile, episode, base, url };
+  const read = async () => ScriptResult.parse(await (await s.request(`${url}/script`)).json());
+  const fixture = ScriptDocument.parse(
+    JSON.parse(
+      await fs.readFile(
+        new URL(
+          '../../../../../packages/contracts/fixtures/standard-script-short.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ),
+  );
+  return { s, project, base, episode, url, read, doc: createEditableScript(fixture) };
 }
-
-it('读取磁盘 v1 自动迁移且首次保存写出 v2', async () => {
-  const { s, project, url, episode } = await setup();
-  const path = join(project.rootPath, '.frameloom/scripts', `${episode.id}.json`);
-  const original = JSON.parse(await fs.readFile(path, 'utf8')) as Record<string, unknown>;
-  await fs.writeFile(
-    path,
-    JSON.stringify({
-      ...original,
-      document: {
-        schemaVersion: 1,
-        blocks: [{ id: 's', type: 'scene', text: '天台', attrs: { time: 'night', space: 'ext' } }],
-      },
-    }),
-  );
-  const result = ScriptResult.parse(await (await s.request(`${url}/script`)).json());
-  expect(result.document).toMatchObject({
-    schemaVersion: 2,
-    preface: '',
-    appendix: '',
-    blocks: [{ attrs: { timeText: null, note: null, timecode: null } }],
-  });
-  expect(
-    (
-      await s.request(`${url}/script`, 'PUT', {
-        revision: result.revision,
-        document: result.document,
-      })
-    ).status,
-  ).toBe(200);
-  expect(JSON.parse(await fs.readFile(path, 'utf8')) as unknown).toMatchObject({
-    formatVersion: 1,
-    document: { schemaVersion: 2 },
-  });
-});
-
-it('项目设定与页面所属剧集兼容旧目录并校验边界', async () => {
-  const { s, project, profile, episode, base } = await setup();
-  expect(project.profile).toEqual(profile);
-  expect(ProjectManifest.parse(await (await s.request(base)).json()).profile).toEqual(profile);
-  expect(((await (await s.request('/projects')).json()) as ProjectSummary[])[0].profile).toEqual(
-    profile,
-  );
-  expect(
-    (await s.request(`${base}/profile`, 'PUT', { ...profile, genres: Array(6).fill('悬疑') }))
-      .status,
-  ).toBe(400);
-  expect((await s.request(`${base}/profile`, 'PUT', { ...profile, aspect: '16:9' })).status).toBe(
+it('E01/E02/E03 剧集唯一数据库来源、页面归属和最新只读投影', async () => {
+  const { s, project, base, episode, url, read, doc } = await setup();
+  expect((await s.request(`${base}/episodes`, 'POST', { number: 1, title: '' })).status).toBe(409);
+  expect((await s.request(`${url}/script`, 'PUT', { revision: 1, document: doc })).status).toBe(
     200,
   );
+  await s.request(`${base}/profile`, 'PUT', {
+    form: null,
+    medium: null,
+    genres: ['悬疑'],
+    aspect: null,
+    style: '新画风',
+  });
+  await s.request(url, 'PATCH', { number: 5, title: '新标题', duration_sec: 50 });
+  const latest = await read();
+  expect(latest.document.meta).toMatchObject({
+    series: '新剧本',
+    genre: '悬疑',
+    style: '新画风',
+    episode: 5,
+    title: '新标题',
+    duration_sec: 50,
+  });
+  expect(latest.document.scenes.map((s) => s.scene_id)).toEqual(['5-1', '5-2']);
+  expect(latest.document.scenes.map((s) => s.id)).toEqual(doc.scenes.map((s) => s.id));
   const page = ProjectPageSummary.parse(
     await (
       await s.request(`${base}/pages`, 'POST', { name: '画布', episodeId: episode.id })
@@ -91,133 +86,114 @@ it('项目设定与页面所属剧集兼容旧目录并校验边界', async () =
   );
   expect(page.episodeId).toBe(episode.id);
   expect(
-    (await s.request(`${base}/pages/${page.id}`, 'PATCH', { episodeId: randomUUID() })).status,
+    (await s.request(`${base}/pages`, 'POST', { name: '坏归属', episodeId: crypto.randomUUID() }))
+      .status,
   ).toBe(404);
-  expect(
-    await (await s.request(`${base}/pages/${page.id}`, 'PATCH', { episodeId: null })).json(),
-  ).toMatchObject({ name: '画布', episodeId: null });
-  expect(
-    (await s.request(`${base}/pages`, 'POST', { name: '错误', episodeId: randomUUID() })).status,
-  ).toBe(404);
-  await fs.rm(join(project.rootPath, '.frameloom/scripts'), { recursive: true });
-  await fs.rm(join(project.rootPath, '.frameloom/trash/scripts'), { recursive: true });
-  expect((await s.request(base)).status).toBe(200);
-  expect((await s.request(`${base}/pages`, 'POST', { name: '旧项目画布' })).status).toBe(201);
-});
-
-it('剧集增改删、集号冲突、删除失败恢复和页面保留', async () => {
-  const { s, project, episode, base, url } = await setup();
-  expect((await s.request(`${base}/episodes`, 'POST', { number: 1, title: '' })).status).toBe(409);
-  expect((await s.request(url, 'PATCH', { number: 3, title: '第三集' })).status).toBe(200);
-  await s.request(`${base}/episodes`, 'POST', { number: 2, title: '' });
-  expect(
-    ((await (await s.request(`${base}/episodes`)).json()) as EpisodeSummary[]).map(
-      (item) => item.number,
-    ),
-  ).toEqual([2, 3]);
-  expect(await (await s.request(url, 'PATCH', { number: 2 })).json()).toMatchObject({
-    code: 'EPISODE_NUMBER_CONFLICT',
+  expect(ProjectManifest.parse(await (await s.request(base)).json()).episodes).toHaveLength(1);
+  const disk = ProjectManifest.parse(
+    JSON.parse(await fs.readFile(join(project.rootPath, '.frameloom/project.json'), 'utf8')),
+  );
+  expect(disk.formatVersion).toBe(2);
+  expect(disk.episodes).toBeUndefined();
+  await expect(fs.stat(join(project.rootPath, '.frameloom/scripts'))).rejects.toMatchObject({
+    code: 'ENOENT',
   });
+  await s.restart();
+  expect((await read()).document).toEqual(latest.document);
+});
+it('E04/E05/E06 稳定身份、并发 revision、SQL 失败回滚正文及设定', async () => {
+  const { s, project, url, read, doc } = await setup();
+  const replies = await Promise.all([
+    s.request(`${url}/script`, 'PUT', { revision: 1, document: doc }),
+    s.request(`${url}/script`, 'PUT', { revision: 1, document: doc }),
+  ]);
+  expect(replies.map((r) => r.status).sort()).toEqual([200, 409]);
+  const moved = { ...doc, scenes: [...doc.scenes].reverse() };
+  await s.request(`${url}/script`, 'PUT', { revision: 2, document: moved });
+  expect((await read()).document.scenes.map((s) => s.id)).toEqual(moved.scenes.map((s) => s.id));
+  const before = await read();
+  await s.app
+    .get(ProjectScriptDatabase)
+    .use(project.rootPath, project.id, (db) =>
+      db.exec(
+        "CREATE TRIGGER fail_save BEFORE UPDATE OF revision ON episodes BEGIN SELECT RAISE(ABORT,'模拟失败'); END",
+      ),
+    );
+  const failed = { ...moved, scenes: [{ ...moved.scenes[0], location: '回滚地点' }] };
+  expect((await s.request(`${url}/script`, 'PUT', { revision: 3, document: failed })).status).toBe(
+    500,
+  );
+  expect((await read()).document).toEqual(before.document);
+  expect(
+    StoryResult.parse(
+      await (await s.request(`/projects/${project.id}/story`)).json(),
+    ).elements.some((e) => e.name === '回滚地点'),
+  ).toBe(false);
+});
+it('E08 删集清单失败可重试，页面不删除，回收在库中保留30天', async () => {
+  const { s, project, base, episode, url } = await setup();
   const page = ProjectPageSummary.parse(
     await (
-      await s.request(`${base}/pages`, 'POST', { name: '保留画布', episodeId: episode.id })
+      await s.request(`${base}/pages`, 'POST', { name: '保留页面', episodeId: episode.id })
     ).json(),
   );
-  vi.spyOn(s.app.get(ProjectStore), 'writeManifest').mockRejectedValueOnce(
-    new Error('清单写入失败'),
-  );
+  const store = s.app.get(ProjectStore);
+  const write = vi.spyOn(store, 'writeManifest').mockRejectedValueOnce(new Error('模拟写失败'));
   expect((await s.request(url, 'DELETE')).status).toBe(500);
   expect((await s.request(`${url}/script`)).status).toBe(200);
-  expect(await fs.readdir(join(project.rootPath, '.frameloom/trash/scripts'))).toEqual([]);
+  write.mockRestore();
   expect((await s.request(url, 'DELETE')).status).toBe(200);
-  expect(await fs.readdir(join(project.rootPath, '.frameloom/trash/scripts'))).toHaveLength(1);
-  expect(
-    ProjectManifest.parse(await (await s.request(base)).json()).pages.find(
-      (item) => item.id === page.id,
-    )?.episodeId,
-  ).toBeNull();
-  expect((await s.request(`${base}/pages/${page.id}`)).status).toBe(200);
+  expect((await s.request(`${url}/script`)).status).toBe(404);
+  const manifest = ProjectManifest.parse(await (await s.request(base)).json());
+  expect(manifest.pages.find((p) => p.id === page.id)?.episodeId).toBeNull();
+  await s.app
+    .get(ProjectScriptDatabase)
+    .use(project.rootPath, project.id, (db) =>
+      expect(db.prepare('SELECT deleted_at FROM episodes WHERE id=?').get(episode.id)).toBeTruthy(),
+    );
+  await s.restart();
+  expect(ProjectManifest.parse(await (await s.request(base)).json()).pages[0].episodeId).toBeNull();
+  const database = s.app.get(ProjectScriptDatabase);
+  await database.use(project.rootPath, project.id, (db) => {
+    db.prepare('UPDATE episodes SET deleted_at=? WHERE id=?').run(
+      '2020-01-01T00:00:00.000Z',
+      episode.id,
+    );
+  });
+  const next = EpisodeSummary.parse(
+    await (await s.request(`${base}/episodes`, 'POST', { number: 2, title: '' })).json(),
+  );
+  await s.request(`${base}/episodes/${next.id}`, 'DELETE');
+  await database.use(project.rootPath, project.id, (db) => {
+    expect(db.prepare('SELECT id FROM episodes WHERE id=?').get(episode.id)).toBeUndefined();
+    expect(db.prepare('SELECT id FROM episodes WHERE id=?').get(next.id)).toBeTruthy();
+  });
 });
-
-it('剧本 revision 与外部修改冲突、摘要修复与落盘顺序', async () => {
-  const { s, project, base, url, episode } = await setup();
-  const file = ScriptResult.parse(await (await s.request(`${url}/script`)).json());
-  expect(file).toMatchObject({
-    revision: 1,
-    document: { schemaVersion: 2, preface: '', appendix: '', blocks: [] },
-  });
-  const document = {
-    schemaVersion: 1,
-    blocks: [
-      { id: 'scene', type: 'scene', text: '客厅', attrs: { time: 'day', space: 'int' } },
-      { id: 'line', type: 'action', text: '风 吹' },
-    ],
-  };
+it('E02/E06 跨项目页面归属和跨集复用内部身份拒绝，原集不受影响', async () => {
+  const { s, base, episode, url, doc, read } = await setup();
+  await s.request(`${url}/script`, 'PUT', { revision: 1, document: doc });
+  const second = EpisodeSummary.parse(
+    await (await s.request(`${base}/episodes`, 'POST', { number: 2, title: '' })).json(),
+  );
   expect(
-    await (await s.request(`${url}/script`, 'PUT', { revision: 1, document })).json(),
-  ).toMatchObject({ revision: 2 });
-  expect(ProjectManifest.parse(await (await s.request(base)).json()).episodes![0]).toMatchObject({
-    scenes: 1,
-    chars: 4,
-    draft: false,
-  });
-  expect(
-    await (await s.request(`${url}/script`, 'PUT', { revision: 1, document })).json(),
-  ).toMatchObject({ code: 'SCRIPT_REVISION_CONFLICT' });
-  const path = join(project.rootPath, '.frameloom/scripts', `${episode.id}.json`);
-  const raw = await fs.readFile(path, 'utf8');
-  const info = await fs.stat(path);
-  await fs.writeFile(path, raw.replace('风 吹', '雨 落'));
-  await fs.utimes(path, info.atime, info.mtime);
-  expect(
-    await (await s.request(`${url}/script`, 'PUT', { revision: 2, document })).json(),
-  ).toMatchObject({ code: 'SCRIPT_REVISION_CONFLICT' });
-  await s.request(`${url}/script`);
-  vi.spyOn(s.app.get(ProjectStore), 'writeManifest').mockRejectedValueOnce(
-    new Error('摘要写入失败'),
+    (await s.request(`${base}/episodes/${second.id}/script`, 'PUT', { revision: 1, document: doc }))
+      .status,
+  ).toBe(409);
+  expect((await read()).document.scenes.map((scene) => scene.id)).toEqual(
+    doc.scenes.map((scene) => scene.id),
+  );
+  const other = ProjectSummary.parse(
+    await (
+      await s.request('/projects', 'POST', { name: '另一项目', location: s.directory })
+    ).json(),
   );
   expect(
     (
-      await s.request(`${url}/script`, 'PUT', {
-        revision: 2,
-        document: { schemaVersion: 1, blocks: [] },
+      await s.request(`/projects/${other.id}/pages`, 'POST', {
+        name: '无效跨项目归属',
+        episodeId: episode.id,
       })
     ).status,
-  ).toBe(500);
-  expect(ScriptResult.parse(await (await s.request(`${url}/script`)).json()).revision).toBe(3);
-  expect(ProjectManifest.parse(await (await s.request(base)).json()).episodes![0]).toMatchObject({
-    scenes: 0,
-    chars: 0,
-  });
-});
-
-it('剧本回收区按删除时间保留 30 天，旧目录缺失可清理', async () => {
-  const { s, project, url } = await setup();
-  await s.request(url, 'DELETE');
-  const folder = join(project.rootPath, '.frameloom/trash/scripts');
-  const name = (await fs.readdir(folder))[0];
-  const media = s.app.get(ProjectMediaService);
-  await media.cleanupAt(project.id, project.rootPath);
-  expect(await fs.readdir(folder)).toEqual([name]);
-  const old = new Date(Date.now() - 31 * 86400_000);
-  await fs.utimes(join(folder, name), old, old);
-  await media.cleanupAt(project.id, project.rootPath);
-  expect(await fs.readdir(folder)).toEqual([]);
-  await fs.rmdir(folder);
-  await expect(media.cleanupAt(project.id, project.rootPath)).resolves.toMatchObject({ files: 0 });
-});
-
-it('超过 500 集时拒绝创建', async () => {
-  const { s, project, episode, base } = await setup();
-  const store = s.app.get(ProjectStore);
-  const manifest = await store.readManifest(project.rootPath);
-  manifest.episodes = Array.from({ length: 500 }, (_, index) => ({
-    ...episode,
-    id: randomUUID(),
-    number: index + 1,
-  }));
-  await store.writeManifest(project.rootPath, manifest);
-  expect(
-    await (await s.request(`${base}/episodes`, 'POST', { number: 501, title: '' })).json(),
-  ).toMatchObject({ code: 'EPISODE_LIMIT_EXCEEDED' });
+  ).toBe(404);
+  expect((await s.request(`${base}/episodes/${second.id}/script`)).status).toBe(200);
 });

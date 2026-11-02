@@ -35,7 +35,7 @@ export class StoryController {
     @Param('elementId', idPipe) elementId: string,
     @Body(new ZodValidationPipe(StoryElementMergeRequest)) input: StoryElementMergeRequest,
   ) {
-    return this.service.merge(id, elementId, input.into);
+    return this.service.merge(id, elementId, input);
   }
   @Delete('elements/:elementId') remove(
     @Param('id', idPipe) id: string,

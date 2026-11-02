@@ -1,15 +1,42 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ScriptDocument } from '@frame-loom/contracts';
+import {
+  emptyScriptDocument,
+  type EditableScriptDocument as ScriptDocument,
+} from '@frame-loom/contracts';
 import { EngineRequestError } from '@/lib/engine-client';
 import { createScriptPersistence } from './script-persistence';
 const doc = (text: string): ScriptDocument => ({
-  schemaVersion: 2,
-  preface: '',
-  appendix: '',
-  blocks: [{ id: 'a', type: 'action', text }],
+  ...emptyScriptDocument({ name: '剧名', episode: { number: 1, title: '', duration_sec: 0 } }),
+  scenes: [
+    {
+      id: '00000000-0000-4000-8000-000000000001',
+      scene_id: '1-1',
+      location: '',
+      characters: [],
+      atmosphere: '',
+      interior: true,
+      time_of_day: '夜',
+      beats: [{ id: '00000000-0000-4000-8000-000000000002', type: 'action', content: text }],
+    },
+  ],
 });
 afterEach(() => vi.useRealTimers());
 describe('剧本保存', () => {
+  it('I07 组字期间禁止自动与手动保存，确认后提交完整文字', async () => {
+    vi.useFakeTimers();
+    const save = vi.fn().mockResolvedValue({ revision: 2, addedElements: 0 });
+    const p = createScriptPersistence({ revision: 1, document: doc('') }, save, vi.fn());
+    p.setComposing(true);
+    p.change(doc('拼'));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await p.flush()).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    p.change(doc('拼音'));
+    p.setComposing(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(save).toHaveBeenCalledWith(1, doc('拼音'));
+    p.stop();
+  });
   it('连续输入只保存一次', async () => {
     vi.useFakeTimers();
     const save = vi.fn().mockResolvedValue({ revision: 2, addedElements: 0 });
@@ -22,6 +49,32 @@ describe('剧本保存', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(save).toHaveBeenCalledTimes(1);
     expect(await p.flush()).toBe(true);
+  });
+  it('保存期间开始组字时，旧响应不继续提交半字，结束后保存最新稿', async () => {
+    vi.useFakeTimers();
+    let resolve!: (value: { revision: number; addedElements: number }) => void;
+    const save = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      )
+      .mockResolvedValue({ revision: 3, addedElements: 0 });
+    const p = createScriptPersistence({ revision: 1, document: doc('') }, save, vi.fn());
+    p.change(doc('已确认'));
+    const first = p.flush();
+    p.setComposing(true);
+    p.change(doc('zuzi'));
+    resolve({ revision: 2, addedElements: 0 });
+    expect(await first).toBe(false);
+    expect(save).toHaveBeenCalledTimes(1);
+    p.change(doc('组字完成'));
+    p.setComposing(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(save).toHaveBeenLastCalledWith(2, doc('组字完成'));
+    p.stop();
   });
   it('保存中输入接续保存，使用新 revision', async () => {
     let resolve!: (value: { revision: number; addedElements: number }) => void;

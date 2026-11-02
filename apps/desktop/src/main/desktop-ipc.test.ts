@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pick: vi.fn(),
   reveal: vi.fn(),
   trash: vi.fn(),
+  target: vi.fn(),
 }));
 vi.mock('electron', () => ({
   app: { quit: mocks.quit, getPath: () => 'user-data' },
@@ -27,6 +28,7 @@ vi.mock('./preferences.js', () => ({
   readPreferences: mocks.readPreferences,
   writePreferences: mocks.writePreferences,
 }));
+vi.mock('./project-files.js', () => ({ projectTarget: mocks.target }));
 
 import { registerDesktopIpc } from './desktop-ipc.js';
 import { APP_ORIGIN } from './security.js';
@@ -163,5 +165,35 @@ it('查询真实最大化状态，并在系统窗口变化时通知 renderer', (
     window.isMaximized.mockReturnValue(name === 'maximize');
     listeners.get(name)!();
     expect(contents.send).toHaveBeenLastCalledWith('window:maximized', name === 'maximize');
+  }
+});
+it('项目放回收站先收束任务，失败不回收；回收资产不停止整个项目', async () => {
+  const connection = { baseUrl: 'http://127.0.0.1:1234', token: 'a'.repeat(64) };
+  registerDesktopIpc(window as unknown as BrowserWindow, APP_ORIGIN, () =>
+    Promise.resolve(connection),
+  );
+  mocks.target.mockResolvedValue('E:\\test-project');
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{}', { status: 200 }));
+  const projectId = '00000000-0000-4000-8000-000000000001';
+  try {
+    await invoke('project:trash', { projectId });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${connection.baseUrl}/projects/${projectId}/release`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.trash.mock.invocationCallOrder[0],
+    );
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 500 }));
+    await expect(invoke('project:trash', { projectId })).rejects.toThrow('无法停止');
+    expect(mocks.trash).toHaveBeenCalledTimes(1);
+    fetchMock.mockClear();
+    await invoke('project:trash', { projectId, path: 'asset.png' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.trash).toHaveBeenCalledTimes(2);
+  } finally {
+    fetchMock.mockRestore();
   }
 });

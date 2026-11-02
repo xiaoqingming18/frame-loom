@@ -33,6 +33,32 @@ afterEach(() => rmSync(directory, { recursive: true, force: true }));
 it('文件缺失时跟随系统', () => {
   expect(readTheme(directory)).toBe('system');
 });
+it('旧剧本偏好只丢弃两个键，主题、排序和位置保留并可继续保存', () => {
+  writeFileSync(
+    join(directory, 'preferences.json'),
+    JSON.stringify({
+      version: 1,
+      theme: 'dark',
+      projectSort: 'name',
+      projectLocation: 'E:/项目',
+      scriptView: 'markdown',
+      scriptMentions: true,
+    }),
+  );
+  expect(readPreferences(directory)).toEqual({
+    version: 1,
+    theme: 'dark',
+    projectSort: 'name',
+    projectLocation: 'E:/项目',
+  });
+  writeTheme(directory, 'light');
+  expect(readPreferences(directory)).toEqual({
+    version: 1,
+    theme: 'light',
+    projectSort: 'name',
+    projectLocation: 'E:/项目',
+  });
+});
 
 it.each(['{', 'null', '{}', '{"version":2,"theme":"dark"}', '{"version":1,"theme":"invalid"}'])(
   '文件损坏或格式非法时跟随系统：%s',

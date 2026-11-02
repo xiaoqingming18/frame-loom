@@ -2,7 +2,7 @@
 
 Status: implemented
 
-2026-11-01 后续方案见[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)。用户已确认重构方向，代码尚未实施；本篇仍记录当前实现与历史决定。后续将替代正文格式、存储、解析和部分编辑交互，不提前改写既有验收结果。
+2026-11-01 后续方案见[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)。该方案代码已实施并进入最终验收；本篇只记录旧版功能与当时验证事实，不代表旧数据格式／转换／编辑入口仍为当前实现。剧本域当前事实、实施范围与未通过验收项以[新方案及状态](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)为准；本篇的项目／剧集组织历史仍有效。
 
 ## Problem
 
@@ -31,19 +31,19 @@ Status: implemented
 
 全文以及代码命名统一使用以下术语，不另造同义词：
 
-| 中文 | 标识符 | 含义 |
-| --- | --- | --- |
-| 剧集 | episode | 项目下的一集，有集号和标题 |
-| 剧本 | script | 一集对应的结构化文档文件 |
-| 段落 | block | 剧本中带类型的一行 |
-| 场 | scene | 由场标题段落开始，到下一个场标题或幕段落之前结束 |
-| 幕 | act | 可选的分隔段落，只用于分组 |
-| 原文 | source | 用户粘贴的原始文本 |
-| 待转换导入 | pendingImport | 已提交、但还没有成功转换的原文 |
-| 转换 | conversion | 后台把原文变成段落并提取元素的过程 |
-| 设定库 | story | 项目级的人物、场景、道具、服装集合 |
-| 元素 | element | 设定库中的一项 |
-| 待确认／已确认／已忽略 | pending／confirmed／ignored | 元素的状态 |
+| 中文                   | 标识符                      | 含义                                             |
+| ---------------------- | --------------------------- | ------------------------------------------------ |
+| 剧集                   | episode                     | 项目下的一集，有集号和标题                       |
+| 剧本                   | script                      | 一集对应的结构化文档文件                         |
+| 段落                   | block                       | 剧本中带类型的一行                               |
+| 场                     | scene                       | 由场标题段落开始，到下一个场标题或幕段落之前结束 |
+| 幕                     | act                         | 可选的分隔段落，只用于分组                       |
+| 原文                   | source                      | 用户粘贴的原始文本                               |
+| 待转换导入             | pendingImport               | 已提交、但还没有成功转换的原文                   |
+| 转换                   | conversion                  | 后台把原文变成段落并提取元素的过程               |
+| 设定库                 | story                       | 项目级的人物、场景、道具、服装集合               |
+| 元素                   | element                     | 设定库中的一项                                   |
+| 待确认／已确认／已忽略 | pending／confirmed／ignored | 元素的状态                                       |
 
 ### 数据格式
 
@@ -115,20 +115,20 @@ TagAttrs = { label: string }
 ReviewOption = { type: BlockType, character?: string（≤ 40 个字符）, text?: string }
 ```
 
-| type | 中文名 | 缩写 | `text` 的含义 |
-| --- | --- | --- | --- |
-| act | 幕 | 幕 | 例如「第一幕」 |
-| scene | 场标题 | 场 | 地点，例如「林夏家·卧室」；时间和内外放在 attrs |
-| cast | 出场人物 | 人 | 例如「林夏、周屿」，按 `、，,/／` 和空白切分 |
-| action | 动作 | 动 | 动作描写，不含开头的 `△▲※` 标记 |
-| character | 角色 | 角 | 角色名，不含冒号和（OS）这类后缀 |
-| parenthetical | 括注 | 括 | 不含括号，括号由样式显示 |
-| dialogue | 对白 | 白 | 台词 |
-| sound | 音效／音乐 | 音 | 不含【音效】这类标记 |
-| production | 制作提示 | 制 | 不含标签，标签原文保存在 attrs.label |
-| text | 字幕／画面文字 | 字 | 不含「字幕：」这类前缀 |
-| transition | 转场 | 转 | 原样保留，例如「切至：」 |
-| note | 注释 | 注 | 不进入下游流程 |
+| type          | 中文名         | 缩写 | `text` 的含义                                   |
+| ------------- | -------------- | ---- | ----------------------------------------------- |
+| act           | 幕             | 幕   | 例如「第一幕」                                  |
+| scene         | 场标题         | 场   | 地点，例如「林夏家·卧室」；时间和内外放在 attrs |
+| cast          | 出场人物       | 人   | 例如「林夏、周屿」，按 `、，,/／` 和空白切分    |
+| action        | 动作           | 动   | 动作描写，不含开头的 `△▲※` 标记                 |
+| character     | 角色           | 角   | 角色名，不含冒号和（OS）这类后缀                |
+| parenthetical | 括注           | 括   | 不含括号，括号由样式显示                        |
+| dialogue      | 对白           | 白   | 台词                                            |
+| sound         | 音效／音乐     | 音   | 不含【音效】这类标记                            |
+| production    | 制作提示       | 制   | 不含标签，标签原文保存在 attrs.label            |
+| text          | 字幕／画面文字 | 字   | 不含「字幕：」这类前缀                          |
+| transition    | 转场           | 转   | 原样保留，例如「切至：」                        |
+| note          | 注释           | 注   | 不进入下游流程                                  |
 
 规则：
 
@@ -175,6 +175,7 @@ StoryElement = {
   - 场标题段落的文本，作为地点。
 
   候选名称如果不匹配同类元素的名称或别名，也不在 `ignored` 中，就新建为待确认元素。结果返回「新增数量」。恢复一个已忽略的名称时，对所有剧本执行一次同步。
+
 - 道具和服装只来自转换时文本模型的提取，或者用户手动标记。
 
 ### 转换
@@ -184,29 +185,27 @@ StoryElement = {
 1. **split（切分）**：用 contracts 中的 `parseScriptText(text)` 规则解析器，把原文按行解析成段落，每个段落带上 `src.line` 和「确定／存疑」标记。
 2. **classify（归类）**：如果配置了默认文本模型，就把原文按行分批交给模型，只请模型对「存疑」的行做决定。没有默认文本模型时跳过这一步，存疑行保持规则解析的猜测，并带上 `review`。
 
-以上「只对存疑行做决定」及下文模型批次与决定范围，已由[导入修正笔记](2026-10-30-script-import-and-markdown-view.md#转换)部分取代：当前全部正文行交给模型，未返回决定视为认可 guess。
-3. **extract（提取）**：模型在同一批调用中顺带提取元素。没有模型时，这一步只有规则同步。
-4. **match（匹配）**：写入剧本，执行同步，计算统计数字。
+以上「只对存疑行做决定」及下文模型批次与决定范围，已由[导入修正笔记](2026-10-30-script-import-and-markdown-view.md#转换)部分取代：当前全部正文行交给模型，未返回决定视为认可 guess。3. **extract（提取）**：模型在同一批调用中顺带提取元素。没有模型时，这一步只有规则同步。4. **match（匹配）**：写入剧本，执行同步，计算统计数字。
 
 **规则解析器**按以下顺序识别各行（行先去掉首尾空白，空行跳过）：
 
 以下表格保留原有规则决策；当前 Markdown 预处理、独立角色行和前言附录使用[新规则表](2026-10-30-script-import-and-markdown-view.md#规则解析器替换原规则表)。
 
-| 顺序 | 识别条件 | 结果 | 置信 |
-| --- | --- | --- | --- |
-| 1 | `^第\s*[0-9一二三四五六七八九十百]+\s*集` | 集标题，不生成段落，只计入覆盖 | 确定 |
-| 2 | `^第[0-9一二三四五六七八九十]+幕` 或 `^ACT\s+\S+` | act | 确定 |
-| 3 | `^\d+[-－—.]\d+`、`^第\s*[0-9一二…]+\s*场`、`^(场景\|场)\s*[0-9一二…]+[:：]?`、`^(INT\|EXT\|INT\./EXT)\.?`，或 `^\d+[.、]` 后跟时间／内外词 | scene：时间词（日 白天 → day，夜 夜晚 → night，晨 清晨 → dawn，昏 黄昏 傍晚 → dusk），内外词（内 → int，外 → ext，内外 → intext），其余按空白切分后作为地点 | 至少有一个时间或内外词时为确定，否则存疑 |
-| 4 | `^(人物\|出场人物\|角色)[:：]` | cast | 确定 |
-| 5 | 以 `△▲※` 开头 | action（去掉标记） | 确定 |
-| 6 | `^【(音效\|音乐\|BGM\|音)】`、`^\[(音效\|SFX)\]` | sound（去掉标记） | 确定 |
-| 7 | `^(字幕\|画面字幕\|屏幕文字\|黑屏字幕)[:：]` | text（去掉前缀） | 确定 |
-| 8 | `^(切至\|切到\|叠化\|淡入\|淡出\|转场\|CUT TO\|FADE IN\|FADE OUT)` | transition | 确定 |
-| 9 | 整行是 `（闪回）`、`（回忆）` 这类括号包着的转场词 | transition，候选项为 transition、action、note | 存疑 |
-| 10 | `名字（后缀）?[:：]内容`，名字为 1–12 个字符，不含空白、冒号或括号，也不在停用词（时间、地点、人物、字幕、备注、注）中 | character（后缀 OS、画外音 → os；VO、旁白 → vo；内心 → inner）；内容以（…）开头时，先拆出 parenthetical，其余为 dialogue | 名字没有出现在本场出场人物或之前的说话人中，且超过 4 个字符时为存疑，其余为确定 |
-| 11 | 整行是（…），且上一段是 character 或 dialogue | parenthetical | 确定 |
-| 12 | `已知角色名 + 空白 + 内容`，没有冒号 | action（全文），候选项为「dialogue（角色＝该名，text＝内容）」和 action | 存疑 |
-| 13 | 其他行 | action（全文）。如果本场至少有一行以 △ 开头（说明这份剧本用标记写动作），则为存疑，候选项为 dialogue、action、note；否则为确定 | 见左 |
+| 顺序 | 识别条件                                                                                                                                    | 结果                                                                                                                                                        | 置信                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 1    | `^第\s*[0-9一二三四五六七八九十百]+\s*集`                                                                                                   | 集标题，不生成段落，只计入覆盖                                                                                                                              | 确定                                                                            |
+| 2    | `^第[0-9一二三四五六七八九十]+幕` 或 `^ACT\s+\S+`                                                                                           | act                                                                                                                                                         | 确定                                                                            |
+| 3    | `^\d+[-－—.]\d+`、`^第\s*[0-9一二…]+\s*场`、`^(场景\|场)\s*[0-9一二…]+[:：]?`、`^(INT\|EXT\|INT\./EXT)\.?`，或 `^\d+[.、]` 后跟时间／内外词 | scene：时间词（日 白天 → day，夜 夜晚 → night，晨 清晨 → dawn，昏 黄昏 傍晚 → dusk），内外词（内 → int，外 → ext，内外 → intext），其余按空白切分后作为地点 | 至少有一个时间或内外词时为确定，否则存疑                                        |
+| 4    | `^(人物\|出场人物\|角色)[:：]`                                                                                                              | cast                                                                                                                                                        | 确定                                                                            |
+| 5    | 以 `△▲※` 开头                                                                                                                               | action（去掉标记）                                                                                                                                          | 确定                                                                            |
+| 6    | `^【(音效\|音乐\|BGM\|音)】`、`^\[(音效\|SFX)\]`                                                                                            | sound（去掉标记）                                                                                                                                           | 确定                                                                            |
+| 7    | `^(字幕\|画面字幕\|屏幕文字\|黑屏字幕)[:：]`                                                                                                | text（去掉前缀）                                                                                                                                            | 确定                                                                            |
+| 8    | `^(切至\|切到\|叠化\|淡入\|淡出\|转场\|CUT TO\|FADE IN\|FADE OUT)`                                                                          | transition                                                                                                                                                  | 确定                                                                            |
+| 9    | 整行是 `（闪回）`、`（回忆）` 这类括号包着的转场词                                                                                          | transition，候选项为 transition、action、note                                                                                                               | 存疑                                                                            |
+| 10   | `名字（后缀）?[:：]内容`，名字为 1–12 个字符，不含空白、冒号或括号，也不在停用词（时间、地点、人物、字幕、备注、注）中                      | character（后缀 OS、画外音 → os；VO、旁白 → vo；内心 → inner）；内容以（…）开头时，先拆出 parenthetical，其余为 dialogue                                    | 名字没有出现在本场出场人物或之前的说话人中，且超过 4 个字符时为存疑，其余为确定 |
+| 11   | 整行是（…），且上一段是 character 或 dialogue                                                                                               | parenthetical                                                                                                                                               | 确定                                                                            |
+| 12   | `已知角色名 + 空白 + 内容`，没有冒号                                                                                                        | action（全文），候选项为「dialogue（角色＝该名，text＝内容）」和 action                                                                                     | 存疑                                                                            |
+| 13   | 其他行                                                                                                                                      | action（全文）。如果本场至少有一行以 △ 开头（说明这份剧本用标记写动作），则为存疑，候选项为 dialogue、action、note；否则为确定                              | 见左                                                                            |
 
 存疑的行只生成一个段落，带 `review`。规则 10 判为存疑时，按规则 12 的方式输出：一个 action 段落（全文），候选项为「dialogue（角色＝该名，text＝冒号后的内容）」和 action。用户选择候选项后，才可能拆成多个段落，例如角色加对白。
 
@@ -227,8 +226,10 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
 - 输出必须是如下 JSON（允许外面包着 ```json 代码块）：
 
   ```json
-  { "decisions": [{ "id": 12, "type": "dialogue", "character": "周屿" }],
-    "elements": [{ "kind": "prop", "name": "旧信封", "aliases": [], "sameAs": null }] }
+  {
+    "decisions": [{ "id": 12, "type": "dialogue", "character": "周屿" }],
+    "elements": [{ "kind": "prop", "name": "旧信封", "aliases": [], "sameAs": null }]
+  }
   ```
 
 - engine 用 zod 校验输出：
@@ -253,29 +254,29 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
 
 所有路径都在 engine 的 `/projects/:id` 下。请求体和响应体的 schema 都放在 `packages/contracts/src/scripts.ts`；项目设定和页面字段的 schema 放在 `projects.ts`。
 
-| 能力 | 接口 | 说明 |
-| --- | --- | --- |
-| 新建项目 | `POST /projects` | 请求体新增可选字段 `profile` |
-| 保存项目设定 | `PUT /projects/:id/profile` | 请求体为 `ProjectProfile`，返回清单 |
-| 新建创作页 | `POST /projects/:id/pages` | 请求体新增可选字段 `episodeId` |
-| 修改创作页 | `PATCH /projects/:id/pages/:pageId` | 请求体为 `{ name?, episodeId?: uuid \| null }`，至少带一个字段 |
-| 剧集列表 | `GET /projects/:id/episodes` | 返回 `EpisodeSummary` 加 `{ conversion: ConversionState \| null, pending: number }` |
-| 新建剧集 | `POST /projects/:id/episodes` | 请求体为 `{ number, title }`，集号重复时返回 409 `EPISODE_NUMBER_CONFLICT`；同时创建空剧本，revision 为 1 |
-| 修改剧集 | `PATCH /projects/:id/episodes/:episodeId` | 请求体为 `{ number?, title? }` |
-| 删除剧集 | `DELETE /projects/:id/episodes/:episodeId` | 转换运行中时返回 409 `SCRIPT_CONVERTING` |
-| 读取剧本 | `GET /projects/:id/episodes/:episodeId/script` | 返回 `ScriptFile` 加 `{ conversion }` |
-| 保存剧本 | `PUT /projects/:id/episodes/:episodeId/script` | 请求体为 `{ revision, document }`，返回 `{ revision, addedElements }` |
-| 导入剧本 | `POST /projects/:id/episodes/:episodeId/script/import` | 请求体为 `{ revision, text?, profile? }`；不带 `text` 时使用已有的 `pendingImport`，两者都没有时返回 422 `SCRIPT_IMPORT_EMPTY`；revision 不一致时返回 409；返回 202 和 `{ revision, conversion }` |
-| 取消转换 | `POST /projects/:id/episodes/:episodeId/script/import/cancel` | 中止转换，保留 `pendingImport` |
-| 丢弃导入 | `DELETE /projects/:id/episodes/:episodeId/script/import` | 清空 `pendingImport`；转换运行中时返回 409 |
-| 读取设定库 | `GET /projects/:id/story` | 返回 `{ revision, elements, ignored }`。`elements` 中每项额外带两个字段：`mentions`（全部出现次数）和 `episodes: [{ episodeId, scenes }]`（该集内出现的不同场数） |
-| 出现位置 | `GET /projects/:id/story/elements/:elementId/occurrences` | 返回最多 200 条 `{ episodeId, blockId, sceneId, excerpt（≤ 80 个字符） }` |
-| 新建元素 | `POST /projects/:id/story/elements` | 请求体为 `{ kind, name }`，状态为 confirmed；名称冲突时返回 409 `ELEMENT_NAME_CONFLICT` |
-| 修改元素 | `PATCH /projects/:id/story/elements/:elementId` | 请求体为 `{ name?, aliases?, description?, attrs?, status? }` |
-| 合并元素 | `POST /projects/:id/story/elements/:elementId/merge` | 请求体为 `{ into }`，两者必须同类，否则返回 422；源元素的名称和别名并入目标元素的别名，然后删除源元素 |
-| 忽略或删除元素 | `DELETE /projects/:id/story/elements/:elementId` | 删除元素，并把名称和别名写入 `ignored` |
-| 恢复已忽略 | `POST /projects/:id/story/ignored/restore` | 请求体为 `{ kind, name }`，恢复后对所有剧本执行一次同步 |
-| 批量操作 | `POST /projects/:id/story/batch` | 请求体为 `{ ids（≤ 500 个）, action: 'confirm' \| 'ignore' }` |
+| 能力           | 接口                                                          | 说明                                                                                                                                                                                              |
+| -------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 新建项目       | `POST /projects`                                              | 请求体新增可选字段 `profile`                                                                                                                                                                      |
+| 保存项目设定   | `PUT /projects/:id/profile`                                   | 请求体为 `ProjectProfile`，返回清单                                                                                                                                                               |
+| 新建创作页     | `POST /projects/:id/pages`                                    | 请求体新增可选字段 `episodeId`                                                                                                                                                                    |
+| 修改创作页     | `PATCH /projects/:id/pages/:pageId`                           | 请求体为 `{ name?, episodeId?: uuid \| null }`，至少带一个字段                                                                                                                                    |
+| 剧集列表       | `GET /projects/:id/episodes`                                  | 返回 `EpisodeSummary` 加 `{ conversion: ConversionState \| null, pending: number }`                                                                                                               |
+| 新建剧集       | `POST /projects/:id/episodes`                                 | 请求体为 `{ number, title }`，集号重复时返回 409 `EPISODE_NUMBER_CONFLICT`；同时创建空剧本，revision 为 1                                                                                         |
+| 修改剧集       | `PATCH /projects/:id/episodes/:episodeId`                     | 请求体为 `{ number?, title? }`                                                                                                                                                                    |
+| 删除剧集       | `DELETE /projects/:id/episodes/:episodeId`                    | 转换运行中时返回 409 `SCRIPT_CONVERTING`                                                                                                                                                          |
+| 读取剧本       | `GET /projects/:id/episodes/:episodeId/script`                | 返回 `ScriptFile` 加 `{ conversion }`                                                                                                                                                             |
+| 保存剧本       | `PUT /projects/:id/episodes/:episodeId/script`                | 请求体为 `{ revision, document }`，返回 `{ revision, addedElements }`                                                                                                                             |
+| 导入剧本       | `POST /projects/:id/episodes/:episodeId/script/import`        | 请求体为 `{ revision, text?, profile? }`；不带 `text` 时使用已有的 `pendingImport`，两者都没有时返回 422 `SCRIPT_IMPORT_EMPTY`；revision 不一致时返回 409；返回 202 和 `{ revision, conversion }` |
+| 取消转换       | `POST /projects/:id/episodes/:episodeId/script/import/cancel` | 中止转换，保留 `pendingImport`                                                                                                                                                                    |
+| 丢弃导入       | `DELETE /projects/:id/episodes/:episodeId/script/import`      | 清空 `pendingImport`；转换运行中时返回 409                                                                                                                                                        |
+| 读取设定库     | `GET /projects/:id/story`                                     | 返回 `{ revision, elements, ignored }`。`elements` 中每项额外带两个字段：`mentions`（全部出现次数）和 `episodes: [{ episodeId, scenes }]`（该集内出现的不同场数）                                 |
+| 出现位置       | `GET /projects/:id/story/elements/:elementId/occurrences`     | 返回最多 200 条 `{ episodeId, blockId, sceneId, excerpt（≤ 80 个字符） }`                                                                                                                         |
+| 新建元素       | `POST /projects/:id/story/elements`                           | 请求体为 `{ kind, name }`，状态为 confirmed；名称冲突时返回 409 `ELEMENT_NAME_CONFLICT`                                                                                                           |
+| 修改元素       | `PATCH /projects/:id/story/elements/:elementId`               | 请求体为 `{ name?, aliases?, description?, attrs?, status? }`                                                                                                                                     |
+| 合并元素       | `POST /projects/:id/story/elements/:elementId/merge`          | 请求体为 `{ into }`，两者必须同类，否则返回 422；源元素的名称和别名并入目标元素的别名，然后删除源元素                                                                                             |
+| 忽略或删除元素 | `DELETE /projects/:id/story/elements/:elementId`              | 删除元素，并把名称和别名写入 `ignored`                                                                                                                                                            |
+| 恢复已忽略     | `POST /projects/:id/story/ignored/restore`                    | 请求体为 `{ kind, name }`，恢复后对所有剧本执行一次同步                                                                                                                                           |
+| 批量操作       | `POST /projects/:id/story/batch`                              | 请求体为 `{ ids（≤ 500 个）, action: 'confirm' \| 'ignore' }`                                                                                                                                     |
 
 ### 界面
 
@@ -288,6 +289,7 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
   - 画幅：单选。
 
   折叠区底部说明：「设定用于剧本识别与后续出图风格，可随时在项目设定中修改；未填写时会在首次导入剧本时询问。」
+
 - 同一组字段做成 `ProfileFields` 组件，在三个地方复用：项目卡片菜单「项目设定」、项目详情页标题旁的齿轮按钮「项目设定」，以及导入对话框（精简为必填的内容形式、制作媒介、题材）。
 - 项目卡片日期下方显示一行设定摘要，例如「短剧 · 真人实拍 · 都市/悬疑 · 9:16」，空字段跳过；没有设定时显示「未设置项目设定」。
 
@@ -382,21 +384,21 @@ note 类型的段落不参与元素同步，也不参与出现位置和高亮的
 
 ### 代码位置
 
-| 内容 | 位置 |
-| --- | --- |
-| 项目设定、剧集摘要、页面 `episodeId` 的 schema | `packages/contracts/src/projects.ts` |
-| 剧本、设定库、转换状态、接口请求与响应的 schema | `packages/contracts/src/scripts.ts` |
-| 规则解析器、场标题解析、`findMentions`、场的推导 | `packages/contracts/src/script-parse.ts` |
-| Markdown 渲染与回写 | `packages/contracts/src/script-markdown.ts` |
-| 测试用样例剧本 | `packages/contracts/fixtures/script-sample-01.txt`、`script-sample-02.txt` |
-| 剧本与设定库文件的读写 | `ProjectStore` 新增 `readScript`、`writeScript`、`trashScript`、`restoreScript`、`readStory`、`writeStory` 六个方法，由 `LocalProjectStore` 实现，复用其中的 `atomicWrite` 和 revision 缓存 |
-| 剧集、剧本、设定库、转换 | `apps/engine/src/modules/scripts/`，导入 `ProjectsModule` 和 `ModelServicesModule` |
-| 文本补全 `LlmService.complete()` | `apps/engine/src/modules/llm/llm.service.ts`，由 `ModelServicesModule` 导出 |
-| 项目设定接口、页面 `episodeId` | `apps/engine/src/modules/projects/` |
-| 项目设定表单 `ProfileFields` | `apps/desktop/src/renderer/src/features/projects/profile-fields.tsx` |
-| 剧集列表与剧集对话框 | `apps/desktop/src/renderer/src/features/projects/episodes/`；侧栏仍在 `project-tree.tsx` 中 |
-| 剧本页与编辑器 | `apps/desktop/src/renderer/src/features/projects/script/` |
-| 设定库 Tab | `apps/desktop/src/renderer/src/features/projects/story/` |
+| 内容                                             | 位置                                                                                                                                                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 项目设定、剧集摘要、页面 `episodeId` 的 schema   | `packages/contracts/src/projects.ts`                                                                                                                                                        |
+| 剧本、设定库、转换状态、接口请求与响应的 schema  | `packages/contracts/src/scripts.ts`                                                                                                                                                         |
+| 规则解析器、场标题解析、`findMentions`、场的推导 | `packages/contracts/src/script-parse.ts`                                                                                                                                                    |
+| Markdown 渲染与回写                              | `packages/contracts/src/script-markdown.ts`                                                                                                                                                 |
+| 测试用样例剧本                                   | `packages/contracts/fixtures/script-sample-01.txt`、`script-sample-02.txt`                                                                                                                  |
+| 剧本与设定库文件的读写                           | `ProjectStore` 新增 `readScript`、`writeScript`、`trashScript`、`restoreScript`、`readStory`、`writeStory` 六个方法，由 `LocalProjectStore` 实现，复用其中的 `atomicWrite` 和 revision 缓存 |
+| 剧集、剧本、设定库、转换                         | `apps/engine/src/modules/scripts/`，导入 `ProjectsModule` 和 `ModelServicesModule`                                                                                                          |
+| 文本补全 `LlmService.complete()`                 | `apps/engine/src/modules/llm/llm.service.ts`，由 `ModelServicesModule` 导出                                                                                                                 |
+| 项目设定接口、页面 `episodeId`                   | `apps/engine/src/modules/projects/`                                                                                                                                                         |
+| 项目设定表单 `ProfileFields`                     | `apps/desktop/src/renderer/src/features/projects/profile-fields.tsx`                                                                                                                        |
+| 剧集列表与剧集对话框                             | `apps/desktop/src/renderer/src/features/projects/episodes/`；侧栏仍在 `project-tree.tsx` 中                                                                                                 |
+| 剧本页与编辑器                                   | `apps/desktop/src/renderer/src/features/projects/script/`                                                                                                                                   |
+| 设定库 Tab                                       | `apps/desktop/src/renderer/src/features/projects/story/`                                                                                                                                    |
 
 ### 相关笔记核对
 

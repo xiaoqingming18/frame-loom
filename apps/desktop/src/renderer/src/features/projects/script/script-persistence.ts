@@ -1,4 +1,7 @@
-import type { ScriptDocument, ScriptSaveResult } from '@frame-loom/contracts';
+import type {
+  EditableScriptDocument as ScriptDocument,
+  ScriptSaveResult,
+} from '@frame-loom/contracts';
 import { EngineRequestError } from '@/lib/engine-client';
 
 type Snapshot = {
@@ -18,6 +21,7 @@ export function createScriptPersistence(
   let pending: Promise<boolean> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const listeners = new Set<() => void>();
+  let composing = false;
   function update(patch: Partial<Snapshot>) {
     snapshot = { ...snapshot, ...patch };
     listeners.forEach((listener) => listener());
@@ -36,6 +40,7 @@ export function createScriptPersistence(
   async function run() {
     try {
       while (saved !== snapshot.document) {
+        if (composing) return false;
         const document = snapshot.document;
         update({ status: 'saving', message: undefined });
         const result = await save(revision, document);
@@ -52,6 +57,7 @@ export function createScriptPersistence(
   }
   function flush(): Promise<boolean> {
     clearTimeout(timer);
+    if (composing) return Promise.resolve(false);
     if (pending) return pending;
     if (snapshot.status === 'conflict' || snapshot.status === 'converting')
       return Promise.resolve(false);
@@ -70,11 +76,16 @@ export function createScriptPersistence(
     },
     getSnapshot: () => snapshot,
     getRevision: () => revision,
+    setComposing(value: boolean) {
+      composing = value;
+      clearTimeout(timer);
+      if (!value && saved !== snapshot.document) timer = setTimeout(() => void flush(), 1000);
+    },
     hasPendingChanges: () => saved !== snapshot.document || !!pending,
     change(document: ScriptDocument) {
       update({ document });
       clearTimeout(timer);
-      if (!['conflict', 'converting'].includes(snapshot.status))
+      if (!composing && !['conflict', 'converting'].includes(snapshot.status))
         timer = setTimeout(() => {
           void flush();
         }, 1000);

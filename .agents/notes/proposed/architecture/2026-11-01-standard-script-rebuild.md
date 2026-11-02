@@ -8,7 +8,17 @@ Status: proposed
 
 当前实现与目标有实质差异：剧集摘要在 `.frameloom/project.json`，剧本在 `.frameloom/scripts/<episodeId>.json`，设定在 `.frameloom/story.json`；应用级 SQLite 保存项目登记等本机信息。直接改界面或新增 SQLite 表但继续读写旧文件，会留下两套权威数据。现有编辑器、引用定位、项目树、页面所属剧集和偏好均依赖旧契约，需要一起闭合修改范围。
 
-本篇记录 2026-11-01 对话中用户已经确定的产品决定。`proposed` 仅表示代码尚未实施，不表示以下决定可由实施 Agent 重新选择。本次授权只编写文档，不执行数据清理或功能实施。
+本篇记录 2026-11-01 对话中用户已经确定的产品决定。用户授权全部子计划开发、测试与验收；代码已实施，自动化和开发版 Electron 流程已验证，当前仍处于最终验收。`proposed` 状态保留到验收完成，不表示以下决定可由实施 Agent 重新选择。破坏性清理只在可丢弃临时项目验证。
+
+### 当前实施状态
+
+项目级 `.frameloom/project.sqlite`、旧剧本域限定清理状态机、标准文档／设定关联、完整原文模型分批与来源校验、Tiptap 场次编辑器、项目树／页面接线和旧 Markdown／parser 生产入口删除均已实现。contracts 69 项、engine 合并集合 48 项、renderer 25 项、main 30 项通过；开发版 Electron F01—F04 含 V04 边界全部通过。最新边界用例涵盖队列取消、解析／应用前取消、进程重启中断、上游 429／断网／超时、有序重复句、空字段、焦点跳转、项目树解除归属和删集过期清理。加固目录版 N02 已通过正常启动、导入、保存、退出、关库移动、重新定位和再保存，证据为 `.cache/standard-script-rebuild/packaged-acceptance.json` 和两张目录版截图。
+
+engine 的有界 LLM 调用／本地项目存储另补 8 项通过，核心与直接依赖共 56 项。最终目录包重建后的首轮导入请求触发五秒 HTTP 超时；失败日志保留，增加无凭据请求时序诊断后同一构建物复跑 N02 通过，首次超时底层原因仍未确认。没有调大生产请求超时或放宽 fuses。烟测清除旧成功记录并在失败时写诊断，最终结果与已知风险汇总于 `.cache/standard-script-rebuild/acceptance.md`。
+
+验收未完成：配置库当前没有默认 chat 模型，真实模型 L01／L02 未执行；原生 IME 自动化所需 `@oai/sky` 不可用，N01 未执行；系统缩放 125% 且安全策略阻止本地 `file:` 原型预览，尚无同缩放原型渲染对照。故本笔记保持 proposed、08 与父计划保持 active；不得声称 A08 全部验收通过。计划、命令结果和缺口见[实施计划](../../../plans/2026-11-01-standard-script-rebuild/plan.md)。
+
+目录版烟测通过 `apps/desktop/e2e/script-packaged.smoke.ts` 正常启动加固后的可执行文件，以临时本机端口连接渲染进程，测试结束关闭应用和端口；不修改生产 fuses、不使用主进程调试注入。直接使用 `_electron.launch` 最方便复用开发版驱动，但 [Playwright 官方说明](https://playwright.dev/docs/api/class-electron#known-issues)其依赖的 `EnableNodeCliInspectArguments` fuse 不能关闭，与当前生产加固策略冲突，故不采用。渲染进程连接使用 [Electron 支持的命令行调试端口](https://www.electronjs.org/docs/latest/api/command-line-switches#--remote-debugging-portport)，仅由显式烟测命令启动。网络资料核对时间为 2026-11-02，后续版本可能变化。
 
 ## Proposal
 

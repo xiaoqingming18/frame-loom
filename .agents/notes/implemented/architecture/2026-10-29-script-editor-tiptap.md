@@ -2,7 +2,7 @@
 
 Status: implemented
 
-2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)继续使用本篇 Tiptap 依赖和 feature 边界，但将替代扁平节点模型与旧编辑交互。方案已确认、代码未实施；输入法、撤销、稳定身份与 CSP 的既有教训继续适用。
+2026-11-01 后续[标准剧本与项目 SQLite 重构](../../proposed/architecture/2026-11-01-standard-script-rebuild.md)继续使用本篇 Tiptap 依赖和 feature 边界，已用标准场次／字段节点替换扁平模型与旧编辑交互。本篇仍记录旧版选择理由及保留有效的输入法、撤销、稳定身份与 CSP 教训；新实现尚待原生 IME 验收。
 
 ## Problem
 
@@ -38,6 +38,7 @@ Status: implemented
   - `review`：JSON 字符串或 `null`。
 
   `doc` 的 content 为 `scriptBlock+`，根属性保存 v2 的 preface 和 appendix。HTML 渲染为 `<p data-block-type data-id>`，各类型的样式只通过 `data-block-type` 选择器加 token 实现。
+
 - `toEditorJson(document)` 和 `fromEditorJson(json)` 放在 `features/projects/script/editor-model.ts`，两者必须无损互逆。`fromEditorJson` 的输出要经过 `ScriptDocument.parse` 校验，校验失败时不保存，并显示错误。
 - 编辑某个段落的文字时，清除该段的 `review`。这在 `appendTransaction` 中实现：凡是文本发生变化的段落，如果带有 `review`，就清除。
 

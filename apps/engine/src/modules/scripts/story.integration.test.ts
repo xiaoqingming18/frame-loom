@@ -1,244 +1,181 @@
-import fs from 'node:fs/promises';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import {
   EpisodeSummary,
   ProjectSummary,
+  ScriptResult,
   StoryElement,
   StoryResult,
-  parseScriptText,
-  ScriptDocument as DocumentSchema,
-  type ScriptDocument,
+  StoryOccurrencesResult,
 } from '@frame-loom/contracts';
 import { testEngine } from '../../testing/test-engine.js';
-import { ProjectStore } from '../projects/project-store.js';
-
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
-  vi.restoreAllMocks();
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  for (const close of cleanups.splice(0).reverse()) await close();
 });
 async function setup() {
   const s = await testEngine();
   cleanups.push(() => s.close());
   const project = ProjectSummary.parse(
-    await (await s.request('/projects', 'POST', { name: '设定库', location: s.directory })).json(),
+    await (
+      await s.request('/projects', 'POST', { name: '设定测试', location: s.directory })
+    ).json(),
   );
   const base = `/projects/${project.id}`;
   const episode = EpisodeSummary.parse(
     await (await s.request(`${base}/episodes`, 'POST', { number: 1, title: '' })).json(),
   );
-  const script = `${base}/episodes/${episode.id}/script`;
+  const url = `${base}/episodes/${episode.id}/script`;
+  const record = ScriptResult.parse(await (await s.request(url)).json());
+  const doc = {
+    ...record.document,
+    scenes: [
+      {
+        id: crypto.randomUUID(),
+        scene_id: '1-1',
+        location: '便利店',
+        time_of_day: '夜' as const,
+        interior: true,
+        atmosphere: '安静',
+        characters: ['林夏', '老陈'],
+        beats: [
+          {
+            id: crypto.randomUUID(),
+            type: 'dialogue' as const,
+            speaker: '西装男',
+            emotion: '',
+            line: '林夏，不要开门。',
+          },
+        ],
+      },
+    ],
+  };
+  await s.request(url, 'PUT', { revision: 1, document: doc });
   const story = async () => StoryResult.parse(await (await s.request(`${base}/story`)).json());
   const create = async (kind: string, name: string) =>
     StoryElement.parse(
       await (await s.request(`${base}/story/elements`, 'POST', { kind, name })).json(),
     );
-  const save = (document: ScriptDocument, revision = 1) =>
-    s.request(script, 'PUT', { revision, document });
-  return { s, project, base, episode, script, story, create, save };
+  return { s, project, base, episode, url, doc, story, create };
 }
-
-it('待确认清理跨集检查，保留前言、附录和已确认元素并清除合并引用', async () => {
-  const { s, project, base, episode, story, save, create } = await setup();
-  const document = DocumentSchema.parse({
-    schemaVersion: 2,
-    preface: '前言人物',
-    appendix: '附录人物',
-    blocks: parseScriptText('周屿：你好').blocks,
-  });
-  await save(document);
-  const second = EpisodeSummary.parse(
-    await (await s.request(`${base}/episodes`, 'POST', { number: 2, title: '' })).json(),
+it('S01/S02/S03/S04/S06 精确去重、人物并集、资料保护与改名保留别名', async () => {
+  const { s, base, url, doc, story } = await setup();
+  const first = await story();
+  expect(first.elements.map((e) => e.name).sort()).toEqual(
+    ['便利店', '林夏', '老陈', '西装男'].sort(),
   );
-  await s.request(`${base}/episodes/${second.id}/script`, 'PUT', { revision: 1, document });
-  const confirmed = await create('character', '永远保留');
-  const front = await create('character', '前言人物');
-  const back = await create('character', '附录人物');
-  const person = (await story()).elements.find((element) => element.name === '周屿')!;
-  const store = s.app.get(ProjectStore);
-  await store.serial(project.id, async () => {
-    const file = await store.readStory(project.rootPath);
-    for (const element of file.elements)
-      if ([front.id, back.id].includes(element.id)) {
-        element.status = 'pending';
-        element.suggestedMergeInto = person.id;
-      }
-    await store.writeStory(project.rootPath, { ...file, revision: file.revision + 1 });
-  });
-  const empty = { ...document, blocks: [] };
-  await save(empty, 2);
-  expect((await story()).elements.some((element) => element.id === person.id)).toBe(true);
-  await s.request(`${base}/episodes/${second.id}/script`, 'PUT', { revision: 2, document: empty });
-  const remaining = (await story()).elements;
-  expect(remaining.map((element) => element.id).sort()).toEqual(
-    [confirmed.id, front.id, back.id].sort(),
-  );
-  expect(remaining.every((element) => !element.suggestedMergeInto)).toBe(true);
-  expect(
-    (await (await s.request(`${base}/episodes/${episode.id}/script`)).json()) as unknown,
-  ).toMatchObject({ document: empty });
-});
-
-it('保存同步样例恰好新增十个元素，重复保存不新增，确认更新本集待确认数量', async () => {
-  const { s, base, story, save } = await setup();
-  const text = await fs.readFile(
-    new URL('../../../../../packages/contracts/fixtures/script-sample-01.txt', import.meta.url),
-    'utf8',
-  );
-  const document: ScriptDocument = {
-    schemaVersion: 2,
-    preface: '',
-    appendix: '',
-    blocks: parseScriptText(text).blocks,
+  const person = first.elements.find((e) => e.name === '林夏')!;
+  const patch = {
+    name: '林晚',
+    attrs: {
+      age: '约30岁',
+      appearance: ['黑发'],
+      personality: ['谨慎'],
+      signatureActions: ['转笔'],
+      signatureProps: ['旧钥匙'],
+    },
   };
-  expect(await (await save(document)).json()).toMatchObject({ revision: 2, addedElements: 10 });
-  expect(await (await save(document, 2)).json()).toMatchObject({ addedElements: 0 });
-  const result = await story();
-  expect(result.elements.filter((item) => item.kind === 'character')).toHaveLength(4);
-  expect(result.elements.filter((item) => item.kind === 'location')).toHaveLength(6);
-  expect(await (await s.request(`${base}/episodes`)).json()).toMatchObject([{ pending: 10 }]);
+  expect((await s.request(`${base}/story/elements/${person.id}`, 'PATCH', patch)).status).toBe(200);
+  const saved = await s.request(url, 'PUT', { revision: 2, document: doc });
+  expect(await saved.json()).toMatchObject({ addedElements: 0 });
+  const updated = (await story()).elements.find((e) => e.id === person.id)!;
+  expect(updated.aliases).toEqual(['林夏']);
+  expect(updated.attrs).toEqual(patch.attrs);
+  expect(updated.manuallyEdited).toBe(true);
   expect(
-    (
-      await s.request(`${base}/story/elements/${result.elements[0].id}`, 'PATCH', {
-        status: 'confirmed',
-      })
-    ).status,
-  ).toBe(200);
-  expect(await (await s.request(`${base}/episodes`)).json()).toMatchObject([{ pending: 9 }]);
-});
-
-it('名称和别名唯一，跨类拒绝合并，重定向合并建议且不改剧本文字', async () => {
-  const { s, base, project, story, create } = await setup();
-  const a = await create('character', '林夏');
-  const b = await create('character', '小林');
-  const c = await create('character', '小夏');
-  const location = await create('location', '天台');
+    ScriptResult.parse(await (await s.request(url)).json()).document.scenes[0].characters,
+  ).toContain('林夏');
   expect(
-    (await s.request(`${base}/story/elements`, 'POST', { kind: 'character', name: '林夏' })).status,
-  ).toBe(409);
-  expect(
-    (await s.request(`${base}/story/elements/${a.id}`, 'PATCH', { aliases: ['小林'] })).status,
-  ).toBe(409);
-  expect(
-    await (
-      await s.request(`${base}/story/elements/${a.id}/merge`, 'POST', { into: location.id })
-    ).json(),
-  ).toMatchObject({ code: 'ELEMENT_KIND_MISMATCH' });
-  expect((await s.request(`${base}/story/elements/${randomUUID()}`, 'DELETE')).status).toBe(404);
-  const store = s.app.get(ProjectStore);
-  await store.serial(project.id, async () => {
-    const file = await store.readStory(project.rootPath);
-    for (const element of file.elements)
-      if (element.id === c.id || element.id === a.id) element.suggestedMergeInto = b.id;
-    await store.writeStory(project.rootPath, { ...file, revision: file.revision + 1 });
-  });
-  expect(
-    (await s.request(`${base}/story/elements/${b.id}/merge`, 'POST', { into: a.id })).status,
-  ).toBe(201);
-  const merged = await story();
-  expect(merged.elements.find((item) => item.id === a.id)).toMatchObject({ aliases: ['小林'] });
-  expect(merged.elements.find((item) => item.id === a.id)).not.toHaveProperty('suggestedMergeInto');
-  expect(merged.elements.find((item) => item.id === c.id)?.suggestedMergeInto).toBe(a.id);
-});
-
-it('忽略全部别名、恢复后跨集同步，批量跳过不存在项且限制五百项', async () => {
-  const { s, base, story, create, save } = await setup();
-  const person = await create('character', '店主');
-  await s.request(`${base}/story/elements/${person.id}`, 'PATCH', { aliases: ['老板'] });
-  await s.request(`${base}/story/elements/${person.id}`, 'DELETE');
-  expect((await story()).ignored).toEqual([
-    { kind: 'character', name: '店主' },
-    { kind: 'character', name: '老板' },
-  ]);
-  const document: ScriptDocument = {
-    schemaVersion: 2,
-    preface: '',
-    appendix: '',
-    blocks: [
-      { id: 'c', type: 'character', text: '店主', attrs: { delivery: 'os', extension: 'OS' } },
-    ],
-  };
-  expect(await (await save(document)).json()).toMatchObject({ addedElements: 0 });
-  expect(
-    (await s.request(`${base}/story/ignored/restore`, 'POST', { kind: 'character', name: '店主' }))
+    (await s.request(`${base}/story/elements`, 'POST', { kind: 'character', name: ' 林夏 ' }))
       .status,
-  ).toBe(201);
-  const restored = (await story()).elements[0];
-  expect(restored).toMatchObject({ name: '店主', status: 'pending' });
+  ).toBe(409);
   expect(
-    (
-      await s.request(`${base}/story/batch`, 'POST', {
-        ids: [restored.id, randomUUID()],
-        action: 'confirm',
-      })
-    ).status,
+    (await s.request(`${base}/story/elements`, 'POST', { kind: 'location', name: '林夏' })).status,
   ).toBe(201);
-  expect((await story()).elements[0].status).toBe('confirmed');
-  expect(
-    (
-      await s.request(`${base}/story/batch`, 'POST', {
-        ids: Array(501).fill(restored.id),
-        action: 'ignore',
-      })
-    ).status,
-  ).toBe(400);
-  await s.request(`${base}/story/batch`, 'POST', {
-    ids: [restored.id, restored.id],
-    action: 'ignore',
-  });
-  expect((await story()).elements).toEqual([]);
 });
-
-it('跨集出现位置按场去重、注释不匹配、外部修改和合并使缓存更新', async () => {
-  const { s, base, project, episode, story, save, create } = await setup();
-  const document: ScriptDocument = {
-    schemaVersion: 2,
-    preface: '',
-    appendix: '',
-    blocks: [
-      {
-        id: 'scene',
-        type: 'scene',
-        text: '天台',
-        attrs: { time: null, space: null, timeText: null, note: null, timecode: null },
-      },
-      { id: 'a', type: 'action', text: '林夏 小林 林夏' },
-      { id: 'note', type: 'note', text: '林夏' },
-    ],
-  };
-  await save(document);
-  const person = await create('character', '林夏');
-  const alias = await create('character', '小林');
+it('S07 合并冲突必须明确选值，关系重定向且正文保持', async () => {
+  const { s, base, url, story, create } = await setup();
+  const source = (await story()).elements.find((e) => e.name === '林夏')!;
+  const target = await create('character', '林晚');
+  await s.request(`${base}/story/elements/${source.id}`, 'PATCH', { attrs: { age: '30' } });
+  expect(
+    (await s.request(`${base}/story/elements/${source.id}/merge`, 'POST', { into: target.id }))
+      .status,
+  ).toBe(409);
+  expect(
+    (
+      await s.request(`${base}/story/elements/${source.id}/merge`, 'POST', {
+        into: target.id,
+        attrs: { age: '30' },
+      })
+    ).status,
+  ).toBe(201);
+  const merged = (await story()).elements.find((e) => e.id === target.id)!;
+  expect(merged.aliases).toContain('林夏');
+  const refs = StoryOccurrencesResult.parse(
+    await (await s.request(`${base}/story/elements/${target.id}/occurrences`)).json(),
+  );
+  expect(refs.length).toBeGreaterThan(0);
+  expect(
+    ScriptResult.parse(await (await s.request(url)).json()).document.scenes[0].characters,
+  ).toContain('林夏');
+});
+it('S08/S09/S12 忽略不复活、恢复，手工完善 pending 不清理，四类可管理', async () => {
+  const { s, base, url, doc, story, create } = await setup();
+  const person = (await story()).elements.find((e) => e.name === '老陈')!;
+  await s.request(`${base}/story/elements/${person.id}`, 'DELETE');
+  await s.request(url, 'PUT', { revision: 2, document: doc });
+  expect((await story()).elements.some((e) => e.name === '老陈')).toBe(false);
+  await s.request(`${base}/story/ignored/restore`, 'POST', { kind: 'character', name: '老陈' });
+  expect((await story()).elements.some((e) => e.name === '老陈')).toBe(true);
+  const kept = (await story()).elements.find((e) => e.name === '林夏')!;
+  await s.request(`${base}/story/elements/${kept.id}`, 'PATCH', { description: '已完善但未确认' });
+  await s.request(url, 'PUT', { revision: 3, document: { ...doc, scenes: [] } });
+  expect((await story()).elements.some((e) => e.id === kept.id)).toBe(true);
+  const prop = await create('prop', '旧钥匙'),
+    costume = await create('costume', '风衣');
+  expect(prop.kind).toBe('prop');
+  expect(costume.kind).toBe('costume');
+});
+it('S03/S09/S10 跨集精确复用，动作内已有长名保留，短名不双计，统计不受位置上限截断', async () => {
+  const { s, base, url, doc, story, create } = await setup();
+  const person = (await story()).elements.find((element) => element.name === '林夏')!;
+  const short = await create('character', '林');
   const second = EpisodeSummary.parse(
     await (await s.request(`${base}/episodes`, 'POST', { number: 2, title: '' })).json(),
   );
-  await s.request(`${base}/episodes/${second.id}/script`, 'PUT', { revision: 1, document });
-  const result = (await story()).elements.find((item) => item.id === person.id)!;
-  expect(result.mentions).toBe(4);
-  expect(result.episodes).toEqual([
-    { episodeId: episode.id, scenes: 1 },
-    { episodeId: second.id, scenes: 1 },
-  ]);
-  const store = s.app.get(ProjectStore);
-  const read = vi.spyOn(store, 'readScript');
-  await story();
-  expect(read).not.toHaveBeenCalled();
-  const path = join(project.rootPath, '.frameloom/scripts', `${episode.id}.json`);
-  const original = await fs.readFile(path, 'utf8');
-  await fs.writeFile(path, original.replace('林夏 小林 林夏', '林夏 小林'));
-  expect((await story()).elements.find((item) => item.id === person.id)?.mentions).toBe(3);
-  expect(read).toHaveBeenCalledTimes(1);
-  await s.request(`${base}/story/elements/${alias.id}/merge`, 'POST', { into: person.id });
-  expect((await story()).elements.find((item) => item.id === person.id)?.mentions).toBe(5);
-  const occurrences: unknown = await (
-    await s.request(`${base}/story/elements/${person.id}/occurrences`)
-  ).json();
-  expect(occurrences).toHaveLength(5);
-  expect(occurrences).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ episodeId: episode.id, blockId: 'a', sceneId: 'scene' }),
-    ]),
+  const secondUrl = `${base}/episodes/${second.id}/script`;
+  const secondDoc = structuredClone(doc);
+  secondDoc.scenes[0].id = crypto.randomUUID();
+  secondDoc.scenes[0].beats = [
+    { id: crypto.randomUUID(), type: 'dialogue', speaker: '林夏', emotion: '', line: '不要开门。' },
+  ];
+  expect((await s.request(secondUrl, 'PUT', { revision: 1, document: secondDoc })).status).toBe(
+    200,
   );
+  const actionDoc = {
+    ...doc,
+    scenes: [
+      {
+        ...doc.scenes[0],
+        characters: [],
+        beats: Array.from({ length: 201 }, () => ({
+          id: crypto.randomUUID(),
+          type: 'action',
+          content: '林夏仍然望着门外。',
+        })),
+      },
+    ],
+  };
+  expect((await s.request(url, 'PUT', { revision: 2, document: actionDoc })).status).toBe(200);
+  await s.request(secondUrl, 'PUT', { revision: 2, document: { ...secondDoc, scenes: [] } });
+  const result = await story();
+  expect(result.elements.find((element) => element.id === person.id)?.mentions).toBe(201);
+  expect(result.elements.find((element) => element.id === short.id)?.mentions).toBe(0);
+  expect(
+    StoryOccurrencesResult.parse(
+      await (await s.request(`${base}/story/elements/${person.id}/occurrences`)).json(),
+    ),
+  ).toHaveLength(200);
+  await s.request(url, 'PUT', { revision: 3, document: { ...actionDoc, scenes: [] } });
+  expect((await story()).elements.some((element) => element.id === person.id)).toBe(false);
 });

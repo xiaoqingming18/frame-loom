@@ -107,7 +107,6 @@ export class ProjectMediaService {
       ['media', 0],
       ['trash/media', 30 * 86400_000],
       ['trash/pages', 30 * 86400_000],
-      ['trash/scripts', 30 * 86400_000],
       ['tmp', 3600_000],
     ] as const) {
       const folder = await internalPath(root, directory);

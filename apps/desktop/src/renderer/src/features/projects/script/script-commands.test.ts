@@ -1,200 +1,123 @@
-// @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { getSchema, type JSONContent } from '@tiptap/core';
-import Document from '@tiptap/extension-document';
-import Text from '@tiptap/extension-text';
-import { EditorState, TextSelection, type Command } from '@tiptap/pm/state';
-import { history, undo, redo } from '@tiptap/pm/history';
-import { BLOCK_TYPES, type ScriptBlock } from '@frame-loom/contracts';
-import { ScriptBlockNode, fromEditorJson, toEditorJson } from './editor-model';
+import { afterEach, expect, it } from 'vitest';
+import { Editor } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
+import { emptyScriptDocument, type EditableScriptDocument } from '@frame-loom/contracts';
+import { scriptExtensions, isScriptCompositionKey } from './editor-extensions';
+import { toEditorJson, fromEditorJson } from './editor-model';
 import {
-  NEXT_TYPE,
-  TYPE_CYCLE,
-  applyReview,
-  backspaceBlock,
-  clearReviewPlugin,
-  cycleBlockType,
-  enterBlock,
-  moveBlock,
-  pasteLines,
-  setBlockType,
+  addScene,
+  addBeat,
+  moveNode,
+  removeNode,
+  switchBeat,
+  enterBeat,
+  backspaceBeat,
+  focusField,
+  pasteText,
 } from './script-commands';
-
-const schema = getSchema([Document.extend({ content: 'scriptBlock+' }), Text, ScriptBlockNode]);
-function setup(blocks: ScriptBlock[], cursor = blocks[0].text.length + 1) {
-  let state = EditorState.create({
-    schema,
-    doc: schema.nodeFromJSON(toEditorJson({ schemaVersion: 2, preface: '', appendix: '', blocks })),
-    plugins: [history(), clearReviewPlugin()],
+const editors: Editor[] = [];
+afterEach(() => {
+  for (const editor of editors.splice(0)) editor.destroy();
+});
+it('U06/U07 字段跳转不改正文，空行退格回到前文，非空行和跨字段粘贴不删结构', () => {
+  const editor = setup();
+  addScene(editor);
+  addBeat(editor, read(editor).scenes[0].id, 'dialogue');
+  const before = read(editor);
+  expect(editor.state.selection.$from.parent.attrs.field).toBe('speaker');
+  focusField(1)(editor.state, editor.view.dispatch, editor.view);
+  expect(editor.state.selection.$from.parent.attrs.field).toBe('emotion');
+  focusField(-1)(editor.state, editor.view.dispatch, editor.view);
+  expect(editor.state.selection.$from.parent.attrs.field).toBe('speaker');
+  expect(read(editor)).toEqual(before);
+  backspaceBeat(editor.state, editor.view.dispatch, editor.view);
+  expect(read(editor).scenes[0].beats).toEqual([]);
+  expect(editor.state.selection.$from.parent.attrs.field).toBe('atmosphere');
+  addBeat(editor, before.scenes[0].id, 'action');
+  pasteText('林夏\r\n等一等。')(editor.state, editor.view.dispatch, editor.view);
+  expect(read(editor).scenes[0].beats[0]).toMatchObject({ content: '林夏\n等一等。' });
+  const end = editor.state.selection.from;
+  const start = editor.state.selection.$from.start();
+  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, start)));
+  expect(backspaceBeat(editor.state, editor.view.dispatch, editor.view)).toBe(true);
+  expect(read(editor).scenes[0].beats).toHaveLength(1);
+  const full = read(editor);
+  editor.view.dispatch(
+    editor.state.tr.setSelection(TextSelection.create(editor.state.doc, 2, end)),
+  );
+  pasteText('覆盖')(editor.state, editor.view.dispatch, editor.view);
+  expect(read(editor)).toEqual(full);
+});
+function setup() {
+  const doc = emptyScriptDocument({
+    name: '剧名',
+    episode: { number: 2, title: '重逢', duration_sec: 0 },
   });
-  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, cursor)));
-  return {
-    get state() {
-      return state;
-    },
-    get blocks() {
-      return fromEditorJson(state.doc.toJSON() as JSONContent).blocks;
-    },
-    run(command: Command) {
-      return command(state, (tr) => {
-        state = state.applyTransaction(tr).state;
-      });
-    },
-  };
+  const editor = new Editor({ extensions: scriptExtensions(), content: toEditorJson(doc) });
+  editors.push(editor);
+  return editor;
 }
-describe('剧本键盘命令', () => {
-  it.each(BLOCK_TYPES)('%s 末尾 Enter 映射', (type) => {
-    const editor = setup([{ id: 'a', type, text: '内容' }]);
-    editor.run(enterBlock);
-    expect(editor.blocks.map((block) => block.type)).toEqual([type, NEXT_TYPE[type]]);
-    expect(new Set(editor.blocks.map((block) => block.id)).size).toBe(2);
+const read = (editor: Editor): EditableScriptDocument => fromEditorJson(editor.getJSON());
+it('U04 场次添加移动删除保持身份，场号自动，操作可单步撤销', () => {
+  const editor = setup();
+  addScene(editor);
+  addScene(editor);
+  const before = read(editor).scenes.map((s) => s.id);
+  moveNode(editor, before[1], -1);
+  expect(read(editor).scenes.map((s) => s.id)).toEqual([...before].reverse());
+  expect(read(editor).scenes.map((s) => s.scene_id)).toEqual(['2-1', '2-2']);
+  editor.commands.undo();
+  expect(read(editor).scenes.map((s) => s.id)).toEqual(before);
+  removeNode(editor, before[0]);
+  expect(read(editor).scenes).toHaveLength(1);
+  removeNode(editor, before[1]);
+  expect(read(editor).scenes).toHaveLength(1);
+});
+it('U05/U08 对白转动作保留全字段，一次撤销恢复身份和字段', () => {
+  const editor = setup();
+  addScene(editor);
+  const scene = read(editor).scenes[0];
+  addBeat(editor, scene.id, 'dialogue');
+  const doc = read(editor);
+  const beat = doc.scenes[0].beats[0];
+  doc.scenes[0].beats = [
+    { id: beat.id, type: 'dialogue', speaker: '林夏', emotion: '疑惑', line: '您认识我？' },
+  ];
+  editor.commands.setContent(toEditorJson(doc), { emitUpdate: false });
+  switchBeat(editor, beat.id);
+  expect(read(editor).scenes[0].beats[0]).toEqual({
+    id: beat.id,
+    type: 'action',
+    content: '林夏（疑惑）：您认识我？',
   });
-  it.each(BLOCK_TYPES.filter((type) => type !== 'action'))('%s 空段 Enter 改动作', (type) => {
-    const editor = setup([{ id: 'a', type, text: '' }]);
-    editor.run(enterBlock);
-    expect(editor.blocks).toEqual([{ id: 'a', type: 'action', text: '' }]);
-  });
-  it('Tab 整圈和反向、非空吞 Tab', () => {
-    const editor = setup([{ id: 'a', type: 'action', text: '' }]);
-    for (const type of [...TYPE_CYCLE.slice(1), 'action']) {
-      editor.run(cycleBlockType(1));
-      expect(editor.blocks[0].type).toBe(type);
-    }
-    editor.run(cycleBlockType(-1));
-    expect(editor.blocks[0].type).toBe('cast');
-    const nonempty = setup([{ id: 'a', type: 'action', text: '文字' }]);
-    expect(nonempty.run(cycleBlockType(1))).toBe(true);
-    expect(nonempty.blocks[0].type).toBe('action');
-  });
-  it.each(BLOCK_TYPES)('直接切换 %s 并清 review', (type) => {
-    const editor = setup([
-      {
-        id: 'a',
-        type: 'action',
-        text: '',
-        review: { reason: '未知', options: [{ type: 'action' }] },
-      },
-    ]);
-    editor.run(setBlockType(type));
-    expect(editor.blocks[0]).toMatchObject({ id: 'a', type, text: '' });
-    expect(editor.blocks[0].review).toBeUndefined();
-  });
-  it('解析场标题和角色后缀', () => {
-    const scene = setup([{ id: 'a', type: 'action', text: '1-8 夜 外 天台' }]);
-    scene.run(enterBlock);
-    expect(scene.blocks[0]).toEqual({
-      id: 'a',
-      type: 'scene',
-      text: '天台',
-      attrs: { time: 'night', space: 'ext', timeText: '夜', note: null, timecode: null },
-    });
-    const character = setup([{ id: 'a', type: 'character', text: '店主（OS）' }]);
-    character.run(enterBlock);
-    expect(character.blocks[0]).toEqual({
-      id: 'a',
-      type: 'character',
-      text: '店主',
-      attrs: { delivery: 'os', extension: 'OS' },
-    });
-  });
-  it('类型切换重新解析属性，拆出对白可一次撤销', () => {
-    expect(TYPE_CYCLE).not.toContain('act');
-    expect(TYPE_CYCLE).toContain('production');
-    const scene = setup([{ id: 'a', type: 'action', text: '**1. 内景　X — 夜**' }]);
-    scene.run(setBlockType('scene'));
-    expect(scene.blocks[0]).toMatchObject({
-      text: 'X',
-      attrs: { time: 'night', space: 'int', timeText: '夜' },
-    });
-    const original: ScriptBlock = { id: 'a', type: 'action', text: '林夏：你好' };
-    const dialogue = setup([original]);
-    dialogue.run(setBlockType('character'));
-    expect(dialogue.blocks.map((block) => [block.type, block.text])).toEqual([
-      ['character', '林夏'],
-      ['dialogue', '你好'],
-    ]);
-    expect(dialogue.blocks[1].id).toBe('a');
-    dialogue.run(undo);
-    expect(dialogue.blocks).toEqual([original]);
-  });
-  it('中间拆分后半无来源，撤销恢复 id，重做仍唯一', () => {
-    const original: ScriptBlock[] = [
-      { id: 'a', type: 'action', text: '你好世界', src: { line: 1 } },
-    ];
-    const editor = setup(original, 3);
-    editor.run(enterBlock);
-    expect(editor.blocks.map((block) => block.text)).toEqual(['你好', '世界']);
-    expect(editor.blocks[1].src).toBeUndefined();
-    expect(editor.blocks[1].id).not.toBe('a');
-    editor.run(undo);
-    expect(editor.blocks).toEqual(original);
-    editor.run(redo);
-    expect(new Set(editor.blocks.map((block) => block.id)).size).toBe(2);
-  });
-  it('文本变化清存疑，候选拆分保留对白 id', () => {
-    const block: ScriptBlock = {
-      id: 'a',
-      type: 'action',
-      text: '周屿 你好',
-      review: { reason: '存疑', options: [{ type: 'dialogue', character: '周屿', text: '你好' }] },
-    };
-    const editor = setup([block]);
-    editor.run(applyReview('a', block.review!.options[0]));
-    expect(editor.blocks[1]).toEqual({ id: 'a', type: 'dialogue', text: '你好' });
-    editor.run(undo);
-    expect(editor.blocks).toEqual([block]);
-    editor.run((state, dispatch) => {
-      dispatch?.(state.tr.insertText('啊'));
-      return true;
-    });
-    expect(editor.blocks[0].review).toBeUndefined();
-  });
-  it('多行粘贴、移动和开头退格', () => {
-    const editor = setup([{ id: 'a', type: 'scene', text: '' }]);
-    editor.run(pasteLines('一\n二\n三'));
-    expect(editor.blocks.map((block) => block.type)).toEqual(['action', 'action', 'action']);
-    expect(new Set(editor.blocks.map((block) => block.id)).size).toBe(3);
-    const moving = setup([
-      { id: 'a', type: 'action', text: '一' },
-      { id: 'b', type: 'action', text: '二' },
-    ]);
-    moving.run(moveBlock(1));
-    expect(moving.blocks.map((block) => block.id)).toEqual(['b', 'a']);
-    moving.run(moveBlock(-1));
-    expect(moving.blocks.map((block) => block.id)).toEqual(['a', 'b']);
-    const joining = setup(
-      [
-        { id: 'a', type: 'action', text: '一' },
-        { id: 'b', type: 'action', text: '二' },
-      ],
-      4,
-    );
-    joining.run(backspaceBlock);
-    expect(joining.blocks[0].text).toBe('一二');
-  });
-  it('组字期间所有命令不处理', () => {
-    const editor = setup([{ id: 'a', type: 'action', text: '' }]);
-    for (const command of [
-      enterBlock,
-      setBlockType('scene'),
-      cycleBlockType(1),
-      moveBlock(1),
-      pasteLines('一\n二'),
-      backspaceBlock,
-    ])
-      expect(command(editor.state, undefined, { composing: true } as never)).toBe(false);
-  });
-  it('保持当前只清除存疑，保留场标题属性和来源', () => {
-    const block: ScriptBlock = {
-      id: 'a',
-      type: 'scene',
-      text: '天台',
-      attrs: { time: 'night', space: 'ext', timeText: null, note: null, timecode: null },
-      src: { line: 1 },
-      review: { reason: '存疑', options: [{ type: 'scene' }] },
-    };
-    const editor = setup([block]);
-    editor.run(applyReview('a'));
-    expect(editor.blocks[0]).toEqual({ ...block, review: undefined });
-  });
+  editor.commands.undo();
+  expect(read(editor).scenes[0].beats).toEqual(doc.scenes[0].beats);
+  switchBeat(editor, beat.id);
+  switchBeat(editor, beat.id);
+  expect(read(editor).scenes[0].beats).toEqual(doc.scenes[0].beats);
+});
+it('U06/U07 Enter 新增同类、空行删除，组字和229确认不拆行', () => {
+  const editor = setup();
+  addScene(editor);
+  addBeat(editor, read(editor).scenes[0].id, 'action');
+  expect(enterBeat(editor.state, editor.view.dispatch, editor.view)).toBe(true);
+  expect(read(editor).scenes[0].beats).toHaveLength(2);
+  const position = editor.state.selection.from;
+  editor.view.dispatch(
+    editor.state.tr.setSelection(TextSelection.create(editor.state.doc, position)),
+  );
+  backspaceBeat(editor.state, editor.view.dispatch, editor.view);
+  expect(read(editor).scenes[0].beats).toHaveLength(1);
+  expect(
+    isScriptCompositionKey(
+      editor.view,
+      new KeyboardEvent('keydown', { key: 'Enter', isComposing: true }),
+    ),
+  ).toBe(true);
+  expect(
+    isScriptCompositionKey(
+      editor.view,
+      new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229 }),
+    ),
+  ).toBe(true);
 });

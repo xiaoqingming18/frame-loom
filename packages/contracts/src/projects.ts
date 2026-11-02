@@ -107,6 +107,7 @@ export const ProjectProfile = z.strictObject({
       '题材重复',
     ),
   aspect: z.enum(['16:9', '9:16', '2.39:1', '4:3']).nullable(),
+  style: z.string().max(2000).optional(),
 });
 export type ProjectProfile = z.infer<typeof ProjectProfile>;
 export function isProfileComplete(profile?: ProjectProfile): boolean {
@@ -143,12 +144,18 @@ export const EpisodeSummary = z.strictObject({
   scenes: z.number().int().nonnegative(),
   chars: z.number().int().nonnegative(),
   draft: z.boolean(),
+  duration_sec: z.number().int().nonnegative().default(0),
 });
 export type EpisodeSummary = z.infer<typeof EpisodeSummary>;
 export function episodeLabel(episode: Pick<EpisodeSummary, 'number' | 'title'>): string {
   return `第 ${episode.number} 集${episode.title ? ` ${episode.title}` : ''}`;
 }
 const FormatVersion = z.number().int().positive().max(1, 'PROJECT_FORMAT_TOO_NEW：需要更新应用');
+const ProjectFormatVersion = z
+  .number()
+  .int()
+  .positive()
+  .max(2, 'PROJECT_FORMAT_TOO_NEW：需要更新应用');
 export const ProjectPageSummary = z
   .object({
     id: ProjectPageId,
@@ -163,7 +170,7 @@ export type ProjectPageSummary = z.infer<typeof ProjectPageSummary>;
 export const ProjectManifest = z
   .object({
     format: z.literal('frame-loom-project'),
-    formatVersion: FormatVersion,
+    formatVersion: ProjectFormatVersion,
     id: ProjectId,
     name: EntryName,
     createdAt: Timestamp,
@@ -201,6 +208,12 @@ export const ProjectManifest = z
     }
   });
 export type ProjectManifest = z.infer<typeof ProjectManifest>;
+// 磁盘不保存聚合剧集；旧格式由升级入口单独读取。
+export const ProjectDiskManifest = ProjectManifest.safeExtend({
+  formatVersion: z.literal(2),
+  episodes: z.never().optional(),
+});
+export type ProjectDiskManifest = z.infer<typeof ProjectDiskManifest>;
 export const ProjectPageFile = z
   .object({
     format: z.literal('frame-loom-page'),

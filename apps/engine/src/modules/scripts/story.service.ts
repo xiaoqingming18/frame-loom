@@ -1,402 +1,261 @@
 import { Injectable } from '@nestjs/common';
-import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import type Database from 'better-sqlite3';
+import { z } from 'zod';
 import {
-  ElementName,
-  StoryFile,
-  StoryElementCreateRequest,
-  StoryElementUpdateRequest,
-  findMentions,
-  syncCandidates,
+  StoryElement,
+  elementNameKey,
+  elementAttrsSchema,
   type ElementKind,
-  type ProjectManifest,
-  type ScriptBlock,
-  type StoryElement,
-  type StoryOccurrencesResult,
-  type RosterEntry,
+  type StoryElementCreateRequest,
+  type StoryElementUpdateRequest,
+  type StoryElementMergeRequest,
 } from '@frame-loom/contracts';
 import { DomainError } from '../../core/http/domain-error.js';
-import { ProjectFilesService } from '../projects/project-files.service.js';
-import { internalPath } from '../projects/local-project-store.js';
-
-type Occurrence = StoryOccurrencesResult[number] & { elementId: string };
-const key = (kind: ElementKind, name: string) => `${kind}:${name.toLowerCase()}`;
+import { EpisodesService } from './episodes.service.js';
+import { readElements, writeElement, occurrences } from './script-repository.js';
 
 @Injectable()
 export class StoryService {
-  private readonly cache = new Map<
-    string,
-    {
-      stamp: string;
-      revision: number;
-      storyRevision: number;
-      occurrences: Occurrence[];
-      surrounding: Set<string>;
-    }
-  >();
-  constructor(private readonly files: ProjectFilesService) {}
-
-  invalidate(projectId: string, episodeId: string) {
-    this.cache.delete(`${projectId}:${episodeId}`);
-  }
-
-  private element(story: StoryFile, id: string) {
-    const element = story.elements.find((item) => item.id === id);
-    if (!element) throw new DomainError('ELEMENT_NOT_FOUND', 404, '元素不存在');
-    return element;
-  }
-
-  private unique(
-    story: StoryFile,
-    candidate: Pick<StoryElement, 'kind' | 'name' | 'aliases'>,
-    except?: string,
-  ) {
-    const names = [candidate.name, ...candidate.aliases].map((name) => name.toLowerCase());
-    if (
-      new Set(names).size !== names.length ||
-      story.elements.some(
-        (element) =>
-          element.id !== except &&
-          element.kind === candidate.kind &&
-          [element.name, ...element.aliases].some((name) => names.includes(name.toLowerCase())),
-      )
-    )
-      throw new DomainError('ELEMENT_NAME_CONFLICT', 409, '同类元素名称或别名已存在');
-  }
-
-  private async write(root: string, story: StoryFile) {
-    story.revision++;
-    await this.files.store.writeStory(root, StoryFile.parse(story));
-  }
-
-  private async mutate<T>(
+  constructor(private readonly episodes: EpisodesService) {}
+  private async use<T>(
     projectId: string,
-    action: (story: StoryFile, root: string) => Promise<T> | T,
-  ): Promise<T> {
-    return this.files.store.serial(projectId, async () => {
-      const root = await this.files.root(projectId);
-      const story = await this.files.store.readStory(root);
-      const result = await action(story, root);
-      await this.write(root, story);
-      return result;
-    });
-  }
-
-  create(projectId: string, input: StoryElementCreateRequest) {
-    return this.mutate(projectId, (story) => {
-      const parsed = StoryElementCreateRequest.parse(input);
-      this.unique(story, { ...parsed, aliases: [] });
-      const now = new Date().toISOString();
-      const element: StoryElement = {
-        id: randomUUID(),
-        ...parsed,
-        aliases: [],
-        status: 'confirmed',
-        description: '',
-        attrs: {},
-        createdAt: now,
-        updatedAt: now,
-      };
-      story.elements.push(element);
-      return element;
-    });
-  }
-
-  update(projectId: string, id: string, input: StoryElementUpdateRequest) {
-    return this.mutate(projectId, (story) => {
-      const element = this.element(story, id);
-      const updated = {
-        ...element,
-        ...StoryElementUpdateRequest.parse(input),
-        updatedAt: new Date().toISOString(),
-      };
-      this.unique(story, updated, id);
-      Object.assign(element, updated);
-      return element;
-    });
-  }
-
-  merge(projectId: string, id: string, into: string) {
-    return this.mutate(projectId, (story) => {
-      const source = this.element(story, id);
-      const target = this.element(story, into);
-      if (source.kind !== target.kind)
-        throw new DomainError('ELEMENT_KIND_MISMATCH', 422, '只能合并同类元素');
-      if (id === into) throw new DomainError('ELEMENT_MERGE_SELF', 422, '不能合并到自身');
-      target.aliases = [...target.aliases, source.name, ...source.aliases];
-      target.updatedAt = new Date().toISOString();
-      story.elements = story.elements.filter((element) => element.id !== id);
-      for (const element of story.elements) {
-        if (element.suggestedMergeInto === id) element.suggestedMergeInto = into;
-        if (element.suggestedMergeInto === element.id) delete element.suggestedMergeInto;
-      }
-      return target;
-    });
-  }
-
-  private ignore(story: StoryFile, id: string) {
-    const element = this.element(story, id);
-    const ignored = new Set(story.ignored.map((item) => key(item.kind, item.name)));
-    for (const name of [element.name, ...element.aliases])
-      if (!ignored.has(key(element.kind, name))) {
-        story.ignored.push({ kind: element.kind, name });
-        ignored.add(key(element.kind, name));
-      }
-    story.elements = story.elements.filter((item) => item.id !== id);
-    for (const item of story.elements)
-      if (item.suggestedMergeInto === id) delete item.suggestedMergeInto;
-  }
-
-  remove(projectId: string, id: string) {
-    return this.mutate(projectId, (story) => {
-      this.ignore(story, id);
-      return { saved: true };
-    });
-  }
-
-  batch(projectId: string, ids: string[], action: 'confirm' | 'ignore') {
-    return this.mutate(projectId, (story) => {
-      for (const id of new Set(ids)) {
-        const element = story.elements.find((item) => item.id === id);
-        if (!element) continue;
-        if (action === 'ignore') this.ignore(story, id);
-        else {
-          element.status = 'confirmed';
-          element.updatedAt = new Date().toISOString();
-        }
-      }
-      return { saved: true };
-    });
-  }
-
-  restore(projectId: string, kind: ElementKind, name: string) {
-    return this.mutate(projectId, async (story, root) => {
-      story.ignored = story.ignored.filter((item) => key(item.kind, item.name) !== key(kind, name));
-      const manifest = await this.files.store.readManifest(root);
-      for (const episode of manifest.episodes ?? [])
-        this.syncInto(story, (await this.files.store.readScript(root, episode.id)).document.blocks);
-      return { saved: true };
-    });
-  }
-
-  syncInto(story: StoryFile, blocks: ScriptBlock[]): number {
-    const known = new Set(
-      story.elements.flatMap((element) =>
-        [element.name, ...element.aliases].map((name) => key(element.kind, name)),
-      ),
-    );
-    for (const item of story.ignored) known.add(key(item.kind, item.name));
-    let added = 0;
-    for (const candidate of syncCandidates(blocks)) {
-      const name = ElementName.safeParse(candidate.name);
-      if (!name.success || known.has(key(candidate.kind, name.data))) continue;
-      const now = new Date().toISOString();
-      story.elements.push({
-        id: randomUUID(),
-        kind: candidate.kind,
-        name: name.data,
-        aliases: [],
-        status: 'pending',
-        description: '',
-        attrs: {},
-        createdAt: now,
-        updatedAt: now,
-      });
-      known.add(key(candidate.kind, name.data));
-      added++;
-    }
-    return added;
-  }
-
-  addRoster(story: StoryFile, roster: RosterEntry[]) {
-    let added = 0;
-    for (const entry of roster) {
-      if (story.ignored.some((item) => key(item.kind, item.name) === key('character', entry.name)))
-        continue;
-      const existing = story.elements.find(
-        (element) =>
-          element.kind === 'character' &&
-          [element.name, ...element.aliases].some(
-            (name) => name.toLowerCase() === entry.name.toLowerCase(),
-          ),
+    operation: (db: Database.Database) => T,
+    mutation = false,
+  ) {
+    return this.episodes.store.serial(projectId, async () => {
+      const { root } = await this.episodes.context(projectId);
+      return this.episodes.database.use(root, projectId, (db) =>
+        mutation
+          ? db.transaction(() => {
+              const result = operation(db);
+              db.prepare('UPDATE script_store_meta SET story_revision=story_revision+1').run();
+              return result;
+            })()
+          : operation(db),
       );
-      if (existing) {
-        if (!existing.description && entry.description) {
-          existing.description = entry.description;
-          existing.updatedAt = new Date().toISOString();
-        }
-        continue;
-      }
-      const now = new Date().toISOString();
-      story.elements.push({
-        id: randomUUID(),
-        kind: 'character',
-        ...entry,
-        aliases: [],
-        attrs: {},
-        createdAt: now,
-        updatedAt: now,
-      });
-      added++;
-    }
-    return added;
-  }
-
-  // 调用者已经持有项目串行队列；读取全部剧集后才删除，避免跨集误删。
-  async pruneOrphans(projectId: string) {
-    const root = await this.files.root(projectId);
-    const manifest = await this.files.store.readManifest(root);
-    const story = await this.files.store.readStory(root);
-    const used = new Set<string>();
-    for (const episode of manifest.episodes ?? []) {
-      for (const occurrence of await this.occurrences(root, manifest, story, episode.id))
-        used.add(occurrence.elementId);
-      for (const id of this.cache.get(`${projectId}:${episode.id}`)!.surrounding) used.add(id);
-    }
-    const removed = new Set(
-      story.elements
-        .filter((element) => element.status === 'pending' && !used.has(element.id))
-        .map((element) => element.id),
-    );
-    if (!removed.size) return;
-    story.elements = story.elements.filter((element) => !removed.has(element.id));
-    for (const element of story.elements)
-      if (element.suggestedMergeInto && removed.has(element.suggestedMergeInto))
-        delete element.suggestedMergeInto;
-    await this.write(root, story);
-  }
-
-  // 调用者已经持有项目串行队列，避免嵌套 serial 导致死锁。
-  async sync(projectId: string, blocks: ScriptBlock[]) {
-    const root = await this.files.root(projectId);
-    const story = await this.files.store.readStory(root);
-    const added = this.syncInto(story, blocks);
-    if (added) await this.write(root, story);
-    return added;
-  }
-
-  private async occurrences(
-    root: string,
-    manifest: ProjectManifest,
-    story: StoryFile,
-    episodeId: string,
-  ): Promise<Occurrence[]> {
-    const cacheId = `${manifest.id}:${episodeId}`;
-    const info = await fs.stat(await internalPath(root, `scripts/${episodeId}.json`), {
-      bigint: true,
     });
-    const stamp = `${info.mtimeNs}:${info.size}`;
-    const cached = this.cache.get(cacheId);
-    if (cached?.stamp === stamp && cached.storyRevision === story.revision)
-      return cached.occurrences;
-    const file = await this.files.store.readScript(root, episodeId);
-    const terms = story.elements.flatMap((element) =>
-      [element.name, ...element.aliases].map((name) => ({
-        elementId: element.id,
-        kind: element.kind,
-        name,
-      })),
-    );
-    const occurrences: Occurrence[] = [];
-    let sceneId: string | null = null;
-    for (const block of file.document.blocks) {
-      if (block.type === 'act') sceneId = null;
-      if (block.type === 'scene') sceneId = block.id;
-      if (block.type === 'note') continue;
-      for (const mention of findMentions(block.text, terms, block.type))
-        occurrences.push({
-          elementId: mention.elementId,
-          episodeId,
-          blockId: block.id,
-          sceneId,
-          excerpt: block.text.slice(0, 80),
-        });
-    }
-    this.cache.set(cacheId, {
-      stamp,
-      revision: file.revision,
-      storyRevision: story.revision,
-      occurrences,
-      surrounding: new Set(
-        story.elements
-          .filter((element) =>
-            [element.name, ...element.aliases].some((name) =>
-              `${file.document.preface}\n${file.document.appendix}`
-                .toLowerCase()
-                .includes(name.toLowerCase()),
-            ),
-          )
-          .map((element) => element.id),
-      ),
-    });
-    return occurrences;
   }
-
-  async pending(root: string, manifest: ProjectManifest, episodeId: string): Promise<number> {
-    const story = await this.files.store.readStory(root);
-    const ids = new Set(
-      (await this.occurrences(root, manifest, story, episodeId)).map((item) => item.elementId),
-    );
-    return story.elements.filter((element) => element.status === 'pending' && ids.has(element.id))
-      .length;
+  private element(db: Database.Database, id: string) {
+    const found = readElements(db).find((e) => e.id === id);
+    if (!found) throw new DomainError('STORY_ELEMENT_NOT_FOUND', 404, '设定不存在');
+    return found;
   }
-
   list(projectId: string) {
-    return this.files.store.serial(projectId, async () => {
-      const root = await this.files.root(projectId);
-      const manifest = await this.files.store.readManifest(root);
-      const story = await this.files.store.readStory(root);
-      const all = (
-        await Promise.all(
-          (manifest.episodes ?? []).map((episode) =>
-            this.occurrences(root, manifest, story, episode.id),
-          ),
-        )
-      ).flat();
+    return this.use(projectId, (db) => {
+      const revision = z
+        .object({ story_revision: z.number() })
+        .parse(db.prepare('SELECT story_revision FROM script_store_meta').get()).story_revision;
       return {
-        revision: story.revision,
-        ignored: story.ignored,
-        elements: story.elements.map((element) => {
-          const mentions = all.filter((item) => item.elementId === element.id);
+        revision,
+        ignored: db
+          .prepare('SELECT kind,name FROM story_ignored_names ORDER BY kind,name_key')
+          .all(),
+        elements: readElements(db).map((element) => {
+          const refs = occurrences(db, element);
           return {
             ...element,
-            mentions: mentions.length,
-            episodes: [...new Set(mentions.map((item) => item.episodeId))].map((episodeId) => ({
+            mentions: refs.length,
+            episodes: [...new Set(refs.map((o) => o.episodeId))].map((episodeId) => ({
               episodeId,
-              scenes: new Set(
-                mentions
-                  .filter((item) => item.episodeId === episodeId && item.sceneId)
-                  .map((item) => item.sceneId),
-              ).size,
+              scenes: new Set(refs.filter((o) => o.episodeId === episodeId).map((o) => o.sceneId))
+                .size,
             })),
           };
         }),
       };
     });
   }
-
-  findOccurrences(projectId: string, elementId: string) {
-    return this.files.store.serial(projectId, async () => {
-      const root = await this.files.root(projectId);
-      const manifest = await this.files.store.readManifest(root);
-      const story = await this.files.store.readStory(root);
-      this.element(story, elementId);
-      const all = (
-        await Promise.all(
-          (manifest.episodes ?? []).map((episode) =>
-            this.occurrences(root, manifest, story, episode.id),
-          ),
+  create(projectId: string, input: StoryElementCreateRequest) {
+    return this.use(
+      projectId,
+      (db) => {
+        const now = new Date().toISOString();
+        const element: StoryElement = {
+          id: randomUUID(),
+          ...input,
+          aliases: [],
+          description: '',
+          attrs: {},
+          status: 'confirmed',
+          manuallyEdited: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+        writeElement(db, element);
+        return element;
+      },
+      true,
+    );
+  }
+  update(projectId: string, id: string, patch: StoryElementUpdateRequest) {
+    return this.use(
+      projectId,
+      (db) => {
+        const old = this.element(db, id);
+        const aliases = [...(patch.aliases ?? old.aliases)];
+        if (
+          patch.name &&
+          elementNameKey(patch.name) !== elementNameKey(old.name) &&
+          !aliases.some((a) => elementNameKey(a) === elementNameKey(old.name))
         )
-      ).flat();
-      return all
-        .filter((item) => item.elementId === elementId)
-        .slice(0, 200)
-        .map(({ episodeId, blockId, sceneId, excerpt }) => ({
-          episodeId,
-          blockId,
-          sceneId,
-          excerpt,
-        }));
-    });
+          aliases.push(old.name);
+        const element = StoryElement.parse({
+          ...old,
+          ...patch,
+          aliases,
+          manuallyEdited: true,
+          updatedAt: new Date().toISOString(),
+        });
+        writeElement(db, element);
+        return element;
+      },
+      true,
+    );
+  }
+  merge(projectId: string, id: string, input: StoryElementMergeRequest) {
+    return this.use(
+      projectId,
+      (db) => {
+        const source = this.element(db, id),
+          target = this.element(db, input.into);
+        if (source.id === target.id || source.kind !== target.kind)
+          throw new DomainError('STORY_MERGE_INVALID', 422, '只能合并同类的不同设定');
+        const conflicts = Object.entries(source.attrs).filter(
+          ([key, value]) =>
+            JSON.stringify(value) !== JSON.stringify(Reflect.get(target.attrs, key)),
+        );
+        if (
+          (conflicts.length && input.attrs === undefined) ||
+          (source.description &&
+            source.description !== target.description &&
+            input.description === undefined)
+        )
+          throw new DomainError(
+            'STORY_MERGE_CONFLICT',
+            409,
+            '来源资料存在差异，请选择保留的字段后再合并',
+          );
+        const aliases = [
+          ...new Map(
+            [...target.aliases, source.name, ...source.aliases]
+              .filter((n) => elementNameKey(n) !== elementNameKey(target.name))
+              .map((n) => [elementNameKey(n), n]),
+          ).values(),
+        ];
+        const merged = StoryElement.parse({
+          ...target,
+          aliases,
+          attrs: elementAttrsSchema(target.kind).parse(input.attrs ?? target.attrs),
+          description: input.description ?? target.description,
+          manuallyEdited: true,
+          updatedAt: new Date().toISOString(),
+        });
+        db.prepare('UPDATE script_scenes SET location_id=? WHERE location_id=?').run(
+          target.id,
+          source.id,
+        );
+        db.prepare('UPDATE script_beats SET speaker_id=? WHERE speaker_id=?').run(
+          target.id,
+          source.id,
+        );
+        db.prepare(
+          'DELETE FROM scene_characters WHERE element_id=? AND scene_id IN (SELECT scene_id FROM scene_characters WHERE element_id=?)',
+        ).run(source.id, target.id);
+        db.prepare('UPDATE scene_characters SET element_id=? WHERE element_id=?').run(
+          target.id,
+          source.id,
+        );
+        db.prepare('DELETE FROM story_elements WHERE id=?').run(source.id);
+        writeElement(db, merged);
+        return merged;
+      },
+      true,
+    );
+  }
+  private ignore(db: Database.Database, id: string) {
+    const element = this.element(db, id);
+    for (const name of [element.name, ...element.aliases])
+      db.prepare('INSERT OR IGNORE INTO story_ignored_names VALUES (?,?,?)').run(
+        element.kind,
+        name,
+        elementNameKey(name),
+      );
+    db.prepare('DELETE FROM story_elements WHERE id=?').run(id);
+  }
+  remove(projectId: string, id: string) {
+    return this.use(
+      projectId,
+      (db) => {
+        this.ignore(db, id);
+        return { saved: true };
+      },
+      true,
+    );
+  }
+  restore(projectId: string, kind: ElementKind, name: string) {
+    return this.use(
+      projectId,
+      (db) => {
+        db.prepare('DELETE FROM story_ignored_names WHERE kind=? AND name_key=?').run(
+          kind,
+          elementNameKey(name),
+        );
+        const now = new Date().toISOString();
+        const element: StoryElement = {
+          id: randomUUID(),
+          kind,
+          name,
+          aliases: [],
+          description: '',
+          attrs: {},
+          status: 'pending',
+          manuallyEdited: false,
+          createdAt: now,
+          updatedAt: now,
+        };
+        writeElement(db, element);
+        for (const term of [name]) {
+          if (kind === 'location')
+            db.prepare('UPDATE script_scenes SET location_id=? WHERE lower(trim(location))=?').run(
+              element.id,
+              elementNameKey(term),
+            );
+          if (kind === 'character') {
+            db.prepare('UPDATE script_beats SET speaker_id=? WHERE lower(trim(speaker))=?').run(
+              element.id,
+              elementNameKey(term),
+            );
+            db.prepare('UPDATE scene_characters SET element_id=? WHERE lower(trim(name))=?').run(
+              element.id,
+              elementNameKey(term),
+            );
+          }
+        }
+        return { saved: true };
+      },
+      true,
+    );
+  }
+  batch(projectId: string, ids: string[], action: 'confirm' | 'ignore') {
+    return this.use(
+      projectId,
+      (db) => {
+        for (const id of ids) {
+          this.element(db, id);
+          if (action === 'ignore') this.ignore(db, id);
+          else
+            db.prepare("UPDATE story_elements SET status='confirmed',updated_at=? WHERE id=?").run(
+              new Date().toISOString(),
+              id,
+            );
+        }
+        return { saved: true };
+      },
+      true,
+    );
+  }
+  findOccurrences(projectId: string, id: string) {
+    return this.use(projectId, (db) => occurrences(db, this.element(db, id)).slice(0, 200));
   }
 }

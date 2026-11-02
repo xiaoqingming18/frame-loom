@@ -2,7 +2,6 @@ import { BUILTIN_TAGS } from '@frame-loom/contracts';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LocalProjectStore } from './local-project-store.js';
 
@@ -23,35 +22,6 @@ async function setup() {
   return { root, target, store: new LocalProjectStore() };
 }
 
-it('剧本文件被占用时复用原子写重试，保留未知字段并检测外部修改', async () => {
-  const { root, store } = await setup();
-  const file = {
-    format: 'frame-loom-script' as const,
-    formatVersion: 1 as const,
-    id: randomUUID(),
-    revision: 1,
-    source: null,
-    pendingImport: null,
-    convertedAt: null,
-    document: { schemaVersion: 2 as const, preface: '', appendix: '', blocks: [] },
-    unknown: '保留',
-  };
-  expect(await store.readStory(root)).toMatchObject({ revision: 0, elements: [], ignored: [] });
-  const rename = fs.rename;
-  const spy = vi
-    .spyOn(fs, 'rename')
-    .mockRejectedValueOnce(Object.assign(new Error('占用'), { code: 'EBUSY' }))
-    .mockImplementation(rename);
-  await store.writeScript(root, file);
-  expect(spy).toHaveBeenCalledTimes(2);
-  expect(await store.readScript(root, file.id)).toEqual(file);
-  const path = join(root, '.frameloom/scripts', `${file.id}.json`);
-  await fs.writeFile(path, JSON.stringify({ ...file, unknown: '改动' }));
-  await expect(store.readScript(root, file.id, true)).rejects.toMatchObject({
-    code: 'SCRIPT_REVISION_CONFLICT',
-  });
-});
-
 it.each([
   { name: '旧清单普通写入补齐默认标签', tags: undefined, expected: BUILTIN_TAGS },
   { name: '普通写入保留显式空标签，不恢复默认标签', tags: [], expected: [] },
@@ -59,7 +29,7 @@ it.each([
   const { root, target, store } = await setup();
   const original = JSON.stringify({
     format: 'frame-loom-project',
-    formatVersion: 1,
+    formatVersion: 2,
     id: '00000000-0000-4000-8000-000000000001',
     name: '原项目',
     createdAt: '2026-10-27T00:00:00.000Z',

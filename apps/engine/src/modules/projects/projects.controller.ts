@@ -48,6 +48,9 @@ export class ProjectsController {
   @Delete(':id') remove(@Param('id', idPipe) id: string) {
     return this.service.remove(id);
   }
+  @Post(':id/release') release(@Param('id', idPipe) id: string) {
+    return this.service.release(id);
+  }
   @Post(':id/pages') createPage(
     @Param('id', idPipe) id: string,
     @Body(new ZodValidationPipe(ProjectPageCreateRequest)) input: ProjectPageCreateRequest,

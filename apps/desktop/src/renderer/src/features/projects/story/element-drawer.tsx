@@ -4,6 +4,8 @@ import { Link } from '@tanstack/react-router';
 import {
   episodeLabel,
   StoryOccurrencesResult,
+  CharacterProfile,
+  LocationProfile,
   type ProjectManifest,
   type StoryElement,
   type StoryResult,
@@ -19,6 +21,14 @@ import { Input } from '@frame-loom/ui/components/input';
 import { Textarea } from '@frame-loom/ui/components/textarea';
 import { NativeSelect } from '@frame-loom/ui/components/native-select';
 import type { EngineClient } from '@/lib/engine-client';
+const attribute = (attrs: object, key: string): unknown => Reflect.get(attrs, key);
+const listInput = (text: string) => (text ? text.split('\n') : []);
+const fieldDisplay = (value: unknown) =>
+  Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string').join('、')
+    : typeof value === 'string'
+      ? value
+      : '未填写';
 
 export function ElementDrawer({
   client,
@@ -40,6 +50,9 @@ export function ElementDrawer({
   const [value, setValue] = useState(element);
   const [alias, setAlias] = useState('');
   const [merging, setMerging] = useState(false);
+  const [mergeTarget, setMergeTarget] = useState('');
+  const [mergeChoices, setMergeChoices] = useState<Record<string, 'target' | 'source'>>({});
+  const target = elements.find((item) => item.id === mergeTarget);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -160,61 +173,74 @@ export function ElementDrawer({
           />
           {errors.description && <span role="alert">{errors.description}</span>}
         </label>
-        {element.kind === 'character' &&
-          (['gender', 'ageRange', 'appearance', 'personality'] as const).map((field, index) => (
-            <label key={field} className="grid gap-1 text-sm">
-              {['性别', '年龄段', '外貌', '性格'][index]}
-              <Input
-                maxLength={200}
-                value={value.attrs[field] ?? ''}
-                onChange={(event) =>
-                  setValue({ ...value, attrs: { ...value.attrs, [field]: event.target.value } })
-                }
-                onBlur={() => void save('attrs')}
-              />
-            </label>
-          ))}
+        {element.kind === 'character' && (
+          <>
+            {(['age', 'gender'] as const).map((field, index) => (
+              <label key={field} className="grid gap-1 text-sm">
+                {['年龄', '性别'][index]}
+                <Input
+                  maxLength={200}
+                  value={CharacterProfile.parse(value.attrs)[field] ?? ''}
+                  onChange={(event) =>
+                    setValue({ ...value, attrs: { ...value.attrs, [field]: event.target.value } })
+                  }
+                  onBlur={() => void save('attrs')}
+                />
+              </label>
+            ))}
+            {(['appearance', 'personality', 'signatureActions', 'signatureProps'] as const).map(
+              (field, index) => (
+                <label key={field} className="grid gap-1 text-sm">
+                  {['外貌锚点', '性格标签', '标志动作', '标志道具'][index]}（每行一项）
+                  <Textarea
+                    maxLength={20000}
+                    value={(CharacterProfile.parse(value.attrs)[field] ?? []).join('\n')}
+                    onChange={(event) =>
+                      setValue({
+                        ...value,
+                        attrs: { ...value.attrs, [field]: listInput(event.target.value) },
+                      })
+                    }
+                    onBlur={() => void save('attrs')}
+                  />
+                </label>
+              ),
+            )}
+          </>
+        )}
         {element.kind === 'location' && (
           <>
-            <label className="grid gap-1 text-sm">
-              内外
-              <NativeSelect
-                value={value.attrs.space ?? ''}
-                onChange={(event) => {
-                  const attrs = {
-                    ...value.attrs,
-                    space: (event.target.value || undefined) as StoryElement['attrs']['space'],
-                  };
-                  setValue({ ...value, attrs });
-                  void save('attrs', attrs);
-                }}
-              >
-                <option value="">未设置</option>
-                <option value="int">内</option>
-                <option value="ext">外</option>
-                <option value="intext">内外</option>
-              </NativeSelect>
-            </label>
-            <fieldset className="flex flex-wrap gap-3 text-sm">
-              <legend>常见时段</legend>
-              {(['day', 'night', 'dawn', 'dusk'] as const).map((time, index) => (
-                <label key={time}>
-                  <input
-                    type="checkbox"
-                    checked={value.attrs.times?.includes(time) ?? false}
-                    onChange={(event) => {
-                      const times = event.target.checked
-                        ? [...(value.attrs.times ?? []), time]
-                        : value.attrs.times?.filter((item) => item !== time);
-                      const attrs = { ...value.attrs, times };
-                      setValue({ ...value, attrs });
-                      void save('attrs', attrs);
-                    }}
-                  />{' '}
-                  {['日', '夜', '晨', '昏'][index]}
+            {(['spaceType', 'eraRegion', 'layout', 'colorsMaterials', 'notes'] as const).map(
+              (field, index) => (
+                <label key={field} className="grid gap-1 text-sm">
+                  {['空间类型', '时代／地域', '空间布局', '色彩与材质', '补充说明'][index]}
+                  <Textarea
+                    maxLength={field === 'spaceType' || field === 'eraRegion' ? 200 : 2000}
+                    value={LocationProfile.parse(value.attrs)[field] ?? ''}
+                    onChange={(event) =>
+                      setValue({ ...value, attrs: { ...value.attrs, [field]: event.target.value } })
+                    }
+                    onBlur={() => void save('attrs')}
+                  />
                 </label>
-              ))}
-            </fieldset>
+              ),
+            )}
+            {(['visualAnchors', 'signatureFurnishings'] as const).map((field, index) => (
+              <label key={field} className="grid gap-1 text-sm">
+                {['视觉锚点', '标志陈设'][index]}（每行一项）
+                <Textarea
+                  maxLength={20000}
+                  value={(LocationProfile.parse(value.attrs)[field] ?? []).join('\n')}
+                  onChange={(event) =>
+                    setValue({
+                      ...value,
+                      attrs: { ...value.attrs, [field]: listInput(event.target.value) },
+                    })
+                  }
+                  onBlur={() => void save('attrs')}
+                />
+              </label>
+            ))}
           </>
         )}
         {errors.attrs && (
@@ -231,10 +257,10 @@ export function ElementDrawer({
               <h4 className="text-xs text-muted-foreground">{episodeLabel(episode)}</h4>
               {hits.map((hit, index) => (
                 <Link
-                  key={`${hit.blockId}-${index}`}
+                  key={`${hit.beatId ?? hit.sceneId}-${index}`}
                   to="/projects/$projectId/episodes/$episodeId"
                   params={{ projectId, episodeId: episode.id }}
-                  search={{ block: hit.blockId }}
+                  search={{ block: hit.beatId ?? hit.sceneId }}
                   className="my-1 block rounded-md border p-2 text-sm hover:bg-accent"
                 >
                   {hit.excerpt}
@@ -282,8 +308,8 @@ export function ElementDrawer({
             defaultValue=""
             disabled={busy}
             onChange={(event) => {
-              if (event.target.value)
-                void action(`elements/${element.id}/merge`, 'POST', { into: event.target.value });
+              setMergeTarget(event.target.value);
+              setMergeChoices({});
             }}
           >
             <option value="">选择同类元素</option>
@@ -295,6 +321,94 @@ export function ElementDrawer({
                 </option>
               ))}
           </NativeSelect>
+        )}
+        {merging && target && (
+          <div className="grid gap-3 rounded-md border p-3 text-sm">
+            <p>合并到 {target.name}。请选择需要保留的资料；原名称将成为别名，正文保留原词。</p>
+            {[
+              ...new Set([
+                ...Object.keys(target.attrs),
+                ...Object.keys(value.attrs),
+                'description',
+              ]),
+            ].map((field) => {
+              const sourceValue =
+                field === 'description' ? value.description : attribute(value.attrs, field);
+              const targetValue =
+                field === 'description' ? target.description : attribute(target.attrs, field);
+              const labels: Record<string, string> = {
+                description: '描述',
+                age: '年龄',
+                gender: '性别',
+                appearance: '外貌锚点',
+                personality: '性格标签',
+                signatureActions: '标志动作',
+                signatureProps: '标志道具',
+                spaceType: '空间类型',
+                eraRegion: '时代／地域',
+                layout: '空间布局',
+                visualAnchors: '视觉锚点',
+                colorsMaterials: '色彩与材质',
+                signatureFurnishings: '标志陈设',
+                notes: '补充说明',
+              };
+              return (
+                <label key={field} className="grid gap-1">
+                  {labels[field] ?? field}
+                  <NativeSelect
+                    aria-label={`合并保留${labels[field] ?? field}`}
+                    value={mergeChoices[field] ?? 'target'}
+                    onChange={(event) =>
+                      setMergeChoices({
+                        ...mergeChoices,
+                        [field]: event.target.value === 'source' ? 'source' : 'target',
+                      })
+                    }
+                  >
+                    <option value="target">
+                      保留 {target.name}：{fieldDisplay(targetValue)}
+                    </option>
+                    <option value="source">
+                      采用 {value.name}：{fieldDisplay(sourceValue)}
+                    </option>
+                  </NativeSelect>
+                </label>
+              );
+            })}
+            <Button
+              disabled={busy}
+              onClick={() => {
+                const attrs: Record<string, unknown> = Object.fromEntries(
+                  [...new Set([...Object.keys(target.attrs), ...Object.keys(value.attrs)])]
+                    .map((field): [string, unknown] => [
+                      field,
+                      attribute(
+                        mergeChoices[field] === 'source' ? value.attrs : target.attrs,
+                        field,
+                      ),
+                    ])
+                    .filter(([, entry]) => entry !== undefined),
+                );
+                void action(`elements/${element.id}/merge`, 'POST', {
+                  into: target.id,
+                  attrs,
+                  description:
+                    mergeChoices.description === 'source' ? value.description : target.description,
+                });
+              }}
+            >
+              确认合并
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setMergeTarget('');
+                setMerging(false);
+              }}
+            >
+              取消合并
+            </Button>
+          </div>
         )}
         {deleting && (
           <div role="alert" className="rounded-md border p-3 text-sm">

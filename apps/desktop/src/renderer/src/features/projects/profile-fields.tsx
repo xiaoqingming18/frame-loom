@@ -39,6 +39,14 @@ export function ProfileFields({
   }
   return (
     <fieldset disabled={disabled} className="grid gap-4">
+      <label className="grid gap-2 text-sm">
+        共享画风
+        <Input
+          value={value.style ?? ''}
+          maxLength={2000}
+          onChange={(event) => onChange({ ...value, style: event.target.value })}
+        />
+      </label>
       {(['form', 'medium'] as const).map((field) => (
         <fieldset key={field} className="grid gap-2">
           <legend className="mb-2 text-sm font-medium">

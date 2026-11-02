@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "series": "夜班便利店",
+    "episode": 1,
+    "title": "陌生来客",
+    "genre": "都市 / 悬疑",
+    "duration_sec": 780,
+    "style": "冷色写实",
+    "core_conflict": "林夏必须弄清来客的身份。",
+    "hook_start": "门铃在停电后响起。",
+    "hook_end": "西装男留下了一把旧钥匙。"
+  },
+  "scenes": [
+    {
+      "scene_id": "1-1",
+      "location": "便利店",
+      "time_of_day": "夜",
+      "interior": true,
+      "characters": ["林夏", "老陈", "西装男"],
+      "atmosphere": "安静，灯光冰冷",
+      "beats": [
+        { "type": "action", "content": "林夏看向门口，老陈放下报纸。" },
+        { "type": "dialogue", "speaker": "西装男", "emotion": "", "line": "您认识我？" },
+        { "type": "dialogue", "speaker": "林夏", "emotion": "疑惑", "line": "您认识我？" }
+      ]
+    },
+    {
+      "scene_id": "1-2",
+      "location": "便利店",
+      "time_of_day": "日",
+      "interior": true,
+      "characters": ["小夏"],
+      "atmosphere": "晨光刺眼",
+      "beats": [{ "type": "action", "content": "小夏仍站在门边。" }]
+    }
+  ]
+}

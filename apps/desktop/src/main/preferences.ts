@@ -3,12 +3,13 @@ import { join } from 'node:path';
 import {
   DesktopPreferences,
   DesktopPreferencesUpdate,
+  readDesktopPreferences,
   type ThemeSource,
 } from '@frame-loom/contracts';
 
 export function readPreferences(userData: string): DesktopPreferences {
   try {
-    return DesktopPreferences.parse(
+    return readDesktopPreferences(
       JSON.parse(readFileSync(join(userData, 'preferences.json'), 'utf8')),
     );
   } catch {

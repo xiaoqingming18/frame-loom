@@ -29,6 +29,8 @@ import { errorCode, internalPath } from './local-project-store.js';
 import { pageViews, projects } from './projects.schema.js';
 import { MediaService } from '../generation/media.service.js';
 import { ProjectMediaService, documentReferences } from './project-media.service.js';
+import { ProjectScriptDatabase } from './project-script-database.js';
+import { episodeRow, episodeSummaries } from '../scripts/script-repository.js';
 
 type ProjectRow = typeof projects.$inferSelect;
 const fail = (code: string, message: string, status = 409): never => {
@@ -42,6 +44,7 @@ export class ProjectsService {
     private readonly store: ProjectStore,
     private readonly media: MediaService,
     private readonly projectMedia: ProjectMediaService,
+    private readonly scriptDatabase: ProjectScriptDatabase,
   ) {}
 
   private row(id: string): ProjectRow {
@@ -119,7 +122,10 @@ export class ProjectsService {
     const { summary, manifest } = await this.inspect(row);
     if (!manifest)
       fail(`PROJECT_${summary.status.toUpperCase()}`, '项目不可用，请重新定位或检查项目文件');
-    return { row, manifest: manifest! };
+    const prepared = await this.scriptDatabase.prepare(row.rootPath, manifest!, (value) =>
+      this.store.writeManifest(row.rootPath, value),
+    );
+    return { row, manifest: prepared };
   }
 
   private cache(manifest: ProjectManifest): void {
@@ -192,20 +198,12 @@ export class ProjectsService {
         return fail('PROJECT_WRITE_FAILED', '无法在保存位置创建项目', 500);
       }
       try {
-        for (const directory of [
-          'pages',
-          'scripts',
-          'media',
-          'trash/pages',
-          'trash/scripts',
-          'trash/media',
-          'tmp',
-        ])
+        for (const directory of ['pages', 'media', 'trash/pages', 'trash/media', 'tmp'])
           await fs.mkdir(join(root, '.frameloom', directory), { recursive: true });
         const now = new Date().toISOString();
         const manifest: ProjectManifest = {
           format: 'frame-loom-project',
-          formatVersion: 1,
+          formatVersion: 2,
           id: randomUUID(),
           name,
           createdAt: now,
@@ -214,12 +212,25 @@ export class ProjectsService {
           tags: BUILTIN_TAGS,
           ...(input.profile ? { profile: ProjectProfile.parse(input.profile) } : {}),
         };
+        await this.scriptDatabase.create(root, manifest.id);
         await this.store.writeManifest(root, manifest);
         return this.register(await this.canonical(root), manifest);
       } catch (error) {
-        await fs.rm(root, { recursive: true, force: true });
+        for (const file of ['project.json', 'project.sqlite'])
+          await fs.rm(await internalPath(root, file), { force: true }).catch(() => {});
+        for (const directory of [
+          'trash/media',
+          'trash/pages',
+          'trash',
+          'tmp',
+          'media',
+          'pages',
+          '',
+        ])
+          await fs.rmdir(join(root, '.frameloom', directory)).catch(() => {});
+        await fs.rmdir(root).catch(() => {});
         if (error instanceof DomainError) throw error;
-        return fail('PROJECT_WRITE_FAILED', '项目创建失败，已回滚新建目录', 500);
+        return fail('PROJECT_WRITE_FAILED', '项目创建失败，已清理本次内部文件；额外文件保留', 500);
       }
     });
   }
@@ -234,6 +245,7 @@ export class ProjectsService {
         if (error instanceof DomainError) throw error;
         return fail('PROJECT_UNREADABLE', '无法读取项目清单，请选择有效的项目目录', 400);
       }
+      if (!input.asCopy) await this.scriptDatabase.releaseTasks(manifest.id);
       return this.store.serial(manifest.id, async () => {
         const existing = this.database.db
           .select()
@@ -262,10 +274,26 @@ export class ProjectsService {
           .get();
         if (collision && collision.id !== manifest.id)
           fail('PROJECT_PATH_CONFLICT', '此目录已登记为其他项目');
-        if (copy)
-          manifest = { ...manifest, id: randomUUID(), name, updatedAt: new Date().toISOString() };
-        else manifest = { ...manifest, name };
-        if (copy || input.name !== undefined) await this.store.writeManifest(root, manifest);
+        manifest = await this.scriptDatabase.prepare(root, manifest, (value) =>
+          this.store.writeManifest(root, value),
+        );
+        if (copy) {
+          const original = manifest;
+          const newId = randomUUID();
+          await this.scriptDatabase.use(root, manifest.id, (db) =>
+            db.prepare('UPDATE script_store_meta SET project_id=?').run(newId),
+          );
+          manifest = { ...manifest, id: newId, name, updatedAt: new Date().toISOString() };
+          try {
+            await this.store.writeManifest(root, manifest);
+          } catch (error) {
+            await this.scriptDatabase.use(root, newId, (db) =>
+              db.prepare('UPDATE script_store_meta SET project_id=?').run(original.id),
+            );
+            throw error;
+          }
+        } else manifest = { ...manifest, name };
+        if (!copy && input.name !== undefined) await this.store.writeManifest(root, manifest);
         const result = this.register(root, manifest);
         await this.projectMedia.restoreAt(manifest.id, root);
         return result;
@@ -273,7 +301,8 @@ export class ProjectsService {
     });
   }
 
-  relocate(id: string, rootPath: string): Promise<ProjectSummary> {
+  async relocate(id: string, rootPath: string): Promise<ProjectSummary> {
+    await this.scriptDatabase.releaseTasks(id);
     return this.store.serial('registry', () =>
       this.store.serial(id, async () => {
         this.row(id);
@@ -286,6 +315,9 @@ export class ProjectsService {
           return fail('PROJECT_UNREADABLE', '无法读取所选项目清单', 400);
         }
         if (manifest.id !== id) fail('PROJECT_MISMATCH', '所选目录不是此项目');
+        manifest = await this.scriptDatabase.prepare(root, manifest, (value) =>
+          this.store.writeManifest(root, value),
+        );
         this.uniqueName(manifest.name, id);
         const result = this.register(root, manifest);
         await this.projectMedia.restoreAt(id, root);
@@ -309,7 +341,14 @@ export class ProjectsService {
     );
   }
 
-  remove(id: string): Promise<{ saved: true }> {
+  async release(id: string): Promise<{ saved: true }> {
+    this.row(id);
+    await this.scriptDatabase.releaseTasks(id);
+    return { saved: true };
+  }
+
+  async remove(id: string): Promise<{ saved: true }> {
+    await this.release(id);
     return this.store.serial('registry', () =>
       this.store.serial(id, () => {
         this.row(id);
@@ -324,7 +363,10 @@ export class ProjectsService {
       const { row, manifest } = await this.available(id);
       await this.projectMedia.restoreAt(id, row.rootPath);
       await this.projectMedia.cleanupAt(id, row.rootPath);
-      return manifest;
+      return {
+        ...manifest,
+        episodes: await this.scriptDatabase.use(row.rootPath, id, episodeSummaries),
+      };
     });
   }
 
@@ -351,16 +393,19 @@ export class ProjectsService {
     });
   }
 
-  private validateEpisode(manifest: ProjectManifest, episodeId?: string | null): void {
-    if (episodeId && !manifest.episodes?.some((episode) => episode.id === episodeId))
-      fail('EPISODE_NOT_FOUND', '剧集不存在', 404);
+  private async validateEpisode(
+    root: string,
+    id: string,
+    episodeId?: string | null,
+  ): Promise<void> {
+    if (episodeId) await this.scriptDatabase.use(root, id, (db) => episodeRow(db, episodeId));
   }
 
   createPage(id: string, input: ProjectPageCreateRequest): Promise<ProjectPageSummary> {
     return this.store.serial(id, async () => {
       const { row, manifest } = await this.available(id);
       const name = ProjectName.parse(input.name);
-      this.validateEpisode(manifest, input.episodeId);
+      await this.validateEpisode(row.rootPath, id, input.episodeId);
       this.uniquePage(manifest, name);
       const now = new Date().toISOString();
       const summary: ProjectPageSummary = {
@@ -393,7 +438,7 @@ export class ProjectsService {
     return this.store.serial(id, async () => {
       const { row, manifest } = await this.available(id);
       const summary = this.page(manifest, pageId);
-      this.validateEpisode(manifest, input.episodeId);
+      await this.validateEpisode(row.rootPath, id, input.episodeId);
       if (input.name !== undefined) {
         const name = ProjectName.parse(input.name);
         this.uniquePage(manifest, name, pageId);

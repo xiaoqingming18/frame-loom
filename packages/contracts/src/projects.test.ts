@@ -161,7 +161,7 @@ it('项目与页面保留未知字段，校验必填、重复页面与过高版�
   expect(ProjectManifest.parse(JSON.parse(JSON.stringify(manifest)))).toEqual(manifest);
   expect(ProjectManifest.safeParse({ ...manifest, name: undefined }).success).toBe(false);
   expect(ProjectManifest.safeParse({ ...manifest, pages: [page, page] }).success).toBe(false);
-  const tooNew = ProjectManifest.safeParse({ ...manifest, formatVersion: 2 });
+  const tooNew = ProjectManifest.safeParse({ ...manifest, formatVersion: 3 });
   expect(tooNew.success).toBe(false);
   if (!tooNew.success) expect(tooNew.error.message).toContain('PROJECT_FORMAT_TOO_NEW');
   const file = {

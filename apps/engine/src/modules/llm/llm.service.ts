@@ -58,8 +58,18 @@ export class LlmService {
     id: string,
     input: { system: string; user: string },
     parentSignal: AbortSignal,
+    options: { timeoutMs?: number; maxTokens?: number; requireStop?: boolean } = {},
   ): Promise<string> {
-    const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(60000)]);
+    const timeoutMs = options.timeoutMs ?? 60000;
+    if (
+      !Number.isInteger(timeoutMs) ||
+      timeoutMs < 1000 ||
+      timeoutMs > 300000 ||
+      (options.maxTokens !== undefined &&
+        (!Number.isInteger(options.maxTokens) || options.maxTokens < 1))
+    )
+      throw new DomainError('INVALID_COMPLETION_BUDGET', 422, '文本调用预算不合法');
+    const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(timeoutMs)]);
     let text = '';
     let complete = false;
     try {
@@ -70,9 +80,15 @@ export class LlmService {
           messages: [{ role: 'user', content: input.user, timestamp: Date.now() }],
         },
         signal,
+        undefined,
+        { timeoutMs, maxTokens: options.maxTokens },
       )) {
         if (event.type === 'text_delta') text += event.delta;
-        if (event.type === 'done') complete = true;
+        if (event.type === 'done') {
+          if (options.requireStop && event.reason !== 'stop')
+            throw new DomainError('INCOMPLETE_OUTPUT', 422, '模型输出截断或未正常完成');
+          complete = true;
+        }
       }
       if (!complete) throw new DomainError('INCOMPLETE_STREAM', 422, '响应流提前结束');
       return text;
@@ -163,6 +179,7 @@ export class LlmService {
     context: Context,
     signal: AbortSignal,
     preview?: (body: unknown) => void,
+    options: { timeoutMs?: number; maxTokens?: number } = {},
   ) {
     const { models, model, cap, endpoint } = await this.prepare(id, !!preview);
     let status = 0;
@@ -176,10 +193,10 @@ export class LlmService {
     try {
       const stream = models.streamSimple(requestModel, context, {
         signal,
-        maxTokens: model.maxTokens,
+        maxTokens: Math.min(options.maxTokens ?? model.maxTokens, model.maxTokens),
         reasoning: model.reasoning ? 'low' : undefined,
         maxRetries: 0,
-        timeoutMs: 60000,
+        timeoutMs: options.timeoutMs ?? 60000,
         ...(model.api === 'google-generative-ai'
           ? {}
           : {
@@ -205,7 +222,7 @@ export class LlmService {
           if (model.api === 'google-generative-ai') {
             const config = {
               ...(value.config as Record<string, unknown>),
-              httpOptions: { timeout: 60000, retryOptions: { attempts: 1 } },
+              httpOptions: { timeout: options.timeoutMs ?? 60000, retryOptions: { attempts: 1 } },
             };
             for (const key of Object.keys(sampling))
               if (!cap.samplingParams.includes(key as keyof typeof sampling))

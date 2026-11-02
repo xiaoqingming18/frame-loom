@@ -10,10 +10,12 @@ import { ProjectContentController } from './project-content.controller.js';
 import { ProjectTagsController } from './project-tags.controller.js';
 import { ProjectTagsService } from './project-tags.service.js';
 import { MediaService } from '../generation/media.service.js';
+import { ProjectScriptDatabase } from './project-script-database.js';
 
 @Module({
   controllers: [ProjectsController, ProjectContentController, ProjectTagsController],
   providers: [
+    ProjectScriptDatabase,
     ProjectsService,
     ProjectTagsService,
     ProjectFilesService,
@@ -22,6 +24,13 @@ import { MediaService } from '../generation/media.service.js';
     ProjectAssetsService,
     { provide: ProjectStore, useClass: LocalProjectStore },
   ],
-  exports: [ProjectStore, ProjectsService, ProjectFilesService, MediaService, ProjectMediaService],
+  exports: [
+    ProjectStore,
+    ProjectScriptDatabase,
+    ProjectsService,
+    ProjectFilesService,
+    MediaService,
+    ProjectMediaService,
+  ],
 })
 export class ProjectsModule {}

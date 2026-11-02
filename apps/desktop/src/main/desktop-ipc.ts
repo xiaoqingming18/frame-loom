@@ -62,7 +62,22 @@ export function registerDesktopIpc(
       ).parse(input);
       return getConnection()
         .then((value) => EngineConnection.parse(value))
-        .then((connection) => projectTarget(value, connection))
+        .then(async (connection) => {
+          const target = await projectTarget(value, connection);
+          if (channel === 'project:trash' && value.path === undefined) {
+            const response = await fetch(
+              `${connection.baseUrl}/projects/${value.projectId}/release`,
+              {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${connection.token}` },
+                redirect: 'error',
+                signal: AbortSignal.timeout(200000),
+              },
+            );
+            if (!response.ok) throw new Error('无法停止项目剧本任务，请稍后重试');
+          }
+          return target;
+        })
         .then(async (target) => {
           if (channel === 'project:trash') await shell.trashItem(target);
           else shell.showItemInFolder(target);

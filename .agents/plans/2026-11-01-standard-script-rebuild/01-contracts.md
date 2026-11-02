@@ -1,6 +1,6 @@
 # Plan: 标准契约、权威字段与验证样例
 
-Status: draft
+Status: done
 Parent: plan.md
 
 ## 目标
@@ -15,19 +15,31 @@ Parent: plan.md
 
 ## 步骤
 
-- [ ] T1 在本文件追加「契约清单」，固定标准文档、内部 ID、保存请求、导入任务、设定属性、磁盘清单／聚合响应的字段表及真实代码位置 — 验证：每个消费者有唯一契约来源，表中不出现第二份可写正文或第三种 beat。
-- [ ] T2 在 `scripts.ts` 建立标准 `meta/scenes/beats` Zod 契约和内部编辑契约；模型不输出内部 ID，API 外层保留 revision 与任务信息；动作标记只标准化一次 — 验证：本节 C01—C04 通过。
-- [ ] T3 在 `projects.ts` 区分磁盘清单和对外项目响应；支持新格式版本及旧格式升级入口，HTTP 项目响应可带数据库聚合的剧集但新清单写入不带 episodes；项目 profile 新增画风，类型复用 genres；剧集加入 duration_sec — 验证：C05、C06 通过，不把 genre 和 genres 做成两处独立可编辑值。
-- [ ] T4 定义人物、地点的类别化 attrs，保留 prop／costume 和 ignored 行为；定义改名、合并与稳定出现位置的结果契约 — 验证：跨类别无效字段、主名／别名碰撞和无效定位被拒绝，空手工字段可保存。
-- [ ] T5 定义短文完整输出与长文边界／场次片段输出的内部 schema：来源编号、负责区间、上下文区间、续场身份、不可表示内容和批次身份；状态区分定位、解析、校验、应用及最终状态 — 验证：区间越界、重叠归属、无效续场和未知类型有负例；标准 JSON 不包含来源映射或内部批次字段。
-- [ ] T6 定义只读元信息投影和场号生成的共享函数；集号改变、移场、插场不改内部 ID；输入中的权威元信息不得反向写项目 — 验证：相同内部文档在不同项目／剧集上下文中只改变投影值，动作和对白内容不变。
-- [ ] T7 编写 `packages/contracts/fixtures/standard-script-short.md`、`standard-script-short.json`、`standard-script-long.md` 及配套预期／来源映射；长样例可由固定生成器在测试中生成，生成器只生成数据不模拟解析器 — 验证：短样例预期可人工逐句核对，长样例至少跨三批且含超长单场、重复句和边界对白；保留只在旧升级测试中需要的旧格式 fixture。
-- [ ] T8 定义移除剧本偏好的兼容过滤：仅过滤既有 scriptView／scriptMentions 后校验新偏好，不清主题、路径、项目排序等其他值；实际 preferences 读写在 07 接线 — 验证：C07 通过，未知或损坏其他字段仍遵守原错误处理。
-- [ ] T9 清理 `index.ts` 等出口；旧 parser／Markdown 文件的物理删除待消费者全部替换后在 07 完成，不能新增 alias 把新旧格式伪装成相同类型 — 验证：新 contracts 可构建；未完成消费者的错误有清单，不用 any、类型断言或成功占位绕过。
+- [x] T1 在本文件追加「契约清单」，固定标准文档、内部 ID、保存请求、导入任务、设定属性、磁盘清单／聚合响应的字段表及真实代码位置 — 验证：每个消费者有唯一契约来源，表中不出现第二份可写正文或第三种 beat。
+- [x] T2 在 `scripts.ts` 建立标准 `meta/scenes/beats` Zod 契约和内部编辑契约；模型不输出内部 ID，API 外层保留 revision 与任务信息；动作标记只标准化一次 — 验证：C01—C04 通过。
+- [x] T3 在 `projects.ts` 区分磁盘清单和对外项目响应；支持新格式版本及旧格式升级入口，HTTP 项目响应可带数据库聚合的剧集但新清单写入不带 episodes；项目 profile 新增画风，类型复用 genres；剧集加入 duration_sec — 验证：C05、C06 通过，不把 genre 和 genres 做成两处独立可编辑值。
+- [x] T4 定义人物、地点的类别化 attrs，保留 prop／costume 和 ignored 行为；定义改名、合并与稳定出现位置的结果契约 — 验证：分类字段、唯一命名和稳定定位 schema 用例通过。
+- [x] T5 定义短文完整输出与长文边界／场次片段输出的内部 schema：来源编号、负责区间、上下文区间、续场身份、不可表示内容和批次身份；状态区分定位、解析、校验、应用及最终状态 — 验证：协议边界、未知类型和来源映射负例通过；标准 JSON 不含模型来源映射。
+- [x] T6 定义只读元信息投影和场号生成的共享函数；集号改变、移场、插场不改内部 ID — 验证：契约与 engine 集成测试断言最新权威投影、自动场号及内部 ID 稳定。
+- [x] T7 编写短样例原文／标准 JSON 和配套预期／来源映射；长样例由 `packages/contracts/fixtures/standard-script-long.mjs` 固定生成器生成，生成器只生成数据不模拟解析器 — 验证：短样例可逐句核对，长样例至少跨三批且含超长单场、重复句和边界对白；保留只在旧升级测试中需要的旧格式 fixture。长文不另存静态 `.md`，避免重复维护。
+- [x] T8 定义移除剧本偏好的兼容过滤：仅过滤既有 scriptView／scriptMentions 后校验新偏好 — 验证：C07 保留主题与路径并过滤旧键。
+- [x] T9 清理 `index.ts` 等出口并删除旧 contracts parser／Markdown 源码 — 验证：contracts build、typecheck、静态旧路径扫描通过。
 
 ### 契约清单
 
-实施时在此填写实际导出名、字段和文件；必须遵循主笔记的标准 JSON。当前未实施，不把建议名称写成已存在 API。
+实施位置为 `packages/contracts/src/scripts.ts`、`script-import-protocol.ts`、`projects.ts` 和 `desktop.ts`：
+
+| 契约                                       | 字段／边界                                               | 消费者                                                |
+| ------------------------------------------ | -------------------------------------------------------- | ----------------------------------------------------- |
+| `ScriptDocument`                           | 严格 meta/scenes/beats，仅 action/dialogue，不含内部身份 | 模型最终文档、导出投影、契约测试                      |
+| `EditableScriptDocument`                   | 场和内容增加程序生成的 id，元信息读取时投影              | engine 剧集保存、desktop Tiptap、保存通道             |
+| `ScriptResult` / `ScriptSaveRequest`       | 外层 revision、任务信息；唯一可写正文为 document         | episodes controller、Query、script-page               |
+| `ProjectManifest` / `ProjectDiskManifest`  | HTTP 聚合 episodes／新磁盘格式禁止 episodes              | projects service、local store、desktop 主进程与项目树 |
+| `StoryElement`                             | 分类 attrs、manuallyEdited；精确名称命名空间             | story service、关联事务、设定抽屉                     |
+| `ImportBoundaryBatch` / `ImportSceneBatch` | 负责区间、上下文区间、续场键与来源映射                   | 模型编排、保真验证与 mock 测试                        |
+| `readDesktopPreferences`                   | 仅过滤 scriptView/scriptMentions，然后 strict 校验       | 主进程 preferences                                    |
+
+受影响消费者已以 rg 盘点：contracts 的旧 parser/Markdown 和测试；engine 的 project-store、local-project-store、projects、episodes、story、conversion；desktop 的 project-files、profile、episodes、script 全 feature、story 抽屉、Query 和 preferences。events/endpoints 的既有事件与 URL 无需改变。
 
 ### 必要样例与预期
 
@@ -56,11 +68,13 @@ pnpm --filter @frame-loom/contracts exec vitest run src/scripts.test.ts src/proj
 
 只需跑上述被改契约测试及 C01—C08；若实际改 events／endpoints 行为，补对应文件用例。不跑图像、音视频、画布几何等无关契约。
 
-实际：未执行；本轮仅创建文档。
+实际：contracts build、typecheck 与 `src/scripts.test.ts src/projects.test.ts src/desktop.test.ts src/script-import-protocol.test.ts` 通过，共 69 tests。长文样例采用 `.mjs` 固定数据生成器，不保存重复静态长文文件。
 
 ## 进度
 
 - 2026-11-01：编写契约、消费者盘点与确定性样例要求，尚未实施。
+- 2026-11-01：开始实施，Node v24.22.1、pnpm 12.15.0；完成直接消费者盘点和契约边界表。
+- 2026-11-02：C01—C08 与 69 项 contracts 定向测试通过；项目清单／聚合契约、短 fixture 与长文生成器均已核对，T1—T9 完成。
 
 ## 发现与偏差
 
@@ -69,4 +83,4 @@ pnpm --filter @frame-loom/contracts exec vitest run src/scripts.test.ts src/proj
 
 ## 交接
 
-等待用户开始代码实施。先补 T1 契约清单，再实施 T2—T9；本阶段不执行旧数据删除。完成后将新类型／fixtures 和消费者迁移清单交给 02—07。
+01 契约与其所属测试完成；目录版 N02 已通过，整体仍待 08 的真实模型、原生 IME 和原型同缩放视觉对照。

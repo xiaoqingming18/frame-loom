@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme.css';
+@import '../features/projects/script/script-editor.css' layer(components);
 
 /* 工作区包经 node_modules 链接引入，Tailwind 自动扫描会跳过，需显式登记源码。 */
 @source '../../../../../../packages/ui/src';

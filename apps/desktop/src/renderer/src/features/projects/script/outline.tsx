@@ -1,225 +1,69 @@
-import { memo, useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/core';
-import { TextSelection } from '@tiptap/pm/state';
-import { moveScene, scrollToBlock } from './scene-commands';
-import { deriveScenes, type ScriptDocument } from '@frame-loom/contracts';
-import { Button } from '@frame-loom/ui/components/button';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from '@frame-loom/ui/components/dropdown-menu';
-import { MoreHorizontal, Plus } from 'lucide-react';
-import { fromEditorJson, defaultBlockAttrs } from './editor-model';
-
-type Scene = ReturnType<typeof deriveScenes>[number];
-type RowProps = {
-  editor: Editor;
-  scene: Scene;
-  number: number;
-  active: boolean;
-  previousId?: string;
-  nextId?: string;
-  dragRef: RefObject<string>;
-  select: (id: string) => void;
-};
-const SceneRow = memo(
-  function SceneRow({
-    editor,
-    scene,
-    number,
-    active,
-    previousId,
-    nextId,
-    dragRef,
-    select,
-  }: RowProps) {
-    const move = (source: string, target: string) =>
-      moveScene(editor, fromEditorJson(editor.getJSON()), number, source, target);
-    return (
-      <div
-        draggable
-        onDragStart={() => {
-          dragRef.current = scene.id;
-        }}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={() => move(dragRef.current, scene.id)}
-        className="mb-1 flex items-center rounded-md hover:bg-accent"
-        data-active={active}
-      >
-        <button
-          className="min-w-0 flex-1 p-2 text-left text-sm"
-          onClick={() => {
-            select(scene.id);
-            scrollToBlock(editor, scene.id);
-          }}
-        >
-          <span className="font-medium">
-            {scene.number} {scene.location || '未命名场景'}
-          </span>
-          <span className="block text-xs text-muted-foreground">
-            {scene.timeText ??
-              (scene.time
-                ? { day: '日', night: '夜', dawn: '晨', dusk: '昏' }[scene.time]
-                : '时间')}{' '}
-            · {scene.space ? { int: '内', ext: '外', intext: '内外' }[scene.space] : '内外'} ·{' '}
-            {scene.characters.slice(0, 3).join('、')}
-            {scene.characters.length > 3 ? ` +${scene.characters.length - 3}` : ''}
-          </span>
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label={`${scene.number} 场菜单`}>
-              <MoreHorizontal />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
-              onSelect={() => {
-                let pos = 0;
-                editor.state.doc.forEach((node, offset) => {
-                  if (node.attrs.id === scene.id) pos = offset;
-                });
-                const blocks = fromEditorJson(editor.getJSON()).blocks;
-                const acts = blocks
-                  .slice(
-                    0,
-                    blocks.findIndex((block) => block.id === scene.id),
-                  )
-                  .filter((block) => block.type === 'act').length;
-                const tr = editor.state.tr.insert(
-                  pos,
-                  editor.schema.nodes.scriptBlock.create(
-                    { id: crypto.randomUUID(), type: 'act' },
-                    editor.schema.text(`第${acts + 1}幕`),
-                  ),
-                );
-                tr.setSelection(TextSelection.create(tr.doc, pos + 1));
-                editor.view.dispatch(tr);
-                editor.view.focus();
-              }}
-            >
-              在此场前插入分幕
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!previousId}
-              onSelect={() => previousId && move(scene.id, previousId)}
-            >
-              上移
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!nextId} onSelect={() => nextId && move(scene.id, nextId)}>
-              下移
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    );
-  },
-  (previous, next) =>
-    previous.editor === next.editor &&
-    previous.number === next.number &&
-    previous.active === next.active &&
-    previous.previousId === next.previousId &&
-    previous.nextId === next.nextId &&
-    previous.dragRef === next.dragRef &&
-    previous.select === next.select &&
-    JSON.stringify(previous.scene) === JSON.stringify(next.scene),
-);
-
+import type { EditableScriptDocument } from '@frame-loom/contracts';
+import { addScene, scrollToScriptNode } from './script-commands';
 export function Outline({
   editor,
   document,
-  number,
 }: {
   editor: Editor;
-  document: ScriptDocument;
-  number: number;
+  document: EditableScriptDocument;
 }) {
-  const scenes = deriveScenes(document.blocks, number);
-  const sceneIds = scenes.map((scene) => scene.id).join(',');
-  const [active, setActive] = useState('');
-  const dragRef = useRef('');
+  const [active, setActive] = useState(''),
+    [expanded, setExpanded] = useState(false);
+  const ids = document.scenes.map((s) => s.id).join(',');
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(
       (entries) => {
-        const visible = entries.find((entry) => entry.isIntersecting);
+        const visible = entries.find((e) => e.isIntersecting);
         if (visible) setActive((visible.target as HTMLElement).dataset.id ?? '');
       },
       { root: editor.view.dom.closest('[data-script-scroll]'), rootMargin: '-10% 0px -65% 0px' },
     );
-    editor.view.dom
-      .querySelectorAll('[data-block-type="scene"]')
-      .forEach((node) => observer.observe(node));
+    editor.view.dom.querySelectorAll('[data-script-scene]').forEach((n) => observer.observe(n));
     return () => observer.disconnect();
-  }, [editor, sceneIds]);
+  }, [editor, ids]);
   return (
-    <nav aria-label="场次大纲" className="flex h-full flex-col overflow-auto p-3">
-      <h2 className="mb-3 text-sm font-semibold">场次大纲 · {scenes.length} 场</h2>
-      {scenes.map((scene, index) => (
-        <div key={scene.id}>
-          {scene.actId && scenes[index - 1]?.actId !== scene.actId && (
-            <h3 className="mt-3 mb-2 text-xs text-muted-foreground">
-              {document.blocks.find((block) => block.id === scene.actId)?.text}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`${document.blocks.find((block) => block.id === scene.actId)?.text} 幕菜单`}
-                  >
-                    <MoreHorizontal aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      editor.state.doc.forEach((node, pos) => {
-                        if (node.attrs.id === scene.actId)
-                          editor.view.dispatch(editor.state.tr.delete(pos, pos + node.nodeSize));
-                      });
-                    }}
-                  >
-                    移除分幕
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </h3>
-          )}
-          <SceneRow
-            editor={editor}
-            scene={scene}
-            number={number}
-            active={active === scene.id}
-            previousId={scenes[index - 1]?.id}
-            nextId={scenes[index + 1]?.id}
-            dragRef={dragRef}
-            select={setActive}
-          />
-        </div>
-      ))}
-      <Button
-        className="mt-3"
-        variant="outline"
-        onClick={() => {
-          const pos = editor.state.doc.content.size;
-          const tr = editor.state.tr.insert(
-            pos,
-            editor.schema.nodes.scriptBlock.create({
-              id: crypto.randomUUID(),
-              type: 'scene',
-              attrs: JSON.stringify(defaultBlockAttrs('scene')),
-            }),
-          );
-          tr.setSelection(TextSelection.create(tr.doc, pos + 1));
-          editor.view.dispatch(tr);
-          editor.view.focus();
-        }}
+    <aside className="script-outline" data-expanded={expanded} aria-label="场次大纲">
+      <button
+        className="script-outline-head"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
       >
-        <Plus />
-        新增场
-      </Button>
-    </nav>
+        <span>场次大纲</span>
+        <small>{document.scenes.length} 场</small>
+        <span className="script-outline-caret">⌄</span>
+      </button>
+      <nav className="script-outline-list">
+        {document.scenes.map((scene, index) => (
+          <button
+            key={scene.id}
+            className="script-outline-item"
+            data-active={active === scene.id}
+            onClick={() => {
+              setActive(scene.id);
+              scrollToScriptNode(editor, scene.id);
+              setExpanded(false);
+            }}
+          >
+            <span className="script-outline-number">
+              {document.meta.episode}-{index + 1}
+            </span>
+            <span className="script-outline-location">{scene.location || '未命名场景'}</span>
+            <span className="script-outline-tag">
+              {scene.interior ? '内' : '外'} · {scene.time_of_day} · {scene.beats.length} 条内容
+            </span>
+          </button>
+        ))}
+      </nav>
+      <button
+        className="script-outline-add"
+        disabled={!editor.isEditable}
+        onClick={() => addScene(editor)}
+      >
+        ＋ 添加场次
+      </button>
+    </aside>
   );
 }

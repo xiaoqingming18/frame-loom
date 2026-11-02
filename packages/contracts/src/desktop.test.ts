@@ -1,5 +1,22 @@
 import { expect, it } from 'vitest';
-import { ThemeSource, WindowCommand } from './index.js';
+import { ThemeSource, WindowCommand, readDesktopPreferences, DesktopPreferences } from './index.js';
+
+it('C07 兼容读取只移除旧剧本偏好，不吞掉其他字段错误', () => {
+  const preferences = {
+    version: 1,
+    theme: 'dark',
+    projectLocation: 'E:/项目',
+    projectSort: 'name',
+  };
+  expect(
+    readDesktopPreferences({ ...preferences, scriptView: 'markdown', scriptMentions: true }),
+  ).toEqual(preferences);
+  expect(() => readDesktopPreferences({ ...preferences, unknown: true })).toThrow();
+  expect(() => readDesktopPreferences({ ...preferences, theme: 'broken' })).toThrow();
+  expect(DesktopPreferences.safeParse({ ...preferences, scriptView: 'styled' }).success).toBe(
+    false,
+  );
+});
 
 it.each(['system', 'light', 'dark'])('接受主题 %s', (value) => {
   expect(ThemeSource.parse(value)).toBe(value);

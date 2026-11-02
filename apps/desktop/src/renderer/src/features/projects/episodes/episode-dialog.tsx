@@ -32,6 +32,7 @@ export function EpisodeDialog({
     action.episode?.number ?? Math.max(0, ...episodes.map((episode) => episode.number)) + 1,
   );
   const [title, setTitle] = useState(action.episode?.title ?? '');
+  const [duration, setDuration] = useState(action.episode?.duration_sec ?? 0);
   const duplicate = episodes.some(
     (episode) => episode.number === number && episode.id !== action.episode?.id,
   );
@@ -47,7 +48,10 @@ export function EpisodeDialog({
       return engineClient.request(
         action.kind === 'edit' ? `${url}/${action.episode!.id}` : url,
         EpisodeSummary,
-        { method: action.kind === 'edit' ? 'PATCH' : 'POST', body: { number, title } },
+        {
+          method: action.kind === 'edit' ? 'PATCH' : 'POST',
+          body: { number, title, duration_sec: duration },
+        },
       );
     },
     onSuccess: async (episode) => {
@@ -87,7 +91,16 @@ export function EpisodeDialog({
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!duplicate) mutation.mutate();
+            if (
+              action.kind === 'delete' ||
+              (!duplicate &&
+                Number.isInteger(number) &&
+                number >= 1 &&
+                number <= 9999 &&
+                Number.isInteger(duration) &&
+                duration >= 0)
+            )
+              mutation.mutate();
           }}
         >
           {action.kind !== 'delete' && (
@@ -122,6 +135,16 @@ export function EpisodeDialog({
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </label>
+              <label className="grid gap-2">
+                单集时长（秒，0 表示未填写）
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={duration}
+                  onChange={(event) => setDuration(Number(event.target.value))}
+                />
+              </label>
             </>
           )}
           {action.kind === 'delete' && mutation.error && (
@@ -136,7 +159,13 @@ export function EpisodeDialog({
               variant={action.kind === 'delete' ? 'destructive' : 'default'}
               disabled={
                 mutation.isPending ||
-                (action.kind !== 'delete' && (duplicate || number < 1 || number > 9999))
+                (action.kind !== 'delete' &&
+                  (duplicate ||
+                    number < 1 ||
+                    number > 9999 ||
+                    !Number.isInteger(number) ||
+                    !Number.isInteger(duration) ||
+                    duration < 0))
               }
             >
               {mutation.isPending ? '处理中…' : '确认'}

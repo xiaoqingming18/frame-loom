@@ -34,6 +34,7 @@ const story: StoryResult = {
       aliases: ['小林'],
       description: '',
       attrs: {},
+      manuallyEdited: false,
       status: 'confirmed',
       createdAt: now,
       updatedAt: now,
@@ -47,6 +48,7 @@ const story: StoryResult = {
       aliases: [],
       description: '',
       attrs: {},
+      manuallyEdited: false,
       status: 'pending',
       createdAt: now,
       updatedAt: now,
@@ -60,6 +62,7 @@ const story: StoryResult = {
       aliases: [],
       description: '',
       attrs: {},
+      manuallyEdited: false,
       status: 'confirmed',
       createdAt: now,
       updatedAt: now,
@@ -78,6 +81,7 @@ const episodes = [
     scenes: 7,
     chars: 500,
     draft: false,
+    duration_sec: 0,
   },
 ];
 const provider = (children: ReactNode) => (
@@ -149,7 +153,7 @@ it('别名只 patch aliases，冲突字段报错，出现位置跳转，合并�
   const request = vi
     .fn()
     .mockResolvedValue([
-      { episodeId: 'e', blockId: 'block', sceneId: 'scene', excerpt: '林夏走到天台' },
+      { episodeId: 'e', beatId: 'block', sceneId: 'scene', excerpt: '林夏走到天台' },
     ]);
   const mutate = vi
     .fn()
@@ -178,4 +182,82 @@ it('别名只 patch aliases，冲突字段报错，出现位置跳转，合并�
   const select = screen.getByLabelText('合并目标');
   expect(within(select).getByRole('option', { name: '周屿' })).toBeTruthy();
   expect(within(select).queryByRole('option', { name: '天台' })).toBeNull();
+});
+it('S11 人物资料失败保留输入，重试提交全部资料，空列表可保存', async () => {
+  const mutate = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('磁盘不可写'))
+    .mockResolvedValue(undefined);
+  const close = vi.fn(),
+    request = vi.fn().mockResolvedValue([]);
+  render(
+    provider(
+      <ElementDrawer
+        client={{ request } as unknown as EngineClient}
+        projectId="p"
+        element={story.elements[0]}
+        elements={story.elements}
+        episodes={episodes}
+        mutate={mutate}
+        onClose={close}
+      />,
+    ),
+  );
+  fireEvent.change(screen.getByLabelText('年龄'), { target: { value: '约30岁' } });
+  fireEvent.blur(screen.getByLabelText('年龄'));
+  await screen.findByText('磁盘不可写');
+  expect(screen.getByLabelText<HTMLInputElement>('年龄').value).toBe('约30岁');
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('标志动作（每行一项）'), {
+    target: { value: '转笔\n抬头' },
+  });
+  fireEvent.blur(screen.getByLabelText('标志动作（每行一项）'));
+  await waitFor(() =>
+    expect(mutate).toHaveBeenLastCalledWith('elements/a', 'PATCH', {
+      attrs: { age: '约30岁', signatureActions: ['转笔', '抬头'] },
+    }),
+  );
+  fireEvent.change(screen.getByLabelText('标志动作（每行一项）'), { target: { value: '' } });
+  fireEvent.blur(screen.getByLabelText('标志动作（每行一项）'));
+  await waitFor(() =>
+    expect(mutate).toHaveBeenLastCalledWith('elements/a', 'PATCH', {
+      attrs: { age: '约30岁', signatureActions: [] },
+    }),
+  );
+});
+it('S07 合并逐项选择源资料，取消不写入', async () => {
+  const mutate = vi.fn().mockResolvedValue(undefined),
+    request = vi.fn().mockResolvedValue([]);
+  const elements = story.elements.map((element) => ({
+    ...element,
+    attrs: { age: element.id === 'a' ? '30' : '40' },
+  }));
+  render(
+    provider(
+      <ElementDrawer
+        client={{ request } as unknown as EngineClient}
+        projectId="p"
+        element={elements[0]}
+        elements={elements}
+        episodes={episodes}
+        mutate={mutate}
+        onClose={vi.fn()}
+      />,
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '合并到…' }));
+  fireEvent.change(screen.getByLabelText('合并目标'), { target: { value: 'b' } });
+  fireEvent.click(screen.getByRole('button', { name: '取消合并' }));
+  expect(mutate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '合并到…' }));
+  fireEvent.change(screen.getByLabelText('合并目标'), { target: { value: 'b' } });
+  fireEvent.change(screen.getByLabelText('合并保留年龄'), { target: { value: 'source' } });
+  fireEvent.click(screen.getByRole('button', { name: '确认合并' }));
+  await waitFor(() =>
+    expect(mutate).toHaveBeenCalledWith('elements/a/merge', 'POST', {
+      into: 'b',
+      attrs: { age: '30' },
+      description: '',
+    }),
+  );
 });
